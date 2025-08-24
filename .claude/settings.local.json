@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv venv:*)",
+      "Bash(source:*)",
+      "Bash(uvicorn:*)",
+      "WebSearch"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
