@@ -1,0 +1,110 @@
+# Agents You Can Defend: Support Agent Tool Efficiency Platform
+
+## Project Overview
+
+This project demonstrates LaunchDarkly AI Configs for measuring and optimizing tool efficiency in AI support agents. A **Support Agent** uses multiple tools (documentation lookup, web search, PII redaction) with different configurations to help customers, automatically switching models when latency degrades.
+
+The system enables data-driven decisions about agent capabilities through controlled experimentation and real-time monitoring, with automatic guardrails that trigger model fallbacks when performance thresholds are breached.
+
+## Core Problem Statement
+
+AI agent features are powerful but come with trade-offs:
+- **Cost & Latency**: Some tools add processing time and computational expense
+- **Privacy Concerns**: Tools may interact with PII requiring additional controls
+- **Model Variability**: Different models exhibit varying tool-selection behaviors
+- **Efficiency Questions**: Determining which tools actually improve outcomes vs. adding overhead
+
+## Solution Architecture
+
+### LaunchDarkly LangGraph AI Configs Integration
+- **Centralized Configuration**: Model/prompt/tool management via AI Configs
+- **Multi-arm Experiments**: Statistical testing with automatic winner promotion
+- **Real-time Guardrails**: Sub-200ms automatic model switching on latency spikes
+- **Progressive Rollouts**: Safe deployment with automatic rollback on metric degradation
+- **Context Targeting**: Per-user/region tool access and model selection
+- **All Observability**: Metrics, experiments, and monitoring centralized in LaunchDarkly
+
+### Key Measurement Metrics
+1. **Task Success Rate**: Percentage resolved without human escalation
+2. **Tool Efficiency**: Ratio of useful vs. extraneous tool calls
+3. **Cost Analysis**: Total per-request costs (model + tool-specific)
+4. **Latency Monitoring**: 95th percentile response times
+5. **User Satisfaction**: Direct feedback collection
+6. **Efficiency Score**: Composite metric balancing success vs. overhead
+
+## Technical Components
+
+### LaunchDarkly as Central Platform
+- **AI Configs**: Model/prompt/tool configuration management
+- **Experiments**: Multi-arm testing with statistical significance
+- **Metrics & Observability**: All efficiency metrics flow to LaunchDarkly
+- **Guardrails**: Sub-200ms latency detection with automatic model fallback
+- **Progressive Rollouts**: Automatic rollback on metric degradation
+
+### Application Components (Python)
+- **FastAPI + LangGraph v0.6**: Agent execution using LaunchDarkly static runtime context
+- **LangChain Tools**: Documentation lookup, web search, PII redaction variants
+- **Metrics Collection**: Send all events to LaunchDarkly SDK (latency, success, tool usage)
+- **Evaluation System**: Realistic usage patterns for testing
+- **Chat UI**: Simple interface showing real-time tool calls and model switches
+
+### Evaluation System
+- **Query Generation**: Mixed difficulty scenarios (FAQ, ambiguous, PII-sensitive)
+- **Metrics Collection**: Real-time tool usage, success rates, and cost tracking
+- **Performance Analysis**: Statistical evaluation of tool effectiveness
+
+## Repository Structure
+```
+/api           # FastAPI chat service with tool orchestration
+/tools_impl    # Alternative tool implementations (lookup, re-rank, redaction)
+/policy        # LaunchDarkly parameter reading and enforcement
+/ui            # Chat interface with real-time monitoring charts
+/ld            # LaunchDarkly configuration and setup automation
+/tools         # Query generation, evaluation scripts, test utilities
+```
+
+## Experiment Design
+
+### Variation Comparisons
+- **Tool Alternatives**: Different documentation lookup implementations
+- **Stack Configurations**: Single tool vs. multi-tool workflows
+- **Model Comparisons**: Same tools across different LLMs
+
+### Success Criteria
+- Clear, evidence-based decisions on tool effectiveness
+- Measurable ROI on tool implementation costs
+- Justified model selection based on efficiency metrics
+- Production-ready configuration policies
+
+## Key Features
+
+### Automatic Model Fallback System
+- **Primary Model**: Claude-3.5-Sonnet (high quality, higher latency)
+- **Fallback Model**: Claude-3-Haiku (faster, lower cost)
+- **Guardrail Trigger**: When P95 latency > 4000ms, automatically switch to Haiku
+- **Recovery**: Switch back to Sonnet when latency normalizes
+- **Monitoring**: Real-time model switching tracked in LaunchDarkly metrics
+
+## Guardrails & Risk Mitigation
+- **Latency Guardrails**: Automatic model fallback when response time > 4s
+- **Cost Circuit Breakers**: Hard limits on per-session spending
+- **Quality Monitoring**: Automatic rollback on satisfaction drop
+- **Privacy Controls**: Regional tool restrictions and PII redaction
+- **Tool Efficiency**: Block tools with low success rates
+
+## Success Metrics
+- Demonstrable tool ROI through controlled experiments
+- Reduced operational costs through optimized configurations
+- Improved user satisfaction with evidence-based tool selection
+- Scalable policy management for production deployment
+
+## Production Readiness
+- **Environment Variables**: LD_SDK_KEY, model provider keys, ENV flags
+- **Monitoring Integration**: LaunchDarkly metrics and custom counters
+- **Policy Inheritance**: Same configuration keys for production deployment
+- **Extensibility**: Modular design for additional tools and models
+
+This demonstrates how LaunchDarkly AI Configs enables **Speed + Caution = Iterability, Experimentation & Integration** - transforming agent development from guesswork into data-driven engineering with enterprise-grade reliability.
+
+### No Separate Observability Tools
+Everything flows through LaunchDarkly's proven experimentation platform - eliminating the need for standalone monitoring, guardrails, or experimentation tools.
