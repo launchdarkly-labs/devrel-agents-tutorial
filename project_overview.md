@@ -43,6 +43,7 @@ AI agent features are powerful but come with trade-offs:
 
 ### Application Components (Python)
 - **FastAPI + LangGraph v0.6**: Agent execution using LaunchDarkly static runtime context
+- **Vector Database**: Persistent FAISS storage with OpenAI embeddings for semantic search
 - **LangChain Tools**: Documentation lookup, web search, PII redaction variants
 - **Metrics Collection**: Send all events to LaunchDarkly SDK (latency, success, tool usage)
 - **Evaluation System**: Realistic usage patterns for testing
@@ -55,13 +56,31 @@ AI agent features are powerful but come with trade-offs:
 
 ## Repository Structure
 ```
-/api           # FastAPI chat service with tool orchestration
-/tools_impl    # Alternative tool implementations (lookup, re-rank, redaction)
-/policy        # LaunchDarkly parameter reading and enforcement
-/ui            # Chat interface with real-time monitoring charts
-/ld            # LaunchDarkly configuration and setup automation
-/tools         # Query generation, evaluation scripts, test utilities
+/api                    # FastAPI chat service with tool orchestration
+/agents                 # LangGraph agent definitions and workflows
+/tools_impl             # Alternative tool implementations (lookup, search, redaction)
+/policy                 # LaunchDarkly parameter reading and enforcement
+/data                   # Knowledge base, PDF processing, persistent vector storage
+/ui                     # Chat interface with real-time monitoring charts
+/ld                     # LaunchDarkly configuration and setup automation
+/tools                  # Query generation, evaluation scripts, test utilities
+initialize_embeddings.py # One-time vector embedding initialization
 ```
+
+## Vector Database Architecture
+
+### Persistent Embeddings System
+- **OpenAI Embeddings**: Uses `text-embedding-3-small` for superior semantic understanding
+- **FAISS Storage**: CPU-optimized vector database with disk persistence
+- **One-time Setup**: Run `initialize_embeddings.py` to create embeddings once
+- **Automatic Loading**: Search tools automatically load pre-computed embeddings
+- **No Re-computation**: Eliminates embedding computation on every tool initialization
+
+### Benefits Over TF-IDF
+- **Better Semantic Understanding**: OpenAI embeddings capture meaning vs. keyword matching
+- **Persistent Storage**: Embeddings computed once and reused across sessions
+- **Faster Startup**: Tools load instantly without re-computing vectors
+- **Consistent Results**: Same embeddings across all tool instances and sessions
 
 ## Experiment Design
 
@@ -99,9 +118,11 @@ AI agent features are powerful but come with trade-offs:
 - Scalable policy management for production deployment
 
 ## Production Readiness
-- **Environment Variables**: LD_SDK_KEY, model provider keys, ENV flags
+- **Environment Variables**: LD_SDK_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY
+- **Vector Storage**: Persistent FAISS database with automatic loading
 - **Monitoring Integration**: LaunchDarkly metrics and custom counters
 - **Policy Inheritance**: Same configuration keys for production deployment
+- **No Fallbacks**: All configuration must come from LaunchDarkly (fail-fast on misconfiguration)
 - **Extensibility**: Modular design for additional tools and models
 
 This demonstrates how LaunchDarkly AI Configs enables **Speed + Caution = Iterability, Experimentation & Integration** - transforming agent development from guesswork into data-driven engineering with enterprise-grade reliability.

@@ -14,6 +14,8 @@ A comprehensive AI agent evaluation platform demonstrating LaunchDarkly AI Confi
 ### Prerequisites
 - Python 3.9+
 - [uv](https://astral.sh/uv/) package manager
+- OpenAI API key (for vector embeddings)
+- LaunchDarkly SDK key (for AI configs)
 
 ### Setup
 
@@ -23,30 +25,34 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 source $HOME/.local/bin/env
 ```
 
-2. **Create virtual environment and install dependencies**:
+2. **Install dependencies**:
 ```bash
-uv venv
-source .venv/bin/activate
-uv pip install -r requirements.txt
+uv sync
 ```
 
-3. **Set up LaunchDarkly** (optional for demo):
+3. **Set up environment variables**:
 ```bash
-export LAUNCHDARKLY_SDK_KEY="your-sdk-key-here"
+export OPENAI_API_KEY="your-openai-api-key"
+export LD_SDK_KEY="your-launchdarkly-sdk-key"
+export ANTHROPIC_API_KEY="your-anthropic-api-key"
 ```
+
+4. **Initialize vector embeddings** (one-time setup):
+```bash
+uv run initialize_embeddings.py
+```
+This creates persistent OpenAI embeddings from your knowledge base. Run with `--force` to recreate embeddings.
 
 ### Running the Application
 
 1. **Start the FastAPI backend**:
 ```bash
-source .venv/bin/activate
-uvicorn api.main:app --reload --port 8000
+uv run uvicorn api.main:app --reload --port 8000
 ```
 
 2. **Start the Streamlit UI** (in another terminal):
 ```bash
-source .venv/bin/activate
-streamlit run ui/chat_interface.py --server.port 8501
+uv run streamlit run ui/chat_interface.py --server.port 8501
 ```
 
 3. **Access the application**:

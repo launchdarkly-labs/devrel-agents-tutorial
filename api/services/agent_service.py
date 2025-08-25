@@ -22,5 +22,6 @@ class AgentService:
             id=str(uuid.uuid4()),
             response=result["response"],
             tool_calls=result.get("tool_calls", []),
-            variation_key=config.variation_key
+            variation_key=config.variation_key,
+            model=config.model
         )

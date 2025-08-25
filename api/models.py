@@ -10,3 +10,4 @@ class ChatResponse(BaseModel):
     response: str
     tool_calls: List[str]
     variation_key: str
+    model: str
