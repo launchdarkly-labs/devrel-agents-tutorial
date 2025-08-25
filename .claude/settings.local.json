@@ -4,7 +4,13 @@
       "Bash(uv venv:*)",
       "Bash(source:*)",
       "Bash(uvicorn:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(uv pip install:*)",
+      "Bash(python test:*)",
+      "Bash(uv run:*)",
+      "Bash(python3:*)",
+      "Bash(export:*)",
+      "Bash(uv:*)"
     ],
     "deny": [],
     "ask": []

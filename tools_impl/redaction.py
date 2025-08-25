@@ -2,7 +2,7 @@ from langchain.tools import BaseTool
 import re
 
 class RedactionTool(BaseTool):
-    name: str = "pii_redaction"
+    name: str = "redaction"
     description: str = "Redact personally identifiable information from text"
     
     def _run(self, text: str) -> str:

@@ -6,17 +6,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Setup and Installation:**
 ```bash
-pip install -r requirements.txt
+uv sync
 cp .env.example .env  # Edit with your API keys
 ```
 
 **Run the Application:**
 ```bash
 # Backend API
-uvicorn api.main:app --reload
+uv run uvicorn api.main:app --reload
 
 # Chat UI (separate terminal)
-streamlit run ui/chat_interface.py
+uv run streamlit run ui/chat_interface.py
 ```
 
 **Key Environment Variables:**

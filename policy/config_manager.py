@@ -12,6 +12,7 @@ class AgentConfig:
     allowed_tools: List[str]
     max_tool_calls: int
     max_cost: float
+    workflow_type: str = "sequential"  # sequential, parallel, conditional
 
 class ConfigManager:
     def __init__(self):
@@ -27,33 +28,30 @@ class ConfigManager:
         # Get AI Config key from environment variable
         ai_config_key = os.getenv('LAUNCHDARKLY_AI_CONFIG_KEY', 'support-agent')
         
-        # Get AI Config from LaunchDarkly - this will use the default if flag doesn't exist
+        # Get AI Config from LaunchDarkly - no defaults, must be configured
         ai_config = self.ld_client.variation(
             ai_config_key,
             user_context,
-            {
-                "model": "claude-3-5-sonnet-20240620",
-                "instructions": "You are a helpful mythical pet support agent. You can help with dragon feeding, phoenix rebirth cycles, unicorn grooming, and other mythical creature care.",
-                "allowed_tools": ["search_v1", "search_v2"],
-                "max_tool_calls": 3,
-                "max_cost": 0.10
-            }
+            None  # No default - LaunchDarkly must provide configuration
         )
         
-        variation_key = self.ld_client.variation(
-            "support-agent-variation",
-            user_context,
-            "baseline"
-        )
+        if ai_config is None:
+            raise ValueError(f"LaunchDarkly AI Config '{ai_config_key}' is not configured. Configuration is required.")
         
-        # Handle case where variation_key might be a complex object
-        if isinstance(variation_key, dict):
-            variation_key = ai_config.get("_ldMeta", {}).get("variationKey", "unknown")
+        # Extract variation key from AI Config metadata
+        variation_key = ai_config.get("_ldMeta", {}).get("variationKey", "unknown")
+        if not variation_key or variation_key == "unknown":
+            variation_key = "baseline"
         
-        # Extract model name from LaunchDarkly AI Config structure
-        model = ai_config.get("model", "claude-3-5-sonnet-20241022")
+        # Extract model name from LaunchDarkly AI Config structure - required
+        model = ai_config.get("model")
+        if not model:
+            raise ValueError("Model configuration is required in LaunchDarkly AI Config")
+        
         if isinstance(model, dict) and "name" in model:
             model = model["name"]
+        elif isinstance(model, dict):
+            raise ValueError("Model configuration must contain 'name' field when using dict format")
         
         # Map LaunchDarkly model names to correct Anthropic model IDs
         model_mapping = {
@@ -66,11 +64,34 @@ class ConfigManager:
             model = model_mapping[model]
         
         
+        # Extract tools from LaunchDarkly AI Config structure
+        allowed_tools = []
+        if "model" in ai_config and "parameters" in ai_config["model"] and "tools" in ai_config["model"]["parameters"]:
+            allowed_tools = [tool["name"] for tool in ai_config["model"]["parameters"]["tools"]]
+        
+        # Validate all required configuration fields
+        instructions = ai_config.get("instructions")
+        if not instructions:
+            raise ValueError("Instructions are required in LaunchDarkly AI Config")
+        
+        max_tool_calls = ai_config.get("max_tool_calls")
+        if max_tool_calls is None:
+            raise ValueError("max_tool_calls is required in LaunchDarkly AI Config")
+        
+        max_cost = ai_config.get("max_cost")
+        if max_cost is None:
+            raise ValueError("max_cost is required in LaunchDarkly AI Config")
+        
+        workflow_type = ai_config.get("workflow_type")
+        if not workflow_type:
+            raise ValueError("workflow_type is required in LaunchDarkly AI Config")
+        
         return AgentConfig(
             variation_key=variation_key,
             model=model,
-            instructions=ai_config.get("instructions", "You are a helpful mythical pet support agent."),
-            allowed_tools=ai_config.get("allowed_tools", []),
-            max_tool_calls=ai_config.get("max_tool_calls", 3),
-            max_cost=ai_config.get("max_cost", 0.10)
+            instructions=instructions,
+            allowed_tools=allowed_tools,
+            max_tool_calls=max_tool_calls,
+            max_cost=max_cost,
+            workflow_type=workflow_type
         )

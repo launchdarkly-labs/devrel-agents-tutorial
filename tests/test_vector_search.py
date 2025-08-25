@@ -1,24 +1,29 @@
 #!/usr/bin/env python3
 """
 Test script to validate vector search vs keyword search
+Enterprise AI/ML Technical Documentation
 """
 
+import os
+from dotenv import load_dotenv
 from tools_impl.search_v1 import SearchToolV1
 from tools_impl.search_v2 import SearchToolV2
 
+load_dotenv()
+
 def test_search_comparison():
-    print("🔍 Testing Vector Search vs Keyword Search\n")
+    print("🔍 Testing Vector Search vs Keyword Search (Technical Documentation)\n")
     
     # Initialize both search tools
     search_v1 = SearchToolV1()  # Keyword search
     search_v2 = SearchToolV2()  # Vector search
     
     test_queries = [
-        "phoenix combustion problems",  # Semantic: should find phoenix rebirth/fire content
-        "dragon feeding",              # Direct match: both should find it
-        "stubborn unicorn behavior",   # Semantic: should find unicorn training content  
-        "pet insurance for magical creatures",  # Semantic: should find insurance content
-        "rebirth cycles",             # Semantic: should find phoenix content
+        "reinforcement learning definition",  # Direct match: both should find it
+        "temporal difference methods",        # Technical term: vector should be better
+        "exploration vs exploitation",       # Conceptual: vector search advantage
+        "Q-learning algorithm implementation", # Technical: should find relevant content
+        "Markov decision process theory",     # Academic term: semantic search better
     ]
     
     for query in test_queries:

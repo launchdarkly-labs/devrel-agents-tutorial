@@ -2,7 +2,7 @@ from langchain.tools import BaseTool
 from typing import List
 
 class RerankingTool(BaseTool):
-    name: str = "result_reranking"
+    name: str = "reranking"
     description: str = "Rerank search results based on relevance"
     
     def _run(self, query: str, results: str) -> str:

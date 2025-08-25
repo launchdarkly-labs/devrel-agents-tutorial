@@ -1,34 +1,36 @@
 from langchain.tools import BaseTool
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-from data.mythical_pets_kb import MYTHICAL_PETS_KB
+from data.vector_store import VectorStore
 
 class SearchToolV2(BaseTool):
-    name: str = "search_vector"
-    description: str = "Advanced vector-based semantic search through mythical pet care documentation"
+    name = "search_vector"
+    description = "Advanced vector-based semantic search through enterprise AI/ML documentation using OpenAI embeddings"
+    
+    def __init__(self):
+        super().__init__()
+        self.vector_store = VectorStore()
+        
+        if not self.vector_store.exists():
+            raise ValueError("Vector embeddings not initialized. Run 'uv run initialize_embeddings.py' first.")
     
     def _run(self, query: str) -> str:
-        docs = MYTHICAL_PETS_KB
-        
-        vectorizer = TfidfVectorizer(stop_words='english', max_features=1000)
-        doc_vectors = vectorizer.fit_transform(docs)
-        query_vector = vectorizer.transform([query])
-        
-        similarities = cosine_similarity(query_vector, doc_vectors).flatten()
-        
-        doc_scores = list(zip(docs, similarities))
-        doc_scores.sort(key=lambda x: x[1], reverse=True)
-        
-        relevant_docs = [doc for doc, score in doc_scores if score > 0.1]
-        
-        if not relevant_docs:
-            return "No relevant documentation found for your query."
-        
-        top_results = relevant_docs[:3]
-        scores = [score for _, score in doc_scores[:len(top_results)]]
-        
-        result = f"Found {len(relevant_docs)} relevant documents (showing top {len(top_results)}):\n\n"
-        for i, _ in enumerate(top_results):
-            result += f"[Relevance: {scores[i]:.3f}] {top_results[i]}\n\n"
-        
-        return result
+        try:
+            # Search using persistent vector embeddings
+            results = self.vector_store.search(query, top_k=3)
+            
+            if not results:
+                return "No relevant documentation found for your query."
+            
+            # Filter results with minimum similarity threshold
+            relevant_results = [(doc, score, meta) for doc, score, meta in results if score > 0.7]
+            
+            if not relevant_results:
+                return "No highly relevant documentation found for your query."
+            
+            result = f"Found {len(relevant_results)} relevant documents:\n\n"
+            for i, (doc, score, metadata) in enumerate(relevant_results):
+                result += f"[Relevance: {score:.3f}] {doc}\n\n"
+            
+            return result
+            
+        except Exception as e:
+            return f"Search error: {str(e)}. Ensure vector embeddings are initialized with 'uv run initialize_embeddings.py'"
