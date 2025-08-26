@@ -10,9 +10,26 @@
       "Bash(uv run:*)",
       "Bash(python3:*)",
       "Bash(export:*)",
-      "Bash(uv:*)"
+      "Bash(uv:*)",
+      "Bash(find:*)",
+      "Bash(python:*)",
+      "Bash(node:*)",
+      "Bash(npm install:*)",
+      "Bash(npm search mcp-server)",
+      "Bash(npx @modelcontextprotocol/server-filesystem:*)",
+      "Read(//tmp/**)",
+      "Bash(arxiv-mcp-server:*)",
+      "Bash(npm search:*)",
+      "Bash(git clone:*)",
+      "Bash(pip install:*)",
+      "Bash(lsof:*)",
+      "Bash(curl:*)"
     ],
     "deny": [],
-    "ask": []
+    "ask": [],
+    "additionalDirectories": [
+      "/private/tmp/arxiv-mcp",
+      "/tmp"
+    ]
   }
 }

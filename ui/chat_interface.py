@@ -27,7 +27,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("🤖 Enterprise AI Assistant")
-st.markdown("*Advanced AI/ML technical support powered by LaunchDarkly AI Configs*")
+st.markdown("*Advanced AI/ML technical support powered by LaunchDarkly AI Config*")
 
 # Initialize session state
 if "messages" not in st.session_state:
@@ -56,7 +56,7 @@ if prompt := st.chat_input("💬 Ask about AI/ML concepts, algorithms, or techni
     # Get agent response
     try:
         response = requests.post(
-            "http://localhost:8000/chat",
+            "http://localhost:8001/chat",
             json={
                 "user_id": st.session_state.user_id,
                 "message": prompt
