@@ -3,7 +3,7 @@ from typing import List
 
 class RerankingTool(BaseTool):
     name: str = "reranking"
-    description: str = "Rerank search results based on relevance"
+    description: str = "Rerank and organize search results by relevance to the original query. Use this when you have search results that need to be ordered by importance or relevance."
     
     def _run(self, query: str, results: str) -> str:
         # Simulate reranking logic

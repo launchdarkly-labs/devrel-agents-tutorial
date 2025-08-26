@@ -5,8 +5,10 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import asyncio
+import pytest
 from policy.config_manager import ConfigManager
 
+@pytest.mark.asyncio
 async def test_config_manager():
     print("Testing ConfigManager with no defaults/fallbacks...")
     

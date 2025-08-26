@@ -1,13 +1,15 @@
 from langchain.tools import BaseTool
 from data.vector_store import VectorStore
+from typing import Any
 
 class SearchToolV2(BaseTool):
-    name = "search_vector"
-    description = "Advanced vector-based semantic search through enterprise AI/ML documentation using OpenAI embeddings"
+    name: str = "search_vector"
+    description: str = "Advanced vector-based semantic search through enterprise AI/ML documentation using OpenAI embeddings"
+    vector_store: Any = None
     
     def __init__(self):
         super().__init__()
-        self.vector_store = VectorStore()
+        object.__setattr__(self, 'vector_store', VectorStore())
         
         if not self.vector_store.exists():
             raise ValueError("Vector embeddings not initialized. Run 'uv run initialize_embeddings.py' first.")

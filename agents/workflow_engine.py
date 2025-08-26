@@ -52,8 +52,8 @@ class WorkflowEngine:
             return 'search_results' in context and len(context['search_results']) > 0
         
         elif condition == "multiple_results":
-            # Check if we have multiple search results that could benefit from reranking
-            return 'search_results' in context and len(context['search_results'].split('\n')) > 3
+            # Check if we have search results that could benefit from reranking
+            return 'search_results' in context and len(context['search_results'].strip()) > 50
         
         return True  # Default to true for unknown conditions
     
