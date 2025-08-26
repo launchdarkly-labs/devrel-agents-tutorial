@@ -6,8 +6,12 @@ Run this script once to create persistent vector embeddings from your knowledge 
 
 import os
 import sys
+from dotenv import load_dotenv
 from data.vector_store import VectorStore
 from data.enterprise_kb import get_knowledge_base
+
+# Load environment variables from .env file
+load_dotenv()
 
 def main():
     print("🚀 Initializing vector embeddings for knowledge base...")

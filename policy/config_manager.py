@@ -38,6 +38,7 @@ class ConfigManager:
         if ai_config is None:
             raise ValueError(f"LaunchDarkly AI Config '{ai_config_key}' is not configured. Configuration is required.")
         
+        
         # Extract variation key from AI Config metadata
         variation_key = ai_config.get("_ldMeta", {}).get("variationKey", "unknown")
         if not variation_key or variation_key == "unknown":
@@ -69,22 +70,24 @@ class ConfigManager:
         if "model" in ai_config and "parameters" in ai_config["model"] and "tools" in ai_config["model"]["parameters"]:
             allowed_tools = [tool["name"] for tool in ai_config["model"]["parameters"]["tools"]]
         
+        # Get instructions from LaunchDarkly AI Config
+        instructions = ai_config.get("instructions", "You are a helpful AI assistant.")
+        
+        # Get custom parameters from model.custom
+        custom_params = ai_config.get("model", {}).get("custom", {})
+        
         # Validate all required configuration fields
-        instructions = ai_config.get("instructions")
-        if not instructions:
-            raise ValueError("Instructions are required in LaunchDarkly AI Config")
-        
-        max_tool_calls = ai_config.get("max_tool_calls")
+        max_tool_calls = custom_params.get("max_tool_calls")
         if max_tool_calls is None:
-            raise ValueError("max_tool_calls is required in LaunchDarkly AI Config")
+            raise ValueError("max_tool_calls is required in LaunchDarkly AI Config custom parameters")
         
-        max_cost = ai_config.get("max_cost")
+        max_cost = custom_params.get("max_cost")
         if max_cost is None:
-            raise ValueError("max_cost is required in LaunchDarkly AI Config")
+            raise ValueError("max_cost is required in LaunchDarkly AI Config custom parameters")
         
-        workflow_type = ai_config.get("workflow_type")
+        workflow_type = custom_params.get("workflow_type")
         if not workflow_type:
-            raise ValueError("workflow_type is required in LaunchDarkly AI Config")
+            raise ValueError("workflow_type is required in LaunchDarkly AI Config custom parameters")
         
         return AgentConfig(
             variation_key=variation_key,

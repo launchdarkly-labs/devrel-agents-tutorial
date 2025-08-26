@@ -56,7 +56,7 @@ if prompt := st.chat_input("💬 Ask about AI/ML concepts, algorithms, or techni
     # Get agent response
     try:
         response = requests.post(
-            "http://localhost:8001/chat",
+            "http://localhost:8000/chat",
             json={
                 "user_id": st.session_state.user_id,
                 "message": prompt
