@@ -1,18 +1,19 @@
-# Agents You Can Defend: Support Agent Tool Efficiency Platform
+# LaunchDarkly AI Config Multi-Agent Demo
 
 ## Project Overview
 
-This project demonstrates LaunchDarkly AI Configs for measuring and optimizing tool efficiency in AI support agents. A **Support Agent** uses multiple tools (documentation lookup, web search, PII redaction) with different configurations to help customers, automatically switching models when latency degrades.
+This is an advanced tutorial demonstrating LaunchDarkly AI Configs with **multi-agent workflows**, **RAG integration**, **real MCP servers**, and **Redis caching**. The system showcases enterprise-grade AI agent orchestration with runtime configuration control through LaunchDarkly's platform.
 
-The system enables data-driven decisions about agent capabilities through controlled experimentation and real-time monitoring, with automatic guardrails that trigger model fallbacks when performance thresholds are breached.
+The demo features a **Supervisor Agent** that orchestrates specialized **Security** and **Research** agents, each controlled by separate LaunchDarkly AI Configs, demonstrating scalable multi-agent architecture patterns with production-ready performance optimization.
 
 ## Core Problem Statement
 
-AI agent features are powerful but come with trade-offs:
-- **Cost & Latency**: Some tools add processing time and computational expense
-- **Privacy Concerns**: Tools may interact with PII requiring additional controls
-- **Model Variability**: Different models exhibit varying tool-selection behaviors
-- **Efficiency Questions**: Determining which tools actually improve outcomes vs. adding overhead
+Enterprise AI systems require sophisticated orchestration and runtime control:
+- **Multi-Agent Coordination**: Complex workflows need intelligent routing between specialized agents
+- **Performance at Scale**: RAG and research tools must deliver sub-second responses with caching
+- **Runtime Flexibility**: Organizations need to instantly adjust AI behavior without redeployment
+- **Integration Standards**: Modern AI systems must leverage protocols like MCP for tool interoperability
+- **Enterprise Features**: Production systems need Redis caching, graceful degradation, and monitoring
 
 ## Solution Architecture
 

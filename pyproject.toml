@@ -2,7 +2,7 @@
 name = "agents-demo"
 version = "0.1.0"
 description = "LaunchDarkly AI Configs tutorial with LangGraph agents"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 dependencies = [
     # Agent Framework
     "langchain>=0.1.0",
@@ -27,6 +27,13 @@ dependencies = [
     # Development
     "python-dotenv>=1.0.0",
     "langchain-openai>=0.3.31",
+    # MCP Integration
+    "langchain-mcp-adapters>=0.1.9",
+    # Redis for caching and performance
+    "redis>=5.0.0",
+    "beautifulsoup4>=4.13.5",
+    "mcp>=1.13.1",
+    "semanticscholar>=0.10.0",
 ]
 
 [dependency-groups]
