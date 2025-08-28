@@ -5,7 +5,8 @@ import json
 st.set_page_config(
     page_title="Enterprise AI Assistant",
     page_icon="🤖",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
 st.markdown("""
@@ -29,31 +30,32 @@ st.markdown("""
 st.title("🤖 Enterprise AI Assistant")
 st.markdown("*Advanced AI/ML technical support powered by LaunchDarkly AI Configs*")
 
-# Add example queries
+# Add example queries from TOOL_TEST_QUERIES.md
 st.markdown("### 💡 Example Queries:")
+st.markdown("*Test different tool combinations with these curated queries*")
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    if st.button("🤖 What is machine learning?", use_container_width=True):
-        st.session_state.example_query = "What is machine learning and how does it work?"
+    if st.button("📚 Internal Knowledge", use_container_width=True):
+        st.session_state.example_query = "What information do you have about machine learning in your knowledge base?"
 
 with col2:
-    if st.button("🔍 Search for RL papers", use_container_width=True):
-        st.session_state.example_query = "Can you search for recent papers on reinforcement learning?"
+    if st.button("🔍 ArXiv Research", use_container_width=True):
+        st.session_state.example_query = "Find recent ArXiv papers on reinforcement learning from the last 6 months"
 
 with col3:
-    if st.button("🧠 Explain neural networks", use_container_width=True):
-        st.session_state.example_query = "Explain how neural networks learn and make predictions"
+    if st.button("🔬 Academic Search", use_container_width=True):
+        st.session_state.example_query = "Search Semantic Scholar for papers on federated learning"
 
 # Additional example queries
 col4, col5 = st.columns(2)
 with col4:
-    if st.button("📊 Compare ML algorithms", use_container_width=True):
-        st.session_state.example_query = "Compare supervised vs unsupervised learning algorithms"
+    if st.button("🎯 RAG + Reranking", use_container_width=True):
+        st.session_state.example_query = "Find the best matches for 'deep learning algorithms' in your documentation"
 
 with col5:
-    if st.button("🔬 Latest AI research", use_container_width=True):
-        st.session_state.example_query = "Find recent research papers on transformer architectures"
+    if st.button("🚀 Full Stack Search", use_container_width=True):
+        st.session_state.example_query = "Compare what you know about transformers from your knowledge base with recent ArXiv and Semantic Scholar papers"
 
 st.markdown("---")
 
@@ -130,7 +132,7 @@ if prompt:
     # Get agent response
     try:
         response = requests.post(
-            "http://localhost:8002/chat",
+            "http://localhost:8001/chat",
             json={
                 "user_id": st.session_state.user_id,
                 "message": prompt

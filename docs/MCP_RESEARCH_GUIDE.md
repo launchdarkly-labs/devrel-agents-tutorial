@@ -120,14 +120,35 @@ LaunchDarkly tool names get translated to actual MCP tool names:
   "model": {
     "name": "claude-3-5-sonnet-20241022",
     "parameters": {
-      "tools": ["search_v2", "reranking", "arxiv_search", "semantic_scholar"]
+      "tools": [
+        {
+          "name": "search_v2",
+          "description": "📚 INTERNAL: Advanced vector search through knowledge base",
+          "type": "function"
+        },
+        {
+          "name": "reranking", 
+          "description": "📊 INTERNAL: BM25 algorithm for result reranking",
+          "type": "function"
+        },
+        {
+          "name": "arxiv_search",
+          "description": "🔬 MCP: ArXiv research papers via external MCP server",
+          "type": "function"
+        },
+        {
+          "name": "semantic_scholar",
+          "description": "🔬 MCP: Academic papers via Semantic Scholar MCP server", 
+          "type": "function"
+        }
+      ]
     },
     "custom": {
       "max_tool_calls": 8,
       "max_cost": 1.0
     }
   },
-  "instructions": "You are a research assistant with access to academic databases..."
+  "instructions": "You are a research assistant with access to internal knowledge and external academic databases via MCP..."
 }
 ```
 
