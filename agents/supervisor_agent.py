@@ -13,6 +13,7 @@ class SupervisorState(TypedDict):
     current_agent: str
     security_cleared: bool
     support_response: str
+    support_tool_calls: List[str]
     final_response: str
     workflow_stage: str  # "initial_security", "research", "revision", "final_compliance"
 
@@ -113,6 +114,7 @@ def create_supervisor_agent(supervisor_config: AgentConfig, support_config: Agen
         return {
             "messages": [AIMessage(content=result["response"])],
             "support_response": result["response"],
+            "support_tool_calls": result.get("tool_calls", []),
             "workflow_stage": "final_compliance"
         }
     
@@ -156,9 +158,20 @@ def create_supervisor_agent(supervisor_config: AgentConfig, support_config: Agen
     
     def format_final(state: SupervisorState):
         """Format final response"""
-        final_message = state["messages"][-1]
+        # Use the support response as the main response, since it contains the helpful answer
+        support_response = state.get("support_response", "")
+        support_tool_calls = state.get("support_tool_calls", [])
+        
+        # If we have a support response, use it; otherwise fall back to last message
+        if support_response:
+            final_content = support_response
+        else:
+            final_message = state["messages"][-1]
+            final_content = final_message.content
+        
         return {
-            "final_response": final_message.content,
+            "final_response": final_content,
+            "actual_tool_calls": support_tool_calls,
             "user_input": state["user_input"],
             "workflow_stage": "complete"
         }

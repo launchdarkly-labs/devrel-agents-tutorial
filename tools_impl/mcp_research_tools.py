@@ -17,19 +17,22 @@ class MCPResearchTools:
         
     async def initialize(self):
         """Initialize MCP client with research servers"""
+        print("DEBUG: MCPResearchTools.initialize() called")
         try:
             # Configure MCP servers for research
+            # NOTE: MCP servers can cause initialization timeouts in some environments
+            # Uncomment when MCP servers are properly installed and configured
             server_configs = {
-                # ArXiv MCP Server (Python-based)
+                # ArXiv MCP Server (Python-based) - RE-ENABLED
                 "arxiv": {
-                    "command": "/Users/ld_scarlett/.local/bin/arxiv-mcp-server",
+                    "command": "/Users/ld_scarlett/.local/bin/arxiv-mcp-server", 
                     "args": ["--storage-path", "/tmp/arxiv-papers"]
                 },
-                # Semantic Scholar MCP Server (Python-based)
-                "semanticscholar": {
-                    "command": "python",
-                    "args": ["/tmp/semantic_scholar_server.py"]
-                }
+                # Semantic Scholar MCP Server (Python-based) - Optional
+                # "semanticscholar": {
+                #     "command": "python",
+                #     "args": ["/tmp/arxiv-mcp/semanticscholar-MCP-Server/semantic_scholar_server.py"]
+                # }
             }
             
             # Try to initialize with available servers
@@ -82,11 +85,13 @@ class MCPResearchTools:
                         # Store all Semantic Scholar tools under their original names
                         self.tools[tool.name] = tool
                         
-                logger.info(f"Initialized MCP tools: {list(self.tools.keys())}")
+                print(f"DEBUG: Initialized MCP tools: {list(self.tools.keys())}")
                 
         except Exception as e:
-            logger.error(f"Failed to initialize MCP client: {e}")
+            print(f"DEBUG: Failed to initialize MCP client: {e}")
             self.client = None
+        
+        print("DEBUG: MCPResearchTools.initialize() completed")
     
     def get_tool(self, tool_name: str) -> Optional[BaseTool]:
         """Get a specific MCP tool"""
@@ -102,43 +107,44 @@ class MCPResearchTools:
             await self.client.close()
 
 
-# Singleton instance for the application
-_mcp_research_tools = None
-
+# Simplified for demo - no singleton caching
 async def get_mcp_research_tools() -> MCPResearchTools:
-    """Get initialized MCP research tools instance"""
-    global _mcp_research_tools
-    if _mcp_research_tools is None:
-        _mcp_research_tools = MCPResearchTools()
-        await _mcp_research_tools.initialize()
-    return _mcp_research_tools
+    """Create and initialize MCP research tools instance"""
+    print("DEBUG: Creating new MCPResearchTools instance")
+    mcp_research_tools = MCPResearchTools()
+    print("DEBUG: Initializing MCP tools...")
+    await mcp_research_tools.initialize()
+    print("DEBUG: MCP initialization completed")
+    return mcp_research_tools
 
 
 # MCP-only implementation - no fallback tools
-
-
 async def get_research_tools() -> List[BaseTool]:
     """Get MCP research tools - requires MCP servers to be installed"""
+    print("DEBUG: get_research_tools called")
     tools = []
     
     try:
+        print("DEBUG: Getting MCP research tools instance")
         mcp_tools = await get_mcp_research_tools()
         available_tools = mcp_tools.get_available_tools()
+        print(f"DEBUG: Available MCP tools: {available_tools}")
         
         # Only return real MCP tools - no fallbacks
         if "arxiv_search" in available_tools:
             tools.append(mcp_tools.get_tool("arxiv_search"))
-            logger.info("Added real ArXiv MCP tool")
+            print("✅ Added real ArXiv MCP tool")
             
         if "semantic_scholar" in available_tools:
             tools.append(mcp_tools.get_tool("semantic_scholar"))
-            logger.info("Added real Semantic Scholar MCP tool")
+            print("✅ Added real Semantic Scholar MCP tool")
         
         if not tools:
-            logger.warning("No MCP research tools available. Install MCP servers: npm install -g @michaellatman/mcp-server-arxiv")
+            print("No MCP research tools available. Install MCP servers: npm install -g @michaellatman/mcp-server-arxiv")
             
     except Exception as e:
-        logger.error(f"MCP tools initialization failed: {e}")
-        logger.error("Install MCP servers to enable research tools: npm install -g @michaellatman/mcp-server-arxiv")
+        print(f"❌ MCP tools initialization failed: {e}")
+        print("Install MCP servers to enable research tools: npm install -g @michaellatman/mcp-server-arxiv")
     
+    print(f"DEBUG: Returning {len(tools)} MCP tools")
     return tools

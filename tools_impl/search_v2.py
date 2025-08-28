@@ -22,11 +22,11 @@ class SearchToolV2(BaseTool):
             if not results:
                 return "No relevant documentation found for your query."
             
-            # Filter results with minimum similarity threshold
-            relevant_results = [(doc, score, meta) for doc, score, meta in results if score > 0.7]
+            # Filter results with minimum similarity threshold (lowered for broader matching)
+            relevant_results = [(doc, score, meta) for doc, score, meta in results if score > 0.2]
             
             if not relevant_results:
-                return "No highly relevant documentation found for your query."
+                return "No relevant documentation found for your query in the knowledge base."
             
             result = f"Found {len(relevant_results)} relevant documents:\n\n"
             for i, (doc, score, metadata) in enumerate(relevant_results):

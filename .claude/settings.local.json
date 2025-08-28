@@ -23,7 +23,12 @@
       "Bash(git clone:*)",
       "Bash(pip install:*)",
       "Bash(lsof:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash($HOME/.local/bin/uv:*)",
+      "Bash(/usr/local/bin/uv:*)",
+      "Bash(~/.cargo/bin/uv:*)",
+      "Bash($HOME/.local/bin/arxiv-mcp-server:*)",
+      "Bash(echo $HOME)"
     ],
     "deny": [],
     "ask": [],

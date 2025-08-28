@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This is an advanced tutorial demonstrating LaunchDarkly AI Configs with **multi-agent workflows**, **RAG integration**, **real MCP servers**, and **Redis caching**. The system showcases enterprise-grade AI agent orchestration with runtime configuration control through LaunchDarkly's platform.
+This is an advanced tutorial demonstrating LaunchDarkly AI Configs with **multi-agent workflows**, **RAG integration**, and **real MCP servers**. The system showcases enterprise-grade AI agent orchestration with runtime configuration control through LaunchDarkly's platform.
 
 The demo features a **Supervisor Agent** that orchestrates specialized **Security** and **Research** agents, each controlled by separate LaunchDarkly AI Configs, demonstrating scalable multi-agent architecture patterns with production-ready performance optimization.
 
@@ -13,17 +13,25 @@ Enterprise AI systems require sophisticated orchestration and runtime control:
 - **Performance at Scale**: RAG and research tools must deliver sub-second responses with caching
 - **Runtime Flexibility**: Organizations need to instantly adjust AI behavior without redeployment
 - **Integration Standards**: Modern AI systems must leverage protocols like MCP for tool interoperability
-- **Enterprise Features**: Production systems need Redis caching, graceful degradation, and monitoring
+- **Enterprise Features**: Production systems need performance caching, graceful degradation, and monitoring
 
 ## Solution Architecture
 
 ### LaunchDarkly LangGraph AI Configs Integration
-- **Centralized Configuration**: Model/prompt/tool management via AI Configs
-- **Multi-arm Experiments**: Statistical testing with automatic winner promotion
-- **Real-time Guardrails**: Sub-200ms automatic model switching on latency spikes
+- **3 AI Config Flags**: `supervisor-agent`, `security-agent`, `support-agent`
+- **Multi-Agent Control**: Each agent configured independently for specialized behavior
+- **Tool Availability**: Runtime control of RAG and MCP research tools
+- **Model Selection**: Claude vs OpenAI models with per-agent configuration
+- **Multi-arm Experiments**: Statistical testing of tool variations
+- **Real-time Guardrails**: Sub-200ms automatic model switching on latency spikes  
 - **Progressive Rollouts**: Safe deployment with automatic rollback on metric degradation
 - **Context Targeting**: Per-user/region tool access and model selection
 - **All Observability**: Metrics, experiments, and monitoring centralized in LaunchDarkly
+
+#### Support Agent Tool Variations:
+- **`docs-only`**: Basic search only (`["search_v2"]`)
+- **`rag-enabled`**: Full RAG stack (`["search_v2", "reranking"]`) 
+- **`research-enhanced`**: RAG + MCP research (`["search_v2", "reranking", "arxiv_search", "semantic_scholar"]`)
 
 ### Key Measurement Metrics
 1. **Task Success Rate**: Percentage resolved without human escalation
@@ -43,11 +51,14 @@ Enterprise AI systems require sophisticated orchestration and runtime control:
 - **Progressive Rollouts**: Automatic rollback on metric degradation
 
 ### Application Components (Python)
-- **FastAPI + LangGraph v0.6**: Agent execution using LaunchDarkly static runtime context
+- **FastAPI + LangGraph v0.6**: Multi-agent execution using LaunchDarkly static runtime context
 - **Vector Database**: Persistent FAISS storage with OpenAI embeddings for semantic search
-- **LangChain Tools**: Documentation lookup, web search, PII redaction variants
+- **RAG Tools**: Documentation search (`search_v2`) and semantic reranking
+- **MCP Research Tools**: Real academic research via Model Context Protocol
+  - **ArXiv MCP Server**: Advanced academic paper search with field-specific queries and category filtering
+  - **Semantic Scholar MCP Server**: Multi-database search with author profiles and citation networks
+- **Multi-Agent Architecture**: Supervisor orchestrates Security and Support agents
 - **Metrics Collection**: Send all events to LaunchDarkly SDK (latency, success, tool usage)
-- **Evaluation System**: Realistic usage patterns for testing
 - **Chat UI**: Simple interface showing real-time tool calls and model switches
 
 ### Evaluation System
@@ -86,9 +97,10 @@ initialize_embeddings.py # One-time vector embedding initialization
 ## Experiment Design
 
 ### Variation Comparisons
-- **Tool Alternatives**: Different documentation lookup implementations
-- **Stack Configurations**: Single tool vs. multi-tool workflows
-- **Model Comparisons**: Same tools across different LLMs
+- **Tool Variations**: `docs-only` vs `rag-enabled` vs `research-enhanced` (with MCP)
+- **Stack Configurations**: Basic RAG vs full research capabilities
+- **Model Comparisons**: Claude vs OpenAI models with same tool configurations
+- **Agent Configurations**: Different multi-agent routing strategies
 
 ### Success Criteria
 - Clear, evidence-based decisions on tool effectiveness

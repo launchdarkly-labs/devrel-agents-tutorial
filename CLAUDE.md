@@ -11,11 +11,9 @@ cp .env.example .env  # Edit with your API keys
 
 # For MCP research tools (research-enhanced variation)
 uv tool install arxiv-mcp-server
-git clone https://github.com/JackKuo666/semanticscholar-MCP-Server.git /tmp/semanticscholar-mcp
+git clone https://github.com/JackKuo666/semanticscholar-MCP-Server.git
 uv add requests beautifulsoup4 mcp semanticscholar
 
-# For Redis caching (optional but recommended)
-brew install redis && brew services start redis
 ```
 
 **Run the Application:**
@@ -31,16 +29,15 @@ uv run streamlit run ui/chat_interface.py
 - `LD_SDK_KEY`: LaunchDarkly Server SDK key
 - `ANTHROPIC_API_KEY`: For Claude model access
 - `OPENAI_API_KEY`: For OpenAI model access
-- `REDIS_URL`: Redis connection string (optional, defaults to localhost)
 
 ## Architecture Overview
 
-This is an advanced tutorial project demonstrating LaunchDarkly AI Configs with multi-agent LangGraph workflows, real MCP integration, and Redis caching.
+This is an advanced tutorial project demonstrating LaunchDarkly AI Configs with multi-agent LangGraph workflows and real MCP integration.
 
 ### Multi-Agent Architecture:
 1. **FastAPI** (`api/main.py`) receives chat requests
 2. **AgentService** (`api/services/agent_service.py`) orchestrates the multi-agent workflow
-3. **ConfigManager** (`policy/config_manager.py`) fetches LaunchDarkly AI Configs with Redis caching
+3. **ConfigManager** (`policy/config_manager.py`) fetches LaunchDarkly AI Configs
 4. **Supervisor Agent** (`agents/supervisor_agent.py`) routes between specialized agents
 5. **Security Agent** (`agents/security_agent.py`) handles PII detection using native model capabilities
 6. **Support Agent** (`agents/support_agent.py`) performs research using RAG + MCP tools
@@ -48,13 +45,13 @@ This is an advanced tutorial project demonstrating LaunchDarkly AI Configs with 
 ### LaunchDarkly Integration:
 - **3 AI Configs** control different agent behaviors: supervisor-agent, support-agent, security-agent
 - **Runtime Control** over tool availability, model selection, and agent instructions
-- **Redis Caching** reduces LaunchDarkly API calls by 90%
+- **Intelligent Caching** optimizes LaunchDarkly API usage
 - **Variations** tested: docs-only, rag-enabled, research-enhanced (with MCP)
 
 ### Technology Stack:
 - **RAG**: Vector search with OpenAI embeddings, FAISS, and semantic reranking
 - **MCP**: Real Model Context Protocol integration with ArXiv and Semantic Scholar
-- **Redis**: High-performance caching for configs, embeddings, and MCP responses
+- **Performance**: Optimized caching for configs, embeddings, and MCP responses
 - **Multi-Provider**: Supports both Anthropic Claude and OpenAI GPT models
 
 ### Production-Ready Features:

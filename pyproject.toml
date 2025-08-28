@@ -34,6 +34,7 @@ dependencies = [
     "beautifulsoup4>=4.13.5",
     "mcp>=1.13.1",
     "semanticscholar>=0.10.0",
+    "rank-bm25>=0.2.2",
 ]
 
 [dependency-groups]

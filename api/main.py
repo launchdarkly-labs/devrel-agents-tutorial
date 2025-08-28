@@ -15,7 +15,16 @@ agent_service = AgentService()
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
-    return await agent_service.process_message(
-        user_id=request.user_id,
-        message=request.message
-    )
+    print(f"🌐 API: Received chat request from user {request.user_id}: {request.message[:50]}...")
+    try:
+        result = await agent_service.process_message(
+            user_id=request.user_id,
+            message=request.message
+        )
+        print(f"🌐 API: Returning response: {len(result.response) if result.response else 0} chars")
+        return result
+    except Exception as e:
+        print(f"🌐 API ERROR: {e}")
+        raise
+
+# Cache clearing removed - simplified for demo
