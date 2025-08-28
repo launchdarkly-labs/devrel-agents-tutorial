@@ -126,14 +126,20 @@ def create_support_agent(config: AgentConfig):
                 total_tool_calls += len(message.tool_calls)
                 for tool_call in message.tool_calls:
                     tool_name = tool_call['name']
+                    tool_args = tool_call.get('args', {})
                     recent_tool_calls.append(tool_name)
-                    # Log tool usage type
+                    
+                    # Extract search query from tool arguments
+                    search_query = tool_args.get('query', '') or tool_args.get('search_query', '') or tool_args.get('q', '')
+                    query_display = f"query: '{search_query}'" if search_query else "no query found"
+                    
+                    # Log tool usage type with search terms
                     if tool_name in ['search_papers', 'search_semantic_scholar']:
-                        print(f"🔬 MCP TOOL CALLED: {tool_name} (external research server)")
+                        print(f"🔬 MCP TOOL CALLED: {tool_name} ({query_display}) (external research server)")
                     elif tool_name in ['search_v1', 'search_v2', 'reranking']:
-                        print(f"📚 INTERNAL TOOL CALLED: {tool_name} (local processing)")
+                        print(f"📚 INTERNAL TOOL CALLED: {tool_name} ({query_display}) (local processing)")
                     else:
-                        print(f"🔧 UNKNOWN TOOL CALLED: {tool_name}")
+                        print(f"🔧 UNKNOWN TOOL CALLED: {tool_name} ({query_display})")
         
         # Check for consecutive identical tool calls (limit: 3 in a row, but give one more chance to finish)
         consecutive_limit = 3

@@ -28,7 +28,8 @@
       "Bash(/usr/local/bin/uv:*)",
       "Bash(~/.cargo/bin/uv:*)",
       "Bash($HOME/.local/bin/arxiv-mcp-server:*)",
-      "Bash(echo $HOME)"
+      "Bash(echo $HOME)",
+      "Bash(kill:*)"
     ],
     "deny": [],
     "ask": [],

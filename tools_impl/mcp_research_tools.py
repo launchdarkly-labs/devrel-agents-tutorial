@@ -28,11 +28,11 @@ class MCPResearchTools:
                     "command": "/Users/ld_scarlett/.local/bin/arxiv-mcp-server", 
                     "args": ["--storage-path", "/tmp/arxiv-papers"]
                 },
-                # Semantic Scholar MCP Server (Python-based) - Optional
-                # "semanticscholar": {
-                #     "command": "python",
-                #     "args": ["/tmp/arxiv-mcp/semanticscholar-MCP-Server/semantic_scholar_server.py"]
-                # }
+                # Semantic Scholar MCP Server (Python-based)
+                "semanticscholar": {
+                    "command": "python",
+                    "args": ["/tmp/semantic_scholar_server.py"]
+                }
             }
             
             # Try to initialize with available servers
@@ -65,7 +65,9 @@ class MCPResearchTools:
                         print(f"DEBUG: Loaded {len(server_tools)} tools from {server_name} MCP server")
                         
                     except Exception as e:
-                        print(f"DEBUG: Failed to load tools from {server_name}: {e}")
+                        print(f"❌ ERROR: Failed to load tools from {server_name}: {e}")
+                        import traceback
+                        print(f"❌ TRACEBACK: {traceback.format_exc()}")
                         continue
                 
                 # Organize tools by type - map actual MCP tools to our expected names
