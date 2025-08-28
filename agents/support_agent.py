@@ -12,6 +12,8 @@ from tools_impl.mcp_research_tools import get_research_tools
 import asyncio
 from policy.config_manager import AgentConfig
 
+# Simplified approach - no caching for demo clarity
+
 class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]
     user_input: str
@@ -20,69 +22,72 @@ class AgentState(TypedDict):
 
 def create_support_agent(config: AgentConfig):
     """Create a universal agent that works with any model provider"""
+    print(f"🏗️  CREATING SUPPORT AGENT: Starting with tools {config.allowed_tools}")
     
     # Create tools based on LaunchDarkly configuration
     available_tools = []
     
-    # Get MCP research tools asynchronously (MCP-only, no fallbacks)
+    # Simple MCP tool loading - no caching for demo clarity
+    print("🔄 LOADING MCP TOOLS: Connecting to MCP servers...")
     mcp_tool_map = {}
+    
     try:
-        # Try to get existing event loop, create new one if needed
-        try:
-            loop = asyncio.get_running_loop()
-            # If we have a running loop, use create_task to run in background
-            import concurrent.futures
-            
-            # Use thread pool executor to run MCP initialization in background
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                def sync_get_mcp_tools():
-                    # Create a new event loop in this thread
-                    new_loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(new_loop)
-                    try:
-                        return new_loop.run_until_complete(get_research_tools())
-                    finally:
-                        new_loop.close()
-                
-                future = executor.submit(sync_get_mcp_tools)
-                mcp_tools = future.result(timeout=10)  # 10 second timeout
-                print(f"DEBUG: Successfully loaded MCP tools in background thread")
-                
-        except RuntimeError:
-            # No running loop, safe to create new one
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            mcp_tools = loop.run_until_complete(get_research_tools())
-            loop.close()
+        import concurrent.futures
         
-        mcp_tool_map = {tool.name: tool for tool in mcp_tools}
-        if mcp_tools:
-            print(f"DEBUG: Loaded real MCP tools: {list(mcp_tool_map.keys())}")
-        else:
-            print("DEBUG: No MCP tools available - using basic tools only")
+        def load_mcp_tools():
+            # Create new event loop for MCP initialization
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            try:
+                return new_loop.run_until_complete(get_research_tools())
+            finally:
+                new_loop.close()
+        
+        # Load MCP tools with timeout
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(load_mcp_tools)
+            try:
+                mcp_tools = future.result(timeout=5)  # 5 second timeout
+                mcp_tool_map = {tool.name: tool for tool in mcp_tools}
+                
+                if mcp_tools:
+                    print(f"✅ MCP TOOLS LOADED: {list(mcp_tool_map.keys())}")
+                else:
+                    print("📚 NO MCP TOOLS: Using internal tools only")
+            except concurrent.futures.TimeoutError:
+                print("⏰ MCP TIMEOUT: MCP servers not responding - using internal tools only")
+                mcp_tool_map = {}
+                
     except Exception as e:
-        print(f"DEBUG: MCP initialization failed: {e}")
-        mcp_tools = []
+        print(f"❌ MCP ERROR: {e} - Using internal tools only")
+        mcp_tool_map = {}
     
     for tool_name in config.allowed_tools:
         if tool_name == "search_v1":
             available_tools.append(SearchToolV1())
+            print(f"📚 INTERNAL TOOL: Basic vector search (search_v1)")
         elif tool_name == "search_v2":
             available_tools.append(SearchToolV2())
+            print(f"📚 INTERNAL TOOL: Advanced vector search with embeddings (search_v2)")
         elif tool_name == "reranking":
             available_tools.append(RerankingTool())
+            print(f"📊 INTERNAL TOOL: BM25 reranking algorithm (reranking)")
         elif tool_name == "arxiv_search":
-            if "arxiv_search" in mcp_tool_map:
-                available_tools.append(mcp_tool_map["arxiv_search"])
-                print(f"DEBUG: Added real ArXiv MCP tool")
+            if "search_papers" in mcp_tool_map:
+                available_tools.append(mcp_tool_map["search_papers"])
+                print(f"🔬 MCP TOOL ENABLED: ArXiv research via real MCP server (search_papers)")
             else:
-                print(f"DEBUG: ArXiv MCP tool requested but not available - install: npm install -g @michaellatman/mcp-server-arxiv")
+                print(f"❌ MCP TOOL UNAVAILABLE: ArXiv MCP tool requested but search_papers not available - SKIPPING")
+                # Skip this tool - don't add anything to available_tools
         elif tool_name == "semantic_scholar":
-            if "semantic_scholar" in mcp_tool_map:
-                available_tools.append(mcp_tool_map["semantic_scholar"])
-                print(f"DEBUG: Added real Semantic Scholar MCP tool")
+            if "search_semantic_scholar" in mcp_tool_map:
+                available_tools.append(mcp_tool_map["search_semantic_scholar"])
+                print(f"🔬 MCP TOOL ENABLED: Semantic Scholar via real MCP server (search_semantic_scholar)")
             else:
-                print(f"DEBUG: Semantic Scholar MCP tool requested but not available")
+                print(f"❌ MCP TOOL UNAVAILABLE: Semantic Scholar MCP tool requested but search_semantic_scholar not available - SKIPPING")
+                # Skip this tool - don't add anything to available_tools
+        else:
+            print(f"❓ UNKNOWN TOOL REQUESTED: {tool_name} - SKIPPING")
     
     # Initialize model based on LaunchDarkly config - support multiple providers
     model_name = config.model.lower()
@@ -94,12 +99,18 @@ def create_support_agent(config: AgentConfig):
         # Default to Anthropic for unknown models
         model = ChatAnthropic(model=config.model, temperature=0.1)
     
+    # Debug: Show final available tools
+    print(f"🔧 FINAL AVAILABLE TOOLS: {[tool.name if hasattr(tool, 'name') else str(tool) for tool in available_tools]}")
+    
     # Bind tools to model - this works universally across providers
     if available_tools:
         model = model.bind_tools(available_tools)
-    
-    # Create tool node for executing tools
-    tool_node = ToolNode(available_tools)
+        # Create tool node for executing tools
+        tool_node = ToolNode(available_tools)
+    else:
+        print(f"⚠️  NO TOOLS AVAILABLE: Agent will work in model-only mode")
+        # Create empty tool node that won't be used
+        tool_node = None
     
     def should_continue(state: AgentState):
         """Decide whether to continue with tools or end"""
@@ -114,7 +125,15 @@ def create_support_agent(config: AgentConfig):
             if hasattr(message, 'tool_calls') and message.tool_calls:
                 total_tool_calls += len(message.tool_calls)
                 for tool_call in message.tool_calls:
-                    recent_tool_calls.append(tool_call['name'])
+                    tool_name = tool_call['name']
+                    recent_tool_calls.append(tool_name)
+                    # Log tool usage type
+                    if tool_name in ['search_papers', 'search_semantic_scholar']:
+                        print(f"🔬 MCP TOOL CALLED: {tool_name} (external research server)")
+                    elif tool_name in ['search_v1', 'search_v2', 'reranking']:
+                        print(f"📚 INTERNAL TOOL CALLED: {tool_name} (local processing)")
+                    else:
+                        print(f"🔧 UNKNOWN TOOL CALLED: {tool_name}")
         
         # Check for consecutive identical tool calls (limit: 3 in a row, but give one more chance to finish)
         consecutive_limit = 3
