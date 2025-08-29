@@ -21,7 +21,6 @@ class MCPResearchTools:
         try:
             # Configure MCP servers for research
             # NOTE: MCP servers can cause initialization timeouts in some environments
-            # Uncomment when MCP servers are properly installed and configured
             server_configs = {
                 # ArXiv MCP Server (Python-based) - RE-ENABLED
                 "arxiv": {
@@ -135,11 +134,11 @@ async def get_research_tools() -> List[BaseTool]:
         # Only return real MCP tools - no fallbacks
         if "arxiv_search" in available_tools:
             tools.append(mcp_tools.get_tool("arxiv_search"))
-            print("✅ Added real ArXiv MCP tool")
+            print("✅ Added ArXiv MCP tool")
             
         if "semantic_scholar" in available_tools:
             tools.append(mcp_tools.get_tool("semantic_scholar"))
-            print("✅ Added real Semantic Scholar MCP tool")
+            print("✅ Added Semantic Scholar MCP tool")
         
         if not tools:
             print("No MCP research tools available. Install MCP servers: npm install -g @michaellatman/mcp-server-arxiv")

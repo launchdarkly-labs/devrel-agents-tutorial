@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Project documentation files
+project_overview.md
+.claude
+CLAUDE.md

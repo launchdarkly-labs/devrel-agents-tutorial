@@ -59,28 +59,6 @@ class RerankingTool(BaseTool):
             return result
             
         except Exception as e:
-            print(f"DEBUG: BM25 reranking failed: {e}")
-            # Fallback to simple term matching
-            return self._fallback_rerank(query, lines)
+            print(f"ERROR: BM25 reranking failed: {e}")
+            return f"Error: Reranking failed - {str(e)}"
     
-    def _fallback_rerank(self, query: str, lines: List[str]) -> str:
-        """Fallback reranking using simple term frequency"""
-        print("DEBUG: Using fallback term-frequency reranking")
-        
-        query_lower = query.lower()
-        scored_results = []
-        
-        for line in lines:
-            # Count query terms in result
-            score = sum(1 for term in query_lower.split() if term.lower() in line.lower())
-            scored_results.append((score, line))
-        
-        # Sort by score (descending)
-        scored_results.sort(key=lambda x: x[0], reverse=True)
-        
-        # Format results
-        reranked_results = []
-        for i, (score, doc) in enumerate(scored_results, 1):
-            reranked_results.append(f"{i}. [Terms: {score}] {doc}")
-        
-        return f"Fallback reranked results for '{query}':\n\n" + '\n\n'.join(reranked_results)

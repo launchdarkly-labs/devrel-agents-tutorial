@@ -20,6 +20,7 @@ dependencies = [
     { name = "langchain-openai" },
     { name = "langgraph" },
     { name = "launchdarkly-server-sdk" },
+    { name = "launchdarkly-server-sdk-ai" },
     { name = "mcp" },
     { name = "numpy" },
     { name = "openai" },
@@ -27,7 +28,6 @@ dependencies = [
     { name = "pymupdf" },
     { name = "python-dotenv" },
     { name = "rank-bm25" },
-    { name = "redis" },
     { name = "requests" },
     { name = "semanticscholar" },
     { name = "streamlit" },
@@ -52,6 +52,7 @@ requires-dist = [
     { name = "langchain-openai", specifier = ">=0.3.31" },
     { name = "langgraph", specifier = ">=0.0.40" },
     { name = "launchdarkly-server-sdk", specifier = ">=9.0.0" },
+    { name = "launchdarkly-server-sdk-ai", specifier = ">=0.1.0" },
     { name = "mcp", specifier = ">=1.13.1" },
     { name = "numpy", specifier = ">=1.24.0" },
     { name = "openai", specifier = ">=1.0.0" },
@@ -59,7 +60,6 @@ requires-dist = [
     { name = "pymupdf", specifier = ">=1.23.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "rank-bm25", specifier = ">=0.2.2" },
-    { name = "redis", specifier = ">=5.0.0" },
     { name = "requests", specifier = ">=2.31.0" },
     { name = "semanticscholar", specifier = ">=0.10.0" },
     { name = "streamlit", specifier = ">=1.28.0" },
@@ -128,15 +128,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/f1/b4/636b3b65173d3ce9a38ef5f0522789614e590dab6a8d505340a4efe4c567/anyio-4.10.0.tar.gz", hash = "sha256:3f3fae35c96039744587aa5b8371e7e8e603c0702999535961dd336026973ba6", size = 213252, upload-time = "2025-08-04T08:54:26.451Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/6f/12/e5e0282d673bb9746bacfb6e2dba8719989d3660cdb2ea79aee9a9651afb/anyio-4.10.0-py3-none-any.whl", hash = "sha256:60e474ac86736bbfd6f210f7a61218939c318f43f9972497381f1c5e930ed3d1", size = 107213, upload-time = "2025-08-04T08:54:24.882Z" },
-]
-
-[[package]]
-name = "async-timeout"
-version = "5.0.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/a5/ae/136395dfbfe00dfc94da3f3e136d0b13f394cba8f4841120e34226265780/async_timeout-5.0.1.tar.gz", hash = "sha256:d9321a7a3d5a6a5e187e824d2fa0793ce379a202935782d555d6e9d2735677d3", size = 9274, upload-time = "2024-11-06T16:41:39.6Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/fe/ba/e2081de779ca30d473f21f5b30e0e737c438205440784c7dfc81efc2b029/async_timeout-5.0.1-py3-none-any.whl", hash = "sha256:39e3809566ff85354557ec2398b55e096c8364bacac9405a7a1fa429e77fe76c", size = 6233, upload-time = "2024-11-06T16:41:37.9Z" },
 ]
 
 [[package]]
@@ -239,6 +230,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/b7/8c/9839225320046ed279c6e839d51f028342eb77c91c89b8ef2549f951f3ec/charset_normalizer-3.4.3-cp314-cp314-win32.whl", hash = "sha256:c6dbd0ccdda3a2ba7c2ecd9d77b37f3b5831687d8dc1b6ca5f56a4880cc7b7ce", size = 100086, upload-time = "2025-08-09T07:56:52.722Z" },
     { url = "https://files.pythonhosted.org/packages/ee/7a/36fbcf646e41f710ce0a563c1c9a343c6edf9be80786edeb15b6f62e17db/charset_normalizer-3.4.3-cp314-cp314-win_amd64.whl", hash = "sha256:73dc19b562516fc9bcf6e5d6e596df0b4eb98d87e4f79f3ae71840e6ed21361c", size = 107400, upload-time = "2025-08-09T07:56:55.172Z" },
     { url = "https://files.pythonhosted.org/packages/8a/1f/f041989e93b001bc4e44bb1669ccdcf54d3f00e628229a85b08d330615c5/charset_normalizer-3.4.3-py3-none-any.whl", hash = "sha256:ce571ab16d890d23b5c278547ba694193a45011ff86a9162a71307ed9f86759a", size = 53175, upload-time = "2025-08-09T07:57:26.864Z" },
+]
+
+[[package]]
+name = "chevron"
+version = "0.14.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/15/1f/ca74b65b19798895d63a6e92874162f44233467c9e7c1ed8afd19016ebe9/chevron-0.14.0.tar.gz", hash = "sha256:87613aafdf6d77b6a90ff073165a61ae5086e21ad49057aa0e53681601800ebf", size = 11440, upload-time = "2021-01-02T22:47:59.233Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/52/93/342cc62a70ab727e093ed98e02a725d85b746345f05d2b5e5034649f4ec8/chevron-0.14.0-py3-none-any.whl", hash = "sha256:fbf996a709f8da2e745ef763f482ce2d311aa817d287593a5b990d6d6e4f0443", size = 11595, upload-time = "2021-01-02T22:47:57.847Z" },
 ]
 
 [[package]]
@@ -816,6 +816,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/19/27/ae186fca5498dbcd80e93940716997a83c09b401b3ee0889dcbb5e3dcd2e/launchdarkly_server_sdk-9.12.0.tar.gz", hash = "sha256:219b100d7569e4f528b6028cbd2a5d61f13539f2b44ed43fc173bb4f456ee580", size = 165130, upload-time = "2025-07-14T16:04:29.253Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/72/45/ff696e71a724e4ed686bbf5e57537c08baabde900e229d2a167040aa5e40/launchdarkly_server_sdk-9.12.0-py3-none-any.whl", hash = "sha256:c7351e26e6b695b968d49888e967691aae60ded82d73a41a74d59d11252a1413", size = 219654, upload-time = "2025-07-14T16:04:27.866Z" },
+]
+
+[[package]]
+name = "launchdarkly-server-sdk-ai"
+version = "0.10.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "chevron" },
+    { name = "launchdarkly-server-sdk" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/da/38/8917f5a30b2b7f75521a0eff7571cd99cd2b1c6da614d8bb1631e9c576ef/launchdarkly_server_sdk_ai-0.10.1.tar.gz", hash = "sha256:fcf45bbbbe65aaf3ef3ac2eb767644677fd3bbc3e84ea5a6c7762755726b3f5c", size = 14014, upload-time = "2025-08-28T14:55:58.53Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/43/20/43e15640d688736cdf7453416c6f2420b32c3ccee534bdb930e425aa7253/launchdarkly_server_sdk_ai-0.10.1-py3-none-any.whl", hash = "sha256:a176837c97606bdfdc7725d00a07e8a9a9adc87ff45d997fa32ab88a7724c0bb", size = 15364, upload-time = "2025-08-28T14:55:57.302Z" },
 ]
 
 [[package]]
@@ -1566,18 +1579,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/fc/0a/f9579384aa017d8b4c15613f86954b92a95a93d641cc849182467cf0bb3b/rank_bm25-0.2.2.tar.gz", hash = "sha256:096ccef76f8188563419aaf384a02f0ea459503fdf77901378d4fd9d87e5e51d", size = 8347, upload-time = "2022-02-16T12:10:52.196Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2a/21/f691fb2613100a62b3fa91e9988c991e9ca5b89ea31c0d3152a3210344f9/rank_bm25-0.2.2-py3-none-any.whl", hash = "sha256:7bd4a95571adadfc271746fa146a4bcfd89c0cf731e49c3d1ad863290adbe8ae", size = 8584, upload-time = "2022-02-16T12:10:50.626Z" },
-]
-
-[[package]]
-name = "redis"
-version = "6.4.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "async-timeout", marker = "python_full_version < '3.11.3'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/0d/d6/e8b92798a5bd67d659d51a18170e91c16ac3b59738d91894651ee255ed49/redis-6.4.0.tar.gz", hash = "sha256:b01bc7282b8444e28ec36b261df5375183bb47a07eb9c603f284e89cbc5ef010", size = 4647399, upload-time = "2025-08-07T08:10:11.441Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/e8/02/89e2ed7e85db6c93dfa9e8f691c5087df4e3551ab39081a4d7c6d1f90e05/redis-6.4.0-py3-none-any.whl", hash = "sha256:f0544fa9604264e9464cdf4814e7d4830f74b165d52f2a330a760a88dd248b7f", size = 279847, upload-time = "2025-08-07T08:10:09.84Z" },
 ]
 
 [[package]]

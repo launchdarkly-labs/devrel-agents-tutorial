@@ -1,4 +1,4 @@
-from typing import TypedDict, List, Annotated, Literal
+from typing import TypedDict, List, Annotated, Literal, Optional
 from langgraph.graph import StateGraph, add_messages
 from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
@@ -17,15 +17,15 @@ class SupervisorState(TypedDict):
     final_response: str
     workflow_stage: str  # "initial_security", "research", "revision", "final_compliance"
 
-def create_supervisor_agent(supervisor_config: AgentConfig, support_config: AgentConfig, security_config: AgentConfig):
+def create_supervisor_agent(supervisor_config: AgentConfig, support_config: AgentConfig, security_config: AgentConfig, metrics_tracker: Optional['AIMetricsTracker'] = None):
     """Create supervisor agent that orchestrates the workflow"""
     
     # Initialize supervisor model
     model_name = supervisor_config.model.lower()
     if "gpt" in model_name or "openai" in model_name:
-        supervisor_model = ChatOpenAI(model=supervisor_config.model, temperature=0.1)
+        supervisor_model = ChatOpenAI(model=supervisor_config.model, temperature=supervisor_config.temperature)
     else:
-        supervisor_model = ChatAnthropic(model=supervisor_config.model, temperature=0.1)
+        supervisor_model = ChatAnthropic(model=supervisor_config.model, temperature=supervisor_config.temperature)
     
     # Create child agents
     support_agent = create_support_agent(support_config)
@@ -76,15 +76,37 @@ def create_supervisor_agent(supervisor_config: AgentConfig, support_config: Agen
     
     def security_node(state: SupervisorState):
         """Route to security agent"""
-        # Prepare input for security agent
-        security_input = {
-            "user_input": state["user_input"],
-            "response": "",
-            "tool_calls": [],
-            "messages": [HumanMessage(content=state["messages"][-2].content if len(state["messages"]) >= 2 else state["user_input"])]
-        }
+        # Track security agent start
+        agent_start = None
+        if metrics_tracker:
+            agent_start = metrics_tracker.track_agent_start("security-agent", security_config.model, security_config.variation_key)
         
-        result = security_agent.invoke(security_input)
+        try:
+            # Prepare input for security agent
+            security_input = {
+                "user_input": state["user_input"],
+                "response": "",
+                "tool_calls": [],
+                "messages": [HumanMessage(content=state["messages"][-2].content if len(state["messages"]) >= 2 else state["user_input"])]
+            }
+            
+            result = security_agent.invoke(security_input)
+            
+            # Track security agent completion
+            if metrics_tracker and agent_start:
+                metrics_tracker.track_agent_completion(
+                    "security-agent", security_config.model, security_config.variation_key,
+                    agent_start, [], True  # Security agent doesn't use tools
+                )
+                
+        except Exception as e:
+            # Track security agent failure
+            if metrics_tracker and agent_start:
+                metrics_tracker.track_agent_completion(
+                    "security-agent", security_config.model, security_config.variation_key,
+                    agent_start, [], False, str(e)
+                )
+            raise
         
         # Update workflow stage
         current_stage = state.get("workflow_stage", "initial_security")
@@ -101,15 +123,38 @@ def create_supervisor_agent(supervisor_config: AgentConfig, support_config: Agen
     
     def support_node(state: SupervisorState):
         """Route to support agent"""
-        # Prepare input for support agent
-        support_input = {
-            "user_input": state["user_input"],
-            "response": "",
-            "tool_calls": [],
-            "messages": [HumanMessage(content=state["user_input"])]
-        }
+        # Track support agent start
+        agent_start = None
+        if metrics_tracker:
+            agent_start = metrics_tracker.track_agent_start("support-agent", support_config.model, support_config.variation_key)
         
-        result = support_agent.invoke(support_input)
+        try:
+            # Prepare input for support agent
+            support_input = {
+                "user_input": state["user_input"],
+                "response": "",
+                "tool_calls": [],
+                "messages": [HumanMessage(content=state["user_input"])]
+            }
+            
+            result = support_agent.invoke(support_input)
+            
+            # Track support agent completion
+            if metrics_tracker and agent_start:
+                tool_calls = result.get("tool_calls", [])
+                metrics_tracker.track_agent_completion(
+                    "support-agent", support_config.model, support_config.variation_key,
+                    agent_start, tool_calls, True
+                )
+                
+        except Exception as e:
+            # Track support agent failure
+            if metrics_tracker and agent_start:
+                metrics_tracker.track_agent_completion(
+                    "support-agent", support_config.model, support_config.variation_key,
+                    agent_start, [], False, str(e)
+                )
+            raise
         
         return {
             "messages": [AIMessage(content=result["response"])],

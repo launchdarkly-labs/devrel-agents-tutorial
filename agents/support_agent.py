@@ -72,32 +72,24 @@ def create_support_agent(config: AgentConfig):
         elif tool_name == "reranking":
             available_tools.append(RerankingTool())
             print(f"📊 INTERNAL TOOL: BM25 reranking algorithm (reranking)")
-        elif tool_name == "arxiv_search":
-            if "search_papers" in mcp_tool_map:
-                available_tools.append(mcp_tool_map["search_papers"])
-                print(f"🔬 MCP TOOL ENABLED: ArXiv research via real MCP server (search_papers)")
+        elif tool_name in ["arxiv_search", "semantic_scholar"]:
+            if tool_name in mcp_tool_map:
+                available_tools.append(mcp_tool_map[tool_name])
+                print(f"🔬 MCP TOOL ENABLED: {tool_name} via real MCP server")
             else:
-                print(f"❌ MCP TOOL UNAVAILABLE: ArXiv MCP tool requested but search_papers not available - SKIPPING")
-                # Skip this tool - don't add anything to available_tools
-        elif tool_name == "semantic_scholar":
-            if "search_semantic_scholar" in mcp_tool_map:
-                available_tools.append(mcp_tool_map["search_semantic_scholar"])
-                print(f"🔬 MCP TOOL ENABLED: Semantic Scholar via real MCP server (search_semantic_scholar)")
-            else:
-                print(f"❌ MCP TOOL UNAVAILABLE: Semantic Scholar MCP tool requested but search_semantic_scholar not available - SKIPPING")
-                # Skip this tool - don't add anything to available_tools
+                print(f"❌ MCP TOOL UNAVAILABLE: {tool_name} requested but not available - SKIPPING")
         else:
             print(f"❓ UNKNOWN TOOL REQUESTED: {tool_name} - SKIPPING")
     
     # Initialize model based on LaunchDarkly config - support multiple providers
     model_name = config.model.lower()
     if "gpt" in model_name or "openai" in model_name:
-        model = ChatOpenAI(model=config.model, temperature=0.1)
+        model = ChatOpenAI(model=config.model, temperature=config.temperature)
     elif "claude" in model_name or "anthropic" in model_name:
-        model = ChatAnthropic(model=config.model, temperature=0.1)
+        model = ChatAnthropic(model=config.model, temperature=config.temperature)
     else:
         # Default to Anthropic for unknown models
-        model = ChatAnthropic(model=config.model, temperature=0.1)
+        model = ChatAnthropic(model=config.model, temperature=config.temperature)
     
     # Debug: Show final available tools
     print(f"🔧 FINAL AVAILABLE TOOLS: {[tool.name if hasattr(tool, 'name') else str(tool) for tool in available_tools]}")
@@ -217,8 +209,7 @@ def create_support_agent(config: AgentConfig):
                 
                 Make sure to:
                 1. Answer the original Q-learning question thoroughly
-                2. Handle any PII redaction if needed (like email addresses or phone numbers)
-                3. Provide a complete response
+                2. Provide a complete response
                 
                 Do NOT use any more tools - just give your final answer.
                 """)
@@ -237,10 +228,17 @@ def create_support_agent(config: AgentConfig):
         messages = state["messages"]
         tool_calls = []
         
-        # Extract all tool calls from the conversation
+        # Extract all tool calls from the conversation with search queries
         for message in messages:
             if hasattr(message, 'tool_calls') and message.tool_calls:
-                tool_calls.extend([call['name'] for call in message.tool_calls])
+                for call in message.tool_calls:
+                    tool_name = call['name']
+                    tool_args = call.get('args', {})
+                    # Extract search query from tool arguments
+                    search_query = tool_args.get('query', '') or tool_args.get('search_query', '') or tool_args.get('q', '')
+                    # Always append just the tool name as a string to maintain consistent type
+                    # The search query and args are for internal tracking but not part of the public API
+                    tool_calls.append(tool_name)
         
         # Get the final assistant message
         final_message = None

@@ -9,7 +9,6 @@ An advanced tutorial demonstrating LaunchDarkly AI Config with multi-agent workf
 - **RAG Integration**: Vector search with embeddings, FAISS, and BM25 reranking
 - **MCP Integration**: ArXiv and Semantic Scholar via Model Context Protocol
 - **Multi-Provider Support**: Claude and OpenAI models
-- **Production-Ready**: Enterprise-grade performance and graceful degradation
 
 ## Quick Start
 
@@ -183,3 +182,44 @@ The system uses **3 specialized AI Config flags**:
   - 👤 Author profiles and detailed academic metadata
   - 🔗 Citation networks and reference relationships
   - 📊 Publication metrics and impact analysis
+
+## 🚀 Traffic Simulation for Experiments
+
+Generate realistic traffic to test your LaunchDarkly AI Config variations and create compelling blog post metrics.
+
+### Quick Traffic Generation
+
+```bash
+# Generate 50 queries with geographic users (basic)
+python tools/traffic_generator.py --queries 50 --delay 2
+
+# Generate 200 queries quickly (for blog post data)
+python tools/traffic_generator.py --queries 200 --delay 0.5
+
+# Verbose output to see details
+python tools/traffic_generator.py --queries 20 --delay 1 --verbose
+```
+
+### What Gets Simulated
+
+✅ **Real AI Responses**: Actual multi-agent workflows with real MCP tools  
+✅ **Geographic Targeting**: Fake users from US, EU, Asia with different plans  
+✅ **Realistic Feedback**: Smart rules simulate thumbs up/down based on response quality  
+✅ **Real User Feedback**: UI includes thumbs up/down buttons for actual user feedback
+✅ **LaunchDarkly Metrics**: Both real and simulated feedback flow to your dashboard  
+
+### Example Output
+```
+🌍 USER CONTEXT: user_eu_enterprise_001 from DE on enterprise plan
+🤖 SENDING: user asks 'Find recent papers on transformers...'
+✅ SUCCESS: Got 1247 chars, used 2 tools
+👍 FEEDBACK: user gave 👍 (rating: 4/5) - good length, found keywords, used tools
+🚀 METRICS: Flushed to LaunchDarkly
+```
+
+### Files You Can Customize
+- `data/fake_users.json` - Add users from different countries/plans
+- `data/sample_queries.json` - Add questions specific to your domain  
+- `tools/traffic_generator.py` - Adjust feedback simulation logic (edit the `simulate_feedback()` function)
+
+**📚 Full Guide**: See [Traffic Simulation Guide](docs/TRAFFIC_SIMULATION_GUIDE.md) for complete instructions

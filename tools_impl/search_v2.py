@@ -3,7 +3,7 @@ from data.vector_store import VectorStore
 from typing import Any
 
 class SearchToolV2(BaseTool):
-    name: str = "search_vector"
+    name: str = "search_v2"
     description: str = "Advanced vector-based semantic search through enterprise AI/ML documentation using OpenAI embeddings"
     vector_store: Any = None
     

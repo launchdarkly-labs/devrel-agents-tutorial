@@ -71,6 +71,72 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.write(message["content"])
         if message["role"] == "assistant" and "metadata" in message:
+            # Show feedback buttons for assistant messages
+            if "message_id" in message:
+                message_id = message["message_id"]
+                current_feedback = message.get("feedback")
+                
+                col1, col2, col3 = st.columns([1, 1, 8])
+                with col1:
+                    feedback_key = f"hist_thumbs_up_{message_id}"
+                    disabled = current_feedback == "positive"
+                    if st.button("👍", key=feedback_key, disabled=disabled, help="Helpful response"):
+                        # Send feedback for historical message
+                        try:
+                            feedback_response = requests.post(
+                                "http://localhost:8001/feedback",
+                                json={
+                                    "user_id": st.session_state.user_id,
+                                    "message_id": message_id,
+                                    "user_query": message.get("user_query", ""),
+                                    "ai_response": message["content"],
+                                    "feedback": "positive",
+                                    "variation_key": message["metadata"].get("primary_variation", "unknown"),
+                                    "model": message["metadata"].get("primary_model", "unknown"),
+                                    "tool_calls": message["metadata"].get("tools_used", []),
+                                    "source": "real_user"
+                                }
+                            )
+                            if feedback_response.status_code == 200:
+                                message["feedback"] = "positive"
+                                st.rerun()
+                            else:
+                                st.error("Failed to submit feedback")
+                        except Exception as e:
+                            st.error(f"Failed to submit feedback: {e}")
+                
+                with col2:
+                    feedback_key = f"hist_thumbs_down_{message_id}"
+                    disabled = current_feedback == "negative"
+                    if st.button("👎", key=feedback_key, disabled=disabled, help="Not helpful"):
+                        # Send feedback for historical message
+                        try:
+                            feedback_response = requests.post(
+                                "http://localhost:8001/feedback",
+                                json={
+                                    "user_id": st.session_state.user_id,
+                                    "message_id": message_id,
+                                    "user_query": message.get("user_query", ""),
+                                    "ai_response": message["content"],
+                                    "feedback": "negative",
+                                    "variation_key": message["metadata"].get("primary_variation", "unknown"),
+                                    "model": message["metadata"].get("primary_model", "unknown"),
+                                    "tool_calls": message["metadata"].get("tools_used", []),
+                                    "source": "real_user"
+                                }
+                            )
+                            if feedback_response.status_code == 200:
+                                message["feedback"] = "negative"
+                                st.rerun()
+                            else:
+                                st.error("Failed to submit feedback")
+                        except Exception as e:
+                            st.error(f"Failed to submit feedback: {e}")
+                            
+                # Show current feedback status
+                if current_feedback:
+                    feedback_emoji = "👍" if current_feedback == "positive" else "👎"
+                    st.caption(f"Feedback: {feedback_emoji}")
             with st.expander("⚙️ Multi-Agent Configuration"):
                 metadata = message["metadata"]
                 if "agent_configurations" in metadata:
@@ -85,12 +151,24 @@ for message in st.session_state.messages:
                         unknown_tools = []
                         
                         for tool in tools:
-                            if tool in ['search_v1', 'search_v2', 'reranking']:
-                                internal_tools.append(tool)
-                            elif tool in ['search_papers', 'search_semantic_scholar']:
-                                mcp_tools.append(tool)
+                            tool_name = tool if isinstance(tool, str) else tool.get("name", str(tool))
+                            if tool_name in ['search_v1', 'search_v2', 'reranking']:
+                                # Add search query if available
+                                if isinstance(tool, dict) and tool.get("search_query"):
+                                    internal_tools.append(f"{tool_name} ('{tool['search_query']}')")
+                                else:
+                                    internal_tools.append(tool_name)
+                            elif tool_name in ['search_papers', 'search_semantic_scholar']:
+                                # Add search query if available
+                                if isinstance(tool, dict) and tool.get("search_query"):
+                                    mcp_tools.append(f"{tool_name} ('{tool['search_query']}')")
+                                else:
+                                    mcp_tools.append(tool_name)
                             else:
-                                unknown_tools.append(tool)
+                                if isinstance(tool, dict) and tool.get("search_query"):
+                                    unknown_tools.append(f"{tool_name} ('{tool['search_query']}')")
+                                else:
+                                    unknown_tools.append(tool_name)
                         
                         config_data = {
                             "variation": agent_config["variation_key"],
@@ -153,15 +231,100 @@ if prompt:
             if "agent_configurations" in data and data["agent_configurations"]:
                 metadata["agent_configurations"] = data["agent_configurations"]
             
+            # Add message with unique ID for feedback tracking
+            message_id = f"msg_{len(st.session_state.messages)}"
             st.session_state.messages.append({
                 "role": "assistant", 
                 "content": data["response"],
-                "metadata": metadata
+                "metadata": metadata,
+                "message_id": message_id,
+                "user_query": prompt,
+                "feedback": None
             })
             
             # Display assistant message
             with st.chat_message("assistant"):
                 st.write(data["response"])
+                
+                # Add feedback buttons after the response
+                col1, col2, col3 = st.columns([1, 1, 8])
+                
+                # Check current feedback status for this message
+                current_feedback = None
+                for msg in st.session_state.messages:
+                    if msg.get("message_id") == message_id:
+                        current_feedback = msg.get("feedback")
+                        break
+                
+                with col1:
+                    disabled_up = current_feedback == "positive"
+                    if st.button("👍", key=f"new_thumbs_up_{message_id}", disabled=disabled_up, help="Helpful response"):
+                        # Send feedback to backend
+                        try:
+                            feedback_response = requests.post(
+                                "http://localhost:8001/feedback",
+                                json={
+                                    "user_id": st.session_state.user_id,
+                                    "message_id": message_id,
+                                    "user_query": prompt,
+                                    "ai_response": data["response"],
+                                    "feedback": "positive",
+                                    "variation_key": data["variation_key"],
+                                    "model": data["model"],
+                                    "tool_calls": data["tool_calls"],
+                                    "source": "real_user"
+                                }
+                            )
+                            if feedback_response.status_code == 200:
+                                # Update message in session state
+                                for msg in st.session_state.messages:
+                                    if msg.get("message_id") == message_id:
+                                        msg["feedback"] = "positive"
+                                        break
+                                st.success("👍 Thanks for your feedback!")
+                                st.rerun()
+                            else:
+                                st.error("Failed to submit feedback")
+                        except Exception as e:
+                            st.error(f"Failed to submit feedback: {e}")
+                
+                with col2:
+                    disabled_down = current_feedback == "negative"
+                    if st.button("👎", key=f"new_thumbs_down_{message_id}", disabled=disabled_down, help="Not helpful"):
+                        # Send feedback to backend
+                        try:
+                            feedback_response = requests.post(
+                                "http://localhost:8001/feedback",
+                                json={
+                                    "user_id": st.session_state.user_id,
+                                    "message_id": message_id,
+                                    "user_query": prompt,
+                                    "ai_response": data["response"],
+                                    "feedback": "negative",
+                                    "variation_key": data["variation_key"],
+                                    "model": data["model"],
+                                    "tool_calls": data["tool_calls"],
+                                    "source": "real_user"
+                                }
+                            )
+                            if feedback_response.status_code == 200:
+                                # Update message in session state
+                                for msg in st.session_state.messages:
+                                    if msg.get("message_id") == message_id:
+                                        msg["feedback"] = "negative"
+                                        break
+                                st.success("👎 Thanks for your feedback!")
+                                st.rerun()
+                            else:
+                                st.error("Failed to submit feedback")
+                        except Exception as e:
+                            st.error(f"Failed to submit feedback: {e}")
+                
+                # Show current feedback status
+                if current_feedback:
+                    feedback_emoji = "👍" if current_feedback == "positive" else "👎"
+                    st.caption(f"Feedback: {feedback_emoji}")
+                    
                 with st.expander("⚙️ Multi-Agent Configuration"):
                     if "agent_configurations" in data and data["agent_configurations"]:
                         # Display each agent's configuration
@@ -175,12 +338,24 @@ if prompt:
                             unknown_tools = []
                             
                             for tool in tools:
-                                if tool in ['search_v1', 'search_v2', 'reranking']:
-                                    internal_tools.append(tool)
-                                elif tool in ['search_papers', 'search_semantic_scholar']:
-                                    mcp_tools.append(tool)
+                                tool_name = tool if isinstance(tool, str) else tool.get("name", str(tool))
+                                if tool_name in ['search_v1', 'search_v2', 'reranking']:
+                                    # Add search query if available
+                                    if isinstance(tool, dict) and tool.get("search_query"):
+                                        internal_tools.append(f"{tool_name} ('{tool['search_query']}')")
+                                    else:
+                                        internal_tools.append(tool_name)
+                                elif tool_name in ['search_papers', 'search_semantic_scholar']:
+                                    # Add search query if available
+                                    if isinstance(tool, dict) and tool.get("search_query"):
+                                        mcp_tools.append(f"{tool_name} ('{tool['search_query']}')")
+                                    else:
+                                        mcp_tools.append(tool_name)
                                 else:
-                                    unknown_tools.append(tool)
+                                    if isinstance(tool, dict) and tool.get("search_query"):
+                                        unknown_tools.append(f"{tool_name} ('{tool['search_query']}')")
+                                    else:
+                                        unknown_tools.append(tool_name)
                             
                             config_data = {
                                 "variation": agent_config["variation_key"],
@@ -204,12 +379,24 @@ if prompt:
                         unknown_tools = []
                         
                         for tool in tools_used:
-                            if tool in ['search_v1', 'search_v2', 'reranking']:
-                                internal_tools.append(tool)
-                            elif tool in ['search_papers', 'search_semantic_scholar']:
-                                mcp_tools.append(tool)
+                            tool_name = tool if isinstance(tool, str) else tool.get("name", str(tool))
+                            if tool_name in ['search_v1', 'search_v2', 'reranking']:
+                                # Add search query if available
+                                if isinstance(tool, dict) and tool.get("search_query"):
+                                    internal_tools.append(f"{tool_name} ('{tool['search_query']}')")
+                                else:
+                                    internal_tools.append(tool_name)
+                            elif tool_name in ['search_papers', 'search_semantic_scholar']:
+                                # Add search query if available  
+                                if isinstance(tool, dict) and tool.get("search_query"):
+                                    mcp_tools.append(f"{tool_name} ('{tool['search_query']}')")
+                                else:
+                                    mcp_tools.append(tool_name)
                             else:
-                                unknown_tools.append(tool)
+                                if isinstance(tool, dict) and tool.get("search_query"):
+                                    unknown_tools.append(f"{tool_name} ('{tool['search_query']}')")
+                                else:
+                                    unknown_tools.append(tool_name)
                         
                         config_data = {
                             "variation": data["variation_key"],
