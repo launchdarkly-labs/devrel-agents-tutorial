@@ -14,15 +14,37 @@ class RerankingTool(BaseTool):
         # Split on whitespace and filter empty strings
         return [token for token in text.split() if token.strip()]
     
-    def _run(self, query: str, results: str) -> str:
-        print(f"DEBUG: BM25 RerankingTool called with query='{query[:50]}...', results='{results[:100]}...'")
+    def _run(self, query=None, results=None, **kwargs) -> str:
+        print(f"🔧 RERANKING TOOL INPUT:")
+        print(f"   📝 Query param: '{query}' (type: {type(query)})")
+        print(f"   📝 Results param: '{results}' (type: {type(results)})")
+        print(f"   📝 Kwargs: {kwargs}")
+        
+        # Handle different input formats based on LaunchDarkly config
+        # Convert query (object) to string
+        if isinstance(query, dict):
+            query_str = query.get('q', '') or query.get('query', '') or str(query)
+        else:
+            query_str = str(query) if query else ""
+        
+        # Convert results (array) to string
+        if isinstance(results, list):
+            results_str = '\n'.join([str(item) for item in results])
+        else:
+            results_str = str(results) if results else ""
+            
+        print(f"   📊 Processed query: '{query_str}'")
+        print(f"   📊 Results length: {len(results_str)} characters")
+        print(f"   📊 Results preview: '{results_str[:200]}...' " if results_str and len(results_str) > 200 else f"   📊 Results: '{results_str}'")
         
         # Validate inputs
-        if not query or not results:
-            return "Error: Reranking requires both query and results parameters."
+        if not query_str or not results_str:
+            error_msg = f"Error: Reranking requires both query and results parameters. Got query='{query_str}', results='{results_str}'"
+            print(f"   ❌ RERANKING ERROR: {error_msg}")
+            return error_msg
         
         # Split results into individual documents
-        lines = [line.strip() for line in results.split('\n') if line.strip()]
+        lines = [line.strip() for line in results_str.split('\n') if line.strip()]
         
         if not lines:
             return "No results to rerank."
@@ -38,7 +60,7 @@ class RerankingTool(BaseTool):
             bm25 = BM25Okapi(tokenized_docs)
             
             # Tokenize query
-            query_tokens = self._tokenize(query)
+            query_tokens = self._tokenize(query_str)
             
             # Get BM25 scores for all documents
             scores = bm25.get_scores(query_tokens)
@@ -54,8 +76,14 @@ class RerankingTool(BaseTool):
             for i, (doc, score) in enumerate(doc_scores, 1):
                 reranked_results.append(f"{i}. [BM25: {score:.3f}] {doc}")
             
-            result = f"BM25 reranked results for '{query}':\n\n" + '\n\n'.join(reranked_results)
-            print(f"DEBUG: BM25 RerankingTool returning: {result[:150]}...")
+            result = f"BM25 reranked results for '{query_str}':\n\n" + '\n\n'.join(reranked_results)
+            
+            print(f"🔧 RERANKING TOOL OUTPUT:")
+            print(f"   📊 Reranked {len(doc_scores)} documents")
+            print(f"   📊 Output length: {len(result)} characters")
+            print(f"   📊 Top 3 scores: {[f'{score:.3f}' for _, score in doc_scores[:3]]}")
+            print(f"   📄 Output preview: '{result[:300]}...'" if len(result) > 300 else f"   📄 Full output: '{result}'")
+            
             return result
             
         except Exception as e:
