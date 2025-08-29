@@ -4,16 +4,15 @@
 
 This is an advanced tutorial demonstrating LaunchDarkly AI Configs with **multi-agent workflows**, **RAG integration**, and **real MCP servers**. The system showcases enterprise-grade AI agent orchestration with runtime configuration control through LaunchDarkly's platform.
 
-The demo features a **Supervisor Agent** that orchestrates specialized **Security** and **Research** agents, each controlled by separate LaunchDarkly AI Configs, demonstrating scalable multi-agent architecture patterns with production-ready performance optimization.
+The demo features a **Supervisor Agent** that orchestrates specialized **Security** and **Research** agents, each controlled by separate LaunchDarkly AI Configs, demonstrating scalable multi-agent architecture patterns.
 
 ## Core Problem Statement
 
 Enterprise AI systems require sophisticated orchestration and runtime control:
 - **Multi-Agent Coordination**: Complex workflows need intelligent routing between specialized agents
-- **Performance at Scale**: RAG and research tools must deliver sub-second responses with caching
+- **Performance at Scale**: RAG and research tools must deliver sub-second responses
 - **Runtime Flexibility**: Organizations need to instantly adjust AI behavior without redeployment
 - **Integration Standards**: Modern AI systems must leverage protocols like MCP for tool interoperability
-- **Enterprise Features**: Production systems need performance caching, graceful degradation, and monitoring
 
 ## Solution Architecture
 
@@ -23,8 +22,6 @@ Enterprise AI systems require sophisticated orchestration and runtime control:
 - **Tool Availability**: Runtime control of RAG and MCP research tools
 - **Model Selection**: Claude vs OpenAI models with per-agent configuration
 - **Multi-arm Experiments**: Statistical testing of tool variations
-- **Real-time Guardrails**: Sub-200ms automatic model switching on latency spikes  
-- **Progressive Rollouts**: Safe deployment with automatic rollback on metric degradation
 - **Context Targeting**: Per-user/region tool access and model selection
 - **All Observability**: Metrics, experiments, and monitoring centralized in LaunchDarkly
 
@@ -47,8 +44,6 @@ Enterprise AI systems require sophisticated orchestration and runtime control:
 - **AI Configs**: Model/prompt/tool configuration management
 - **Experiments**: Multi-arm testing with statistical significance
 - **Metrics & Observability**: All efficiency metrics flow to LaunchDarkly
-- **Guardrails**: Sub-200ms latency detection with automatic model fallback
-- **Progressive Rollouts**: Automatic rollback on metric degradation
 
 ### Application Components (Python)
 - **FastAPI + LangGraph v0.6**: Multi-agent execution using LaunchDarkly static runtime context
@@ -106,23 +101,9 @@ initialize_embeddings.py # One-time vector embedding initialization
 - Clear, evidence-based decisions on tool effectiveness
 - Measurable ROI on tool implementation costs
 - Justified model selection based on efficiency metrics
-- Production-ready configuration policies
+- Scalable policy management for production deployment
 
 ## Key Features
-
-### Automatic Model Fallback System
-- **Primary Model**: Claude-3.5-Sonnet (high quality, higher latency)
-- **Fallback Model**: Claude-3-Haiku (faster, lower cost)
-- **Guardrail Trigger**: When P95 latency > 4000ms, automatically switch to Haiku
-- **Recovery**: Switch back to Sonnet when latency normalizes
-- **Monitoring**: Real-time model switching tracked in LaunchDarkly metrics
-
-## Guardrails & Risk Mitigation
-- **Latency Guardrails**: Automatic model fallback when response time > 4s
-- **Cost Circuit Breakers**: Hard limits on per-session spending
-- **Quality Monitoring**: Automatic rollback on satisfaction drop
-- **Privacy Controls**: Regional tool restrictions and PII redaction
-- **Tool Efficiency**: Block tools with low success rates
 
 ## Success Metrics
 - Demonstrable tool ROI through controlled experiments
@@ -138,7 +119,4 @@ initialize_embeddings.py # One-time vector embedding initialization
 - **No Fallbacks**: All configuration must come from LaunchDarkly (fail-fast on misconfiguration)
 - **Extensibility**: Modular design for additional tools and models
 
-This demonstrates how LaunchDarkly AI Configs enables **Speed + Caution = Iterability, Experimentation & Integration** - transforming agent development from guesswork into data-driven engineering with enterprise-grade reliability.
-
-### No Separate Observability Tools
-Everything flows through LaunchDarkly's proven experimentation platform - eliminating the need for standalone monitoring, guardrails, or experimentation tools.
+This demonstrates how LaunchDarkly AI Configs enables **Speed + Caution = Iterability, Experimentation & Integration** - transforming agent development from guesswork into data-driven engineering.

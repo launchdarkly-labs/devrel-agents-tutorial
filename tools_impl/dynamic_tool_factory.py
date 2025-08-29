@@ -1,7 +1,6 @@
 from langchain.tools import BaseTool
 from typing import Dict, Any, List
 import re
-from data.mythical_pets_kb import MYTHICAL_PETS_KB
 from .search_v1 import SearchToolV1
 from .search_v2 import SearchToolV2
 
@@ -23,8 +22,6 @@ class DynamicTool(BaseTool):
             return self._execute_search_v1(kwargs.get("query", ""))
         elif self.name == "search_v2":
             return self._execute_search_v2(kwargs.get("query", ""))
-        elif self.name == "redaction":
-            return self._execute_redaction(kwargs.get("text", ""))
         elif self.name == "reranking":
             return self._execute_reranking(
                 kwargs.get("query", ""), 
@@ -42,21 +39,7 @@ class DynamicTool(BaseTool):
         """Execute vector search"""
         tool = SearchToolV2()
         return tool._run(query)
-    
-    def _execute_redaction(self, text: str) -> str:
-        """Execute PII redaction"""
-        redacted = text
-        
-        # Redact email addresses
-        redacted = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '[EMAIL_REDACTED]', redacted)
-        
-        # Redact phone numbers
-        redacted = re.sub(r'\b\d{3}[-.]?\d{3}[-.]?\d{4}\b', '[PHONE_REDACTED]', redacted)
-        
-        # Redact SSN patterns
-        redacted = re.sub(r'\b\d{3}-\d{2}-\d{4}\b', '[SSN_REDACTED]', redacted)
-        
-        return f"Redacted text: {redacted}"
+
     
     def _execute_reranking(self, query: str, results: str) -> str:
         """Execute result reranking"""

@@ -19,10 +19,25 @@ uv add requests beautifulsoup4 mcp semanticscholar
 **Run the Application:**
 ```bash
 # Backend API
-uv run uvicorn api.main:app --reload
+uv run uvicorn api.main:app --reload --port 8001
 
 # Chat UI (separate terminal)
 uv run streamlit run ui/chat_interface.py
+
+# Traffic Generator (for experiments and blog posts)
+python tools/traffic_generator.py --queries 50 --delay 2
+```
+
+**Traffic Simulation:**
+```bash
+# Generate realistic LaunchDarkly experiment data
+python tools/traffic_generator.py --queries 100 --delay 1
+
+# Quick test with verbose output  
+python tools/traffic_generator.py --queries 10 --delay 2 --verbose
+
+# Batch generation for blog post metrics
+python tools/traffic_generator.py --queries 500 --delay 0.5
 ```
 
 **Key Environment Variables:**
@@ -45,20 +60,16 @@ This is an advanced tutorial project demonstrating LaunchDarkly AI Configs with 
 ### LaunchDarkly Integration:
 - **3 AI Configs** control different agent behaviors: supervisor-agent, support-agent, security-agent
 - **Runtime Control** over tool availability, model selection, and agent instructions
-- **Intelligent Caching** optimizes LaunchDarkly API usage
 - **Variations** tested: docs-only, rag-enabled, research-enhanced (with MCP)
 
 ### Technology Stack:
 - **RAG**: Vector search with OpenAI embeddings, FAISS, and semantic reranking
 - **MCP**: Real Model Context Protocol integration with ArXiv and Semantic Scholar
-- **Performance**: Optimized caching for configs, embeddings, and MCP responses
 - **Multi-Provider**: Supports both Anthropic Claude and OpenAI GPT models
 
 ### Production-Ready Features:
 - Multi-agent workflows with state management
 - Real academic research capabilities via MCP servers
-- Enterprise-grade caching and performance optimization
-- Graceful degradation when optional services unavailable
 
 ## LaunchDarkly Configuration
 
@@ -90,3 +101,28 @@ Both MCP servers are **successfully installed and working**:
 - **Semantic Scholar Server**: `semanticscholar-MCP-Server` (Python-based, cloned from GitHub)
 
 The multi-agent system automatically initializes MCP tools in background threads to avoid async event loop conflicts.
+
+## Traffic Simulation
+
+The project includes a **dead-simple traffic generator** for creating realistic LaunchDarkly experiment data:
+
+### **Key Files:**
+- `tools/traffic_generator.py`: Main script (high school student friendly)
+- `data/fake_users.json`: Geographic users (US, EU, Asia) with different plans
+- `data/sample_queries.json`: AI/ML questions with expected responses
+- `data/feedback_rules.json`: Configurable satisfaction simulation rules
+
+### **How It Works:**
+1. **Real User Simulation**: Fake users with geographic/plan attributes
+2. **Real API Calls**: Sends actual requests to `/chat` endpoint
+3. **Real AI Responses**: Multi-agent system responds naturally with real MCP tools
+4. **Simulated Feedback**: Smart rules determine thumbs up/down based on response quality
+5. **Real LaunchDarkly Metrics**: Authentic experiment data flows to dashboard
+
+### **Geographic Targeting:**
+- **EU Users**: Get Claude (privacy compliance) 
+- **Enterprise Users**: Get expensive MCP research tools
+- **Free Users**: Get basic tools only
+- **US Users**: Mixed variations for A/B testing
+
+This generates compelling, authentic metrics for blog posts and tutorials demonstrating LaunchDarkly AI Config optimization.
