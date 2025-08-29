@@ -14,6 +14,7 @@ class SupervisorState(TypedDict):
     security_cleared: bool
     support_response: str
     support_tool_calls: List[str]
+    support_tool_details: List[dict]
     final_response: str
     workflow_stage: str  # "initial_security", "research", "revision", "final_compliance"
 
@@ -134,10 +135,15 @@ def create_supervisor_agent(supervisor_config: AgentConfig, support_config: Agen
                 "user_input": state["user_input"],
                 "response": "",
                 "tool_calls": [],
+                "tool_details": [],
                 "messages": [HumanMessage(content=state["user_input"])]
             }
             
             result = support_agent.invoke(support_input)
+            
+            print(f"🔧 SUPERVISOR RECEIVED FROM SUPPORT:")
+            print(f"   📊 tool_calls: {result.get('tool_calls', [])}")
+            print(f"   📊 tool_details: {result.get('tool_details', [])}")
             
             # Track support agent completion
             if metrics_tracker and agent_start:
@@ -160,6 +166,7 @@ def create_supervisor_agent(supervisor_config: AgentConfig, support_config: Agen
             "messages": [AIMessage(content=result["response"])],
             "support_response": result["response"],
             "support_tool_calls": result.get("tool_calls", []),
+            "support_tool_details": result.get("tool_details", []),
             "workflow_stage": "final_compliance"
         }
     
@@ -217,6 +224,7 @@ def create_supervisor_agent(supervisor_config: AgentConfig, support_config: Agen
         return {
             "final_response": final_content,
             "actual_tool_calls": support_tool_calls,
+            "support_tool_details": state.get("support_tool_details", []),
             "user_input": state["user_input"],
             "workflow_stage": "complete"
         }

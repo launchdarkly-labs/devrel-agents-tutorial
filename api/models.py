@@ -11,6 +11,7 @@ class AgentConfig(BaseModel):
     variation_key: str
     model: str
     tools: List[str]
+    tool_details: Optional[List[Dict]] = None  # Optional detailed tool info with search queries
 
 class ChatResponse(BaseModel):
     id: str

@@ -30,6 +30,37 @@ st.markdown("""
 st.title("🤖 Enterprise AI Assistant")
 st.markdown("*Advanced AI/ML technical support powered by LaunchDarkly AI Configs*")
 
+def process_tool_display(tools, tool_details):
+    """Single function to process tools and tool_details for consistent UI display"""
+    tool_list = []
+    
+    # Define mapping from actual tool names to display names
+    mcp_name_mapping = {
+        "search_papers": "arxiv_search",
+        "search_semantic_scholar": "semantic_scholar"
+    }
+    
+    for i, tool in enumerate(tools):
+        tool_name = tool if isinstance(tool, str) else tool.get("name", str(tool))
+        
+        # Get search query from matching tool_details with proper name mapping
+        search_query = ""
+        for detail in tool_details:
+            detail_name = detail.get("name")
+            # Check both direct match and mapped match
+            mapped_name = mcp_name_mapping.get(detail_name, detail_name)
+            if mapped_name == tool_name:
+                search_query = detail.get("search_query", "") or ""
+                break
+        
+        # Add tool with search query if available
+        if search_query:
+            tool_list.append(f"{tool_name} ('{search_query}')")
+        else:
+            tool_list.append(tool_name)
+    
+    return tool_list
+
 # Add example queries from TOOL_TEST_QUERIES.md
 st.markdown("### 💡 Example Queries:")
 st.markdown("*Test different tool combinations with these curated queries*")
@@ -51,7 +82,7 @@ with col3:
 col4, col5 = st.columns(2)
 with col4:
     if st.button("🎯 RAG + Reranking", use_container_width=True):
-        st.session_state.example_query = "Find the best matches for 'deep learning algorithms' in your documentation"
+        st.session_state.example_query = "Find the best matches for 'deep learning algorithms' in your documentation. Rereank them for closest relevance."
 
 with col5:
     if st.button("🚀 Full Stack Search", use_container_width=True):
@@ -144,43 +175,18 @@ for message in st.session_state.messages:
                     for agent_config in metadata["agent_configurations"]:
                         st.markdown(f"**{agent_config['agent_name']}:**")
                         
-                        # Categorize tools by type
+                        # Use shared tool processing function
                         tools = agent_config.get("tools", [])
-                        internal_tools = []
-                        mcp_tools = []
-                        unknown_tools = []
-                        
-                        for tool in tools:
-                            tool_name = tool if isinstance(tool, str) else tool.get("name", str(tool))
-                            if tool_name in ['search_v1', 'search_v2', 'reranking']:
-                                # Add search query if available
-                                if isinstance(tool, dict) and tool.get("search_query"):
-                                    internal_tools.append(f"{tool_name} ('{tool['search_query']}')")
-                                else:
-                                    internal_tools.append(tool_name)
-                            elif tool_name in ['search_papers', 'search_semantic_scholar']:
-                                # Add search query if available
-                                if isinstance(tool, dict) and tool.get("search_query"):
-                                    mcp_tools.append(f"{tool_name} ('{tool['search_query']}')")
-                                else:
-                                    mcp_tools.append(tool_name)
-                            else:
-                                if isinstance(tool, dict) and tool.get("search_query"):
-                                    unknown_tools.append(f"{tool_name} ('{tool['search_query']}')")
-                                else:
-                                    unknown_tools.append(tool_name)
+                        tool_details = agent_config.get("tool_details", [])
+                        processed_tools = process_tool_display(tools, tool_details)
                         
                         config_data = {
                             "variation": agent_config["variation_key"],
                             "model": agent_config["model"]
                         }
                         
-                        if internal_tools:
-                            config_data["📚 internal_tools"] = internal_tools
-                        if mcp_tools:
-                            config_data["🔬 mcp_tools"] = mcp_tools
-                        if unknown_tools:
-                            config_data["🔧 other_tools"] = unknown_tools
+                        if processed_tools:
+                            config_data["🛠️ tools_used"] = processed_tools
                             
                         st.json(config_data)
                         st.markdown("---")
@@ -331,84 +337,35 @@ if prompt:
                         for agent_config in data["agent_configurations"]:
                             st.markdown(f"**{agent_config['agent_name']}:**")
                             
-                            # Categorize tools by type
+                            # Use shared tool processing function
                             tools = agent_config.get("tools", [])
-                            internal_tools = []
-                            mcp_tools = []
-                            unknown_tools = []
-                            
-                            for tool in tools:
-                                tool_name = tool if isinstance(tool, str) else tool.get("name", str(tool))
-                                if tool_name in ['search_v1', 'search_v2', 'reranking']:
-                                    # Add search query if available
-                                    if isinstance(tool, dict) and tool.get("search_query"):
-                                        internal_tools.append(f"{tool_name} ('{tool['search_query']}')")
-                                    else:
-                                        internal_tools.append(tool_name)
-                                elif tool_name in ['search_papers', 'search_semantic_scholar']:
-                                    # Add search query if available
-                                    if isinstance(tool, dict) and tool.get("search_query"):
-                                        mcp_tools.append(f"{tool_name} ('{tool['search_query']}')")
-                                    else:
-                                        mcp_tools.append(tool_name)
-                                else:
-                                    if isinstance(tool, dict) and tool.get("search_query"):
-                                        unknown_tools.append(f"{tool_name} ('{tool['search_query']}')")
-                                    else:
-                                        unknown_tools.append(tool_name)
+                            tool_details = agent_config.get("tool_details", [])
+                            processed_tools = process_tool_display(tools, tool_details)
                             
                             config_data = {
                                 "variation": agent_config["variation_key"],
                                 "model": agent_config["model"]
                             }
                             
-                            if internal_tools:
-                                config_data["📚 internal_tools"] = internal_tools
-                            if mcp_tools:
-                                config_data["🔬 mcp_tools"] = mcp_tools
-                            if unknown_tools:
-                                config_data["🔧 other_tools"] = unknown_tools
+                            if processed_tools:
+                                config_data["🛠️ tools_used"] = processed_tools
                                 
                             st.json(config_data)
                             st.markdown("---")
                     else:
-                        # Fallback to single configuration - categorize tools
+                        # Fallback to single configuration - use shared tool processing
                         tools_used = data.get("tool_calls", [])
-                        internal_tools = []
-                        mcp_tools = []
-                        unknown_tools = []
-                        
-                        for tool in tools_used:
-                            tool_name = tool if isinstance(tool, str) else tool.get("name", str(tool))
-                            if tool_name in ['search_v1', 'search_v2', 'reranking']:
-                                # Add search query if available
-                                if isinstance(tool, dict) and tool.get("search_query"):
-                                    internal_tools.append(f"{tool_name} ('{tool['search_query']}')")
-                                else:
-                                    internal_tools.append(tool_name)
-                            elif tool_name in ['search_papers', 'search_semantic_scholar']:
-                                # Add search query if available  
-                                if isinstance(tool, dict) and tool.get("search_query"):
-                                    mcp_tools.append(f"{tool_name} ('{tool['search_query']}')")
-                                else:
-                                    mcp_tools.append(tool_name)
-                            else:
-                                if isinstance(tool, dict) and tool.get("search_query"):
-                                    unknown_tools.append(f"{tool_name} ('{tool['search_query']}')")
-                                else:
-                                    unknown_tools.append(tool_name)
+                        # Convert old format to new format for compatibility
+                        tool_details = []
+                        processed_tools = process_tool_display(tools_used, tool_details)
                         
                         config_data = {
                             "variation": data["variation_key"],
                             "model": data["model"]
                         }
                         
-                        if internal_tools:
-                            config_data["📚 internal_tools_used"] = internal_tools
-                        if mcp_tools:
-                            config_data["🔬 mcp_tools_used"] = mcp_tools
-                        if unknown_tools:
-                            config_data["🔧 other_tools_used"] = unknown_tools
+                        if processed_tools:
+                            config_data["🛠️ tools_used"] = processed_tools
                             
                         st.json(config_data)
         else:

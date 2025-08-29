@@ -60,6 +60,9 @@ class AgentService:
                 # Fallback to support_tool_calls if actual_tool_calls is not present
                 actual_tool_calls = result.get("support_tool_calls", [])
             
+            # Get detailed tool information with search queries from support agent
+            tool_details = result.get("support_tool_details", [])
+            
             # Track workflow completion
             metrics_tracker.track_agent_completion(
                 "supervisor-workflow", 
@@ -91,7 +94,8 @@ class AgentService:
                     agent_name="support-agent",
                     variation_key=support_config.variation_key,
                     model=support_config.model, 
-                    tools=actual_tool_calls  # Show actual tools used
+                    tools=actual_tool_calls,  # Show actual tools used as strings
+                    tool_details=tool_details  # Show detailed tool info with search queries
                 )
             ]
             
