@@ -252,84 +252,86 @@ if prompt:
             with st.chat_message("assistant"):
                 st.write(data["response"])
                 
-                # Add feedback buttons after the response
-                col1, col2, col3 = st.columns([1, 1, 8])
-                
-                # Check current feedback status for this message
-                current_feedback = None
+                # Add improved feedback system after the response
+                message_obj = None
                 for msg in st.session_state.messages:
                     if msg.get("message_id") == message_id:
-                        current_feedback = msg.get("feedback")
+                        message_obj = msg
                         break
                 
-                with col1:
-                    disabled_up = current_feedback == "positive"
-                    if st.button("👍", key=f"new_thumbs_up_{message_id}", disabled=disabled_up, help="Helpful response"):
-                        # Send feedback to backend
-                        try:
-                            feedback_response = requests.post(
-                                "http://localhost:8001/feedback",
-                                json={
-                                    "user_id": st.session_state.user_id,
-                                    "message_id": message_id,
-                                    "user_query": prompt,
-                                    "ai_response": data["response"],
-                                    "feedback": "positive",
-                                    "variation_key": data["variation_key"],
-                                    "model": data["model"],
-                                    "tool_calls": data["tool_calls"],
-                                    "source": "real_user"
-                                }
-                            )
-                            if feedback_response.status_code == 200:
-                                # Update message in session state
-                                for msg in st.session_state.messages:
-                                    if msg.get("message_id") == message_id:
-                                        msg["feedback"] = "positive"
-                                        break
-                                st.success("👍 Thanks for your feedback!")
-                                st.rerun()
-                            else:
-                                st.error("Failed to submit feedback")
-                        except Exception as e:
-                            st.error(f"Failed to submit feedback: {e}")
-                
-                with col2:
-                    disabled_down = current_feedback == "negative"
-                    if st.button("👎", key=f"new_thumbs_down_{message_id}", disabled=disabled_down, help="Not helpful"):
-                        # Send feedback to backend
-                        try:
-                            feedback_response = requests.post(
-                                "http://localhost:8001/feedback",
-                                json={
-                                    "user_id": st.session_state.user_id,
-                                    "message_id": message_id,
-                                    "user_query": prompt,
-                                    "ai_response": data["response"],
-                                    "feedback": "negative",
-                                    "variation_key": data["variation_key"],
-                                    "model": data["model"],
-                                    "tool_calls": data["tool_calls"],
-                                    "source": "real_user"
-                                }
-                            )
-                            if feedback_response.status_code == 200:
-                                # Update message in session state
-                                for msg in st.session_state.messages:
-                                    if msg.get("message_id") == message_id:
-                                        msg["feedback"] = "negative"
-                                        break
-                                st.success("👎 Thanks for your feedback!")
-                                st.rerun()
-                            else:
-                                st.error("Failed to submit feedback")
-                        except Exception as e:
-                            st.error(f"Failed to submit feedback: {e}")
-                
-                # Show current feedback status
-                if current_feedback:
-                    feedback_emoji = "👍" if current_feedback == "positive" else "👎"
-                    st.caption(f"Feedback: {feedback_emoji}")
+                if message_obj:
+                    current_feedback = message_obj.get("feedback")
+                    
+                    # Show feedback status if already provided
+                    if current_feedback:
+                        feedback_emoji = "👍" if current_feedback == "positive" else "👎"
+                        st.caption(f"Feedback recorded: {feedback_emoji}")
+                    else:
+                        # Show feedback options
+                        st.markdown("**Was this response helpful?**")
+                        col1, col2, col3 = st.columns([1, 1, 8])
+                        
+                        with col1:
+                            if st.button("👍 Helpful", key=f"new_thumbs_up_{message_id}", help="This response was helpful"):
+                                # Send positive feedback to backend
+                                try:
+                                    feedback_response = requests.post(
+                                        "http://localhost:8001/feedback",
+                                        json={
+                                            "user_id": st.session_state.user_id,
+                                            "message_id": message_id,
+                                            "user_query": prompt,
+                                            "ai_response": data["response"],
+                                            "feedback": "positive",
+                                            "variation_key": data["variation_key"],
+                                            "model": data["model"],
+                                            "tool_calls": data["tool_calls"],
+                                            "source": "real_user"
+                                        }
+                                    )
+                                    if feedback_response.status_code == 200:
+                                        # Update message in session state
+                                        for msg in st.session_state.messages:
+                                            if msg.get("message_id") == message_id:
+                                                msg["feedback"] = "positive"
+                                                break
+                                        st.success("Thanks for your feedback! 👍")
+                                        st.rerun()
+                                    else:
+                                        st.error("Failed to submit feedback")
+                                except Exception as e:
+                                    st.error(f"Failed to submit feedback: {e}")
+                        
+                        with col2:
+                            if st.button("👎 Not helpful", key=f"new_thumbs_down_{message_id}", help="This response was not helpful"):
+                                # Send negative feedback to backend
+                                try:
+                                    feedback_response = requests.post(
+                                        "http://localhost:8001/feedback",
+                                        json={
+                                            "user_id": st.session_state.user_id,
+                                            "message_id": message_id,
+                                            "user_query": prompt,
+                                            "ai_response": data["response"],
+                                            "feedback": "negative",
+                                            "variation_key": data["variation_key"],
+                                            "model": data["model"],
+                                            "tool_calls": data["tool_calls"],
+                                            "source": "real_user"
+                                        }
+                                    )
+                                    if feedback_response.status_code == 200:
+                                        # Update message in session state
+                                        for msg in st.session_state.messages:
+                                            if msg.get("message_id") == message_id:
+                                                msg["feedback"] = "negative"
+                                                break
+                                        st.success("Thanks for your feedback! 👎")
+                                        st.rerun()
+                                    else:
+                                        st.error("Failed to submit feedback")
+                                except Exception as e:
+                                    st.error(f"Failed to submit feedback: {e}")
                     
                 with st.expander("⚙️ Multi-Agent Configuration"):
                     if "agent_configurations" in data and data["agent_configurations"]:
