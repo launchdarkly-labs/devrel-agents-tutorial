@@ -1,4 +1,4 @@
-from typing import TypedDict, List, Annotated
+from typing import TypedDict, List, Annotated, Optional
 from typing_extensions import Annotated as TypingAnnotated
 from langgraph.graph import StateGraph, add_messages
 from langgraph.prebuilt import ToolNode
@@ -14,12 +14,22 @@ from policy.config_manager import AgentConfig
 
 # Simplified approach - no caching for demo clarity
 
+def get_model_instance(model_name: str, temperature: float):
+    """Get a model instance without tools bound"""
+    if "gpt" in model_name.lower():
+        return ChatOpenAI(model=model_name, temperature=temperature)
+    else:
+        # Default to Anthropic for unknown models
+        return ChatAnthropic(model=model_name, temperature=temperature)
+
 class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]
     user_input: str
     response: str
     tool_calls: List[str]
     tool_details: List[dict]  # Add support for detailed tool information with search queries
+    most_recent_search_results: Optional[str]  # Store the most recent search results for reranking
+    most_recent_query: Optional[str]  # Store the most recent search query
 
 def create_support_agent(config: AgentConfig):
     """Create a universal agent that works with any model provider"""
@@ -78,8 +88,7 @@ def create_support_agent(config: AgentConfig):
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
             future = executor.submit(initialize_mcp_tools)
             try:
-                mcp_tools = future.result(timeout=10)  # 10 second timeout
-                print("DEBUG: MCP initialization completed")
+                mcp_tools = future.result(timeout=30)  # 30 second timeout
                 
                 # Create tool map
                 mcp_tool_map = {tool.name: tool for tool in mcp_tools if hasattr(tool, 'name')}
@@ -149,20 +158,17 @@ def create_support_agent(config: AgentConfig):
                         object.__setattr__(self, 'wrapped_tool', mcp_tool)
                         object.__setattr__(self, 'name', ld_name)
                     
-                    def _run(self, **kwargs) -> str:
+                    def _run(self, config=None, **kwargs) -> str:
                         """Execute the wrapped MCP tool"""
                         try:
-                            # Remove config if it exists (LangChain passes this but MCP tools don't need it)
-                            tool_kwargs = {k: v for k, v in kwargs.items() if k != 'config'}
-                            
-                            # Call the MCP tool directly
+                            # Call the MCP tool directly (ignore config parameter)
                             if hasattr(self.wrapped_tool, '_run'):
-                                result = self.wrapped_tool._run(**tool_kwargs)
+                                result = self.wrapped_tool._run(**kwargs)
                             elif hasattr(self.wrapped_tool, 'invoke'):
-                                result = self.wrapped_tool.invoke(tool_kwargs)
+                                result = self.wrapped_tool.invoke(kwargs)
                             else:
                                 # Fallback: try to call the tool directly
-                                result = self.wrapped_tool(**tool_kwargs)
+                                result = self.wrapped_tool(**kwargs)
                             
                             if isinstance(result, dict):
                                 return json.dumps(result, indent=2)
@@ -198,8 +204,76 @@ def create_support_agent(config: AgentConfig):
     # Bind tools to model - this works universally across providers
     if available_tools:
         model = model.bind_tools(available_tools)
-        # Create tool node for executing tools
-        tool_node = ToolNode(available_tools)
+        
+        # Create CUSTOM tool node that passes conversation context
+        def custom_tool_node(state: AgentState):
+            """Custom tool execution that passes conversation context to tools"""
+            messages = state["messages"]
+            last_message = messages[-1]
+            
+            # Only process if the last message has tool calls
+            if not (hasattr(last_message, 'tool_calls') and last_message.tool_calls):
+                return {"messages": []}
+            
+            tool_results = []
+            
+            for tool_call in last_message.tool_calls:
+                tool_name = tool_call['name']
+                tool_args = tool_call.get('args', {})
+                tool_id = tool_call.get('id', f"{tool_name}_{len(tool_results)}")
+                
+                print(f"🔧 EXECUTING TOOL: {tool_name} with args: {tool_args}")
+                
+                # Find the tool by name
+                tool_to_execute = None
+                for tool in available_tools:
+                    if hasattr(tool, 'name') and tool.name == tool_name:
+                        tool_to_execute = tool
+                        break
+                
+                if not tool_to_execute:
+                    result = f"Error: Tool '{tool_name}' not found"
+                else:
+                    try:
+                        # PASS CONVERSATION CONTEXT to tools (especially reranking)
+                        if tool_name == 'reranking':
+                            # For reranking tool, pass conversation content as simple strings
+                            message_contents = []
+                            for msg in messages:
+                                try:
+                                    # Extract just the content as plain string
+                                    if hasattr(msg, 'content') and msg.content:
+                                        content = str(msg.content)
+                                        if content.strip():  # Only include non-empty content
+                                            message_contents.append(content)
+                                except Exception as e:
+                                    print(f"   ⚠️ Error extracting message content: {e}")
+                                    continue
+                            
+                            # Pass as simple list of strings - completely JSON serializable
+                            tool_args['message_contents'] = message_contents
+                        
+                        # For MCP tools, ensure config parameter is handled
+                        if tool_name in ['arxiv_search', 'semantic_scholar']:
+                            # MCP tools expect config parameter
+                            if 'config' not in tool_args:
+                                tool_args['config'] = None
+                        
+                        # Execute the tool
+                        result = tool_to_execute._run(**tool_args)
+                    except Exception as e:
+                        result = f"Error executing {tool_name}: {str(e)}"
+                        print(f"❌ TOOL ERROR: {result}")
+                
+                # Create tool message
+                tool_message = ToolMessage(content=str(result), tool_call_id=tool_id)
+                tool_results.append(tool_message)
+                
+                print(f"🔧 TOOL RESULT: {tool_name} -> {str(result)[:200]}...")
+            
+            return {"messages": tool_results}
+        
+        tool_node = custom_tool_node
     else:
         print(f"⚠️  NO TOOLS AVAILABLE: Agent will work in model-only mode")
         # Create empty tool node that won't be used
@@ -234,15 +308,12 @@ def create_support_agent(config: AgentConfig):
                     else:
                         print(f"🔧 UNKNOWN TOOL CALLED: {tool_name} ({query_display})")
         
-        # Check for consecutive identical tool calls (limit: 3 in a row, but give one more chance to finish)
-        consecutive_limit = 3
-        if len(recent_tool_calls) >= consecutive_limit:
-            last_tools = recent_tool_calls[-consecutive_limit:]
-            if len(set(last_tools)) == 1:  # All the same tool
-                print(f"DEBUG: Too many consecutive uses of {last_tools[0]} ({consecutive_limit} times), but allowing final response")
-                # Don't end immediately - let the model provide a final response
-                # We'll check this in call_model and force a final response
-                pass
+        # AGGRESSIVE: Stop tool loops immediately
+        if len(recent_tool_calls) >= 2:
+            last_2_tools = recent_tool_calls[-2:]
+            if len(set(last_2_tools)) == 1:  # Same tool used twice in a row
+                print(f"🛑 STOPPING TOOL LOOP: '{last_2_tools[0]}' used consecutively - ending workflow")
+                return "end"
         
         print(f"DEBUG: should_continue - total_tool_calls: {total_tool_calls}, max: {config.max_tool_calls}")
         print(f"DEBUG: Recent tool calls: {recent_tool_calls[-5:]}")  # Show last 5
@@ -276,45 +347,57 @@ def create_support_agent(config: AgentConfig):
             
             # Add system message with instructions if this is the first call
             if len(messages) == 1:  # Only user message
+                # Create detailed tool descriptions for the prompt
+                tool_descriptions = []
+                for tool in available_tools:
+                    if hasattr(tool, 'name') and hasattr(tool, 'description'):
+                        tool_descriptions.append(f"- {tool.name}: {tool.description}")
+                
+                tools_text = '\n'.join(tool_descriptions)
                 system_prompt = f"""
                 {config.instructions}
                 
-                Available tools: {[tool.name for tool in available_tools]}
+                Available tools:
+                {tools_text}
                 
-                You can use tools to help answer questions. Use as many tools as needed (max {config.max_tool_calls}), but be efficient.
-                When you have enough information, provide your final answer without using more tools.
+                TOOL USAGE GUIDELINES:
+                - Be strategic and efficient with tool usage
+                - Use different tools to gather complementary information
+                - Avoid repeating the same tool unnecessarily
+                - When you have sufficient information, provide your answer
+                - Maximum {config.max_tool_calls} tool calls allowed
                 """
                 messages = [HumanMessage(content=system_prompt)] + messages
             
-            # Check for consecutive tool usage or approaching limit
+            # Simple and effective: Check for tool overuse and REMOVE tools if needed
             recent_tool_calls = []
             for message in messages:
                 if hasattr(message, 'tool_calls') and message.tool_calls:
                     for tool_call in message.tool_calls:
                         recent_tool_calls.append(tool_call['name'])
             
-            # Force final response if we've used too many tools or hit consecutive limit
-            force_final_response = False
-            if total_tool_calls >= config.max_tool_calls - 1:
-                force_final_response = True
-            elif len(recent_tool_calls) >= 3:
-                last_3_tools = recent_tool_calls[-3:]
-                if len(set(last_3_tools)) == 1:  # Same tool used 3 times
-                    force_final_response = True
+            # STRICT tool limits - force completion
+            should_disable_tools = False
             
-            if force_final_response:
-                wrap_up_prompt = HumanMessage(content=f"""
-                You've used {total_tool_calls} tools so far (recent: {recent_tool_calls[-5:]}). 
-                
-                Please provide your final comprehensive answer based on all the information you've gathered. 
-                
-                Make sure to:
-                1. Answer the original Q-learning question thoroughly
-                2. Provide a complete response
-                
-                Do NOT use any more tools - just give your final answer.
-                """)
-                messages = messages + [wrap_up_prompt]
+            # If approaching max tool calls, disable tools
+            if total_tool_calls >= config.max_tool_calls - 1:
+                should_disable_tools = True
+                print(f"🛑 DISABLING TOOLS: Reached max tools ({total_tool_calls}/{config.max_tool_calls})")
+            
+            # If repeating the same tool too much, disable tools
+            elif len(recent_tool_calls) >= 2:
+                last_2_tools = recent_tool_calls[-2:]
+                if len(set(last_2_tools)) == 1:  # Same tool used twice in a row
+                    should_disable_tools = True
+                    print(f"🛑 DISABLING TOOLS: Repeated tool '{last_2_tools[0]}' - forcing completion")
+            
+            # Actually disable tools by creating a model without tools
+            if should_disable_tools:
+                # Use the base model without any tools bound
+                completion_model = get_model_instance(config.model, config.temperature)
+                response = completion_model.invoke(messages)
+                print(f"🎯 FORCED COMPLETION: Model response without tools")
+                return {"messages": [response]}
             
             response = model.invoke(messages)
             print(f"DEBUG: Model response received, has_tool_calls: {hasattr(response, 'tool_calls') and bool(response.tool_calls)}")

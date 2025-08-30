@@ -3,7 +3,7 @@ from langgraph.graph import StateGraph, add_messages
 from langgraph.prebuilt import ToolNode
 from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
+from langchain_core.messages import HumanMessage, AIMessage, BaseMessage, ToolMessage
 from policy.config_manager import AgentConfig
 from tools_impl.search_v1 import SearchToolV1
 from tools_impl.search_v2 import SearchToolV2
@@ -47,7 +47,70 @@ def create_security_agent(config: AgentConfig):
     # Bind tools to model if available
     if available_tools:
         model = model.bind_tools(available_tools)
-        tool_node = ToolNode(available_tools)
+        
+        # Create CUSTOM tool node that passes conversation context (same as support agent)
+        def custom_tool_node(state: AgentState):
+            """Custom tool execution that passes conversation context to tools"""
+            messages = state["messages"]
+            last_message = messages[-1]
+            
+            # Only process if the last message has tool calls
+            if not (hasattr(last_message, 'tool_calls') and last_message.tool_calls):
+                return {"messages": []}
+            
+            tool_results = []
+            
+            for tool_call in last_message.tool_calls:
+                tool_name = tool_call['name']
+                tool_args = tool_call.get('args', {})
+                tool_id = tool_call.get('id', f"{tool_name}_{len(tool_results)}")
+                
+                print(f"🔧 SECURITY EXECUTING TOOL: {tool_name} with args: {tool_args}")
+                
+                # Find the tool by name
+                tool_to_execute = None
+                for tool in available_tools:
+                    if hasattr(tool, 'name') and tool.name == tool_name:
+                        tool_to_execute = tool
+                        break
+                
+                if not tool_to_execute:
+                    result = f"Error: Tool '{tool_name}' not found"
+                else:
+                    try:
+                        # PASS CONVERSATION CONTEXT to tools (especially reranking)
+                        if tool_name == 'reranking':
+                            # For reranking tool, pass conversation content as simple strings
+                            message_contents = []
+                            for msg in messages:
+                                try:
+                                    # Extract just the content as plain string
+                                    if hasattr(msg, 'content') and msg.content:
+                                        content = str(msg.content)
+                                        if content.strip():  # Only include non-empty content
+                                            message_contents.append(content)
+                                except Exception as e:
+                                    print(f"   ⚠️ Error extracting message content: {e}")
+                                    continue
+                            
+                            # Pass as simple list of strings - completely JSON serializable
+                            tool_args['message_contents'] = message_contents
+                        
+                        # Execute the tool
+                        result = tool_to_execute._run(**tool_args)
+                    except Exception as e:
+                        result = f"Error executing {tool_name}: {str(e)}"
+                        print(f"❌ SECURITY TOOL ERROR: {result}")
+                
+                # Create tool message
+                tool_message = ToolMessage(content=str(result), tool_call_id=tool_id)
+                tool_results.append(tool_message)
+                
+                print(f"🔧 SECURITY TOOL RESULT: {tool_name} -> {str(result)[:200]}...")
+            
+            return {"messages": tool_results}
+        
+        tool_node = custom_tool_node
         print(f"🔧 SECURITY TOOLS BOUND: {[tool.name if hasattr(tool, 'name') else str(tool) for tool in available_tools]}")
     else:
         print(f"⚠️  NO SECURITY TOOLS AVAILABLE: Agent will work in model-only mode")
@@ -75,6 +138,13 @@ def create_security_agent(config: AgentConfig):
                     query_display = f"query: '{search_query}'" if search_query else "no query found"
                     
                     print(f"🔐 SECURITY TOOL CALLED: {tool_name} ({query_display})")
+        
+        # AGGRESSIVE: Stop tool loops immediately  
+        if len(recent_tool_calls) >= 2:
+            last_2_tools = recent_tool_calls[-2:]
+            if len(set(last_2_tools)) == 1:  # Same tool used twice in a row
+                print(f"🛑 SECURITY STOPPING TOOL LOOP: '{last_2_tools[0]}' used consecutively - ending")
+                return "end"
         
         # Check max tool calls limit
         if total_tool_calls >= config.max_tool_calls:

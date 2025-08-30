@@ -11,6 +11,8 @@ from ai_metrics import AIMetricsTracker
 class AgentService:
     def __init__(self):
         self.config_manager = ConfigManager()
+        # Clear LaunchDarkly cache on startup to get latest configs
+        self.config_manager.clear_cache()
     
     def flush_metrics(self):
         """Flush LaunchDarkly metrics immediately"""

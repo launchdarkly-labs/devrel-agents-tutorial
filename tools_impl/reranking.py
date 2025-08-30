@@ -5,7 +5,7 @@ import re
 
 class RerankingTool(BaseTool):
     name: str = "reranking"
-    description: str = "Rerank and organize search results by relevance using BM25 algorithm. Use this when you have search results that need to be ordered by importance or relevance to the original query."
+    description: str = "Rerank search results using BM25 algorithm for better relevance ordering. IMPORTANT: This tool requires two parameters: 'query' (the search query) and 'results' (the actual search results text from search_v2). Only call this tool AFTER you have search results to rerank."
     
     def _tokenize(self, text: str) -> List[str]:
         """Simple tokenization for BM25"""
@@ -32,6 +32,45 @@ class RerankingTool(BaseTool):
             results_str = '\n'.join([str(item) for item in results])
         else:
             results_str = str(results) if results else ""
+        
+        # If no results provided, look for recent search results in the conversation
+        # This is the KEY FIX - extract from LangChain conversation history
+        if not results_str:
+            print("   🔍 SEARCHING FOR PREVIOUS SEARCH RESULTS...")
+            
+            # Get message contents from kwargs (simple list of strings)
+            message_contents = kwargs.get('message_contents', [])
+            
+            # Look through recent message contents for search results
+            found_results = False
+            for content in reversed(message_contents):  # Search backwards through conversation
+                try:
+                    if content and isinstance(content, str):
+                        print(f"   🔍 CHECKING CONTENT: {content[:100]}...")
+                        
+                        # Look SPECIFICALLY for ToolMessage content with search results (NOT AI messages)
+                        if ('found 3 relevant documents' in content.lower() or 
+                            'found 2 relevant documents' in content.lower() or
+                            'found 1 relevant documents' in content.lower()) and '[relevance:' in content.lower():
+                            # This is actual search results from search_v2 tool
+                            results_str = content
+                            print(f"   ✅ FOUND ACTUAL SEARCH RESULTS: {len(results_str)} chars")
+                            found_results = True
+                            break
+                        elif content.startswith("Now, I'll rerank") or "try one more" in content.lower():
+                            # Skip AI agent messages about reranking - these are not search results
+                            print(f"   ⏭️  SKIPPING AI MESSAGE: {content[:50]}...")
+                            continue
+                except Exception as e:
+                    print(f"   ⚠️ Error processing message content: {e}")
+                    continue
+            
+            if not found_results:
+                print("   ❌ NO SEARCH RESULTS FOUND in conversation history")
+        
+        # If still no results, provide a helpful message for the agent
+        if not results_str:
+            return "ERROR: No search results found to rerank. This tool requires search results from search_v2. Please call search_v2 first to get search results, then the reranking tool can access them from the conversation history."
             
         print(f"   📊 Processed query: '{query_str}'")
         print(f"   📊 Results length: {len(results_str)} characters")

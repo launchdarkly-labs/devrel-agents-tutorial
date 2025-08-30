@@ -23,8 +23,16 @@ class ConfigManager:
         sdk_key = os.getenv('LD_SDK_KEY')
         if not sdk_key:
             raise ValueError("LD_SDK_KEY environment variable is required")
-        ldclient.set_config(ldclient.Config(sdk_key))
+        
+        # Configure LaunchDarkly with startup wait time
+        ldclient.set_config(ldclient.Config(sdk_key, initial_reconnect_delay=1))
         self.ld_client = ldclient.get()
+        
+        # Wait for client initialization
+        if self.ld_client.is_initialized():
+            print("✅ LaunchDarkly client initialized successfully")
+        else:
+            print("⚠️ LaunchDarkly client not initialized - configs may not be available")
         
         # Initialize LaunchDarkly AI client
         self.ai_client = LDAIClient(self.ld_client)
@@ -70,62 +78,67 @@ class ConfigManager:
         
         # Get AI Config with tracker using the AI SDK
         try:
-            # AI SDK requires a default value - use None to indicate no default
-            config_result = self.ai_client.config(ai_config_key, ld_user_context, None)
+            # AI SDK requires a proper AIConfig as fallback - use disabled config to indicate failure
+            from ldai.client import AIConfig
+            fallback_value = AIConfig(enabled=False)
             
-            if config_result and config_result.enabled:
+            print(f"🔍 DEBUG: Requesting AI config '{ai_config_key}' for user {user_id}")
+            print(f"🔍 DEBUG: LaunchDarkly client initialized: {self.ld_client.is_initialized()}")
+            
+            config, tracker = self.ai_client.config(ai_config_key, ld_user_context, fallback_value)
+            
+            print(f"🔍 DEBUG: Config type: {type(config)}")
+            print(f"🔍 DEBUG: Config enabled: {getattr(config, 'enabled', 'no enabled attr')}")
+            print(f"🔍 DEBUG: Config: {config}")
+            
+            if config and hasattr(config, 'enabled') and config.enabled:
                 print(f"✅ AI CONFIG LOADED: {ai_config_key} for user {user_id}")
-                return config_result.config, config_result.tracker
+                return config, tracker
             else:
-                print(f"❌ AI CONFIG DISABLED: {ai_config_key} for user {user_id}")
-                raise ValueError(f"LaunchDarkly AI Config '{ai_config_key}' is disabled or not configured")
+                print(f"⚠️  AI CONFIG NOT AVAILABLE: {ai_config_key} for user {user_id} - using fallback")
+                raise ValueError(f"LaunchDarkly AI Config '{ai_config_key}' is not configured or disabled")
                 
         except Exception as e:
-            print(f"❌ AI CONFIG ERROR: Failed to get config '{ai_config_key}': {e}")
+            print(f"⚠️  AI CONFIG FALLBACK: AI config '{ai_config_key}' not available: {e}")
             raise ValueError(f"Failed to load LaunchDarkly AI Config '{ai_config_key}': {e}")
         
     async def get_config(self, user_id: str, config_key: str = None, user_context: dict = None) -> AgentConfig:
-        """Get agent configuration with AI metrics tracking"""
-        try:
-            # Try to get AI Config with tracker first
-            ai_config, tracker = await self.get_ai_config_with_tracker(user_id, config_key, user_context)
-            config = self._parse_config(ai_config, config_key or 'support-agent')
-            config.tracker = tracker
-            return config
-        except Exception as e:
-            print(f"⚠️  AI CONFIG FALLBACK: Using standard flag approach due to error: {e}")
-            
-            # Fallback to standard flag approach (without AI metrics)
-            context_builder = Context.builder(user_id)
-            
-            if user_context:
-                # Add geographic targeting attributes for fallback too
-                if 'country' in user_context:
-                    context_builder.set('country', user_context['country'])
-                if 'plan' in user_context:
-                    context_builder.set('plan', user_context['plan'])
-                if 'region' in user_context:
-                    context_builder.set('region', user_context['region'])
-            
-            ld_user_context = context_builder.build()
-            
-            # Get AI Config key from parameter or environment variable
-            if config_key:
-                ai_config_key = config_key
-            else:
-                ai_config_key = os.getenv('LAUNCHDARKLY_AI_CONFIG_KEY', 'support-agent')
-            
-            # Get AI Config from LaunchDarkly - no defaults, must be configured
-            ai_config = self.ld_client.variation(
-                ai_config_key,
-                ld_user_context,
-                None  # No default - LaunchDarkly must provide configuration
-            )
-            
-            if ai_config is None:
-                raise ValueError(f"LaunchDarkly AI Config '{ai_config_key}' is not configured. Configuration is required.")
-            
-            return self._parse_config(ai_config, ai_config_key)
+        """Get agent configuration with AI metrics tracking - LaunchDarkly required"""
+        # Get AI Config with tracker - NO FALLBACK
+        ai_config, tracker = await self.get_ai_config_with_tracker(user_id, config_key, user_context)
+        config = self._parse_ai_config_object(ai_config, config_key or 'support-agent')
+        config.tracker = tracker
+        return config
+    
+    def _parse_ai_config_object(self, ai_config, ai_config_key: str) -> AgentConfig:
+        """Parse AIConfig object from LaunchDarkly AI SDK"""
+        print(f"🔍 DEBUG: Parsing AIConfig object: {ai_config}")
+        print(f"🔍 DEBUG: Model: {ai_config.model}")
+        print(f"🔍 DEBUG: Model name: {ai_config.model.name}")
+        
+        # Extract model name from AIConfig object
+        model = ai_config.model.name
+        
+        # For now, use hardcoded values since the AI SDK handles most configuration
+        # In a real implementation, you'd extract these from custom parameters
+        variation_key = "main"  # Default variation
+        instructions = "You are a helpful AI assistant that can search documentation."
+        allowed_tools = ["search_v2", "reranking", "semantic_scholar", "arxiv_search"]  # Default tools
+        max_tool_calls = 8
+        max_cost = 1.0
+        temperature = 0.0
+        workflow_type = "sequential"
+        
+        return AgentConfig(
+            variation_key=variation_key,
+            model=model,
+            instructions=instructions,
+            allowed_tools=allowed_tools,
+            max_tool_calls=max_tool_calls,
+            max_cost=max_cost,
+            temperature=temperature,
+            workflow_type=workflow_type
+        )
     
     def _parse_config(self, ai_config: dict, ai_config_key: str) -> AgentConfig:
         """Parse AI config into AgentConfig object"""
