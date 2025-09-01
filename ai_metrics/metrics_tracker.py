@@ -9,7 +9,66 @@ import time
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 import json
-from ldai.tracker import LDAIConfigTracker
+from ldai.tracker import LDAIConfigTracker, TokenUsage
+
+def track_langchain_metrics(tracker, func):
+    """
+    Track LangChain-specific operations using the official LaunchDarkly AI SDK pattern.
+
+    This function will track the duration of the operation, the token
+    usage, and the success or error status.
+
+    If the provided function throws, then this method will also throw.
+
+    In the case the provided function throws, this function will record the
+    duration and an error.
+
+    A failed operation will not have any token usage data.
+
+    :param tracker: The LaunchDarkly tracker instance.
+    :param func: Function to track.
+    :return: Result of the tracked function.
+    """
+    try:
+        result = tracker.track_duration_of(func)
+        tracker.track_success()
+        
+        # Extract token usage from LangChain response
+        if hasattr(result, "usage_metadata") and result.usage_metadata:
+            usage_data = result.usage_metadata
+            token_usage = TokenUsage(
+                input=usage_data.get("input_tokens", 0),
+                output=usage_data.get("output_tokens", 0),
+                total=usage_data.get("total_tokens", 0)
+            )
+            tracker.track_tokens(token_usage)
+            print(f"🎯 PROPER LD TOKEN TRACKING: {usage_data.get('total_tokens', 0)} tokens")
+        elif hasattr(result, "response_metadata") and result.response_metadata:
+            # Handle Anthropic Claude response format
+            metadata = result.response_metadata
+            if isinstance(metadata, dict):
+                usage = metadata.get('usage', {})
+                if isinstance(usage, dict):
+                    input_tokens = usage.get('input_tokens', 0)
+                    output_tokens = usage.get('output_tokens', 0)
+                    total_tokens = input_tokens + output_tokens
+                    if total_tokens > 0:
+                        token_usage = TokenUsage(
+                            input=input_tokens,
+                            output=output_tokens,
+                            total=total_tokens
+                        )
+                        tracker.track_tokens(token_usage)
+                        print(f"🎯 PROPER LD TOKEN TRACKING: {total_tokens} tokens (Claude format)")
+        
+        print(f"✅ PROPER LAUNCHDARKLY TRACKING: Operation completed successfully")
+        
+    except Exception as e:
+        tracker.track_error()
+        print(f"❌ PROPER LAUNCHDARKLY TRACKING: Error occurred: {e}")
+        raise
+
+    return result
 
 @dataclass
 class AgentMetrics:
@@ -68,6 +127,13 @@ class AIMetricsTracker:
         self.user_id = ""
         self.query = ""
         
+        # Debug: Check what methods are available on the tracker
+        if tracker:
+            print(f"🔍 TRACKER DEBUG: Tracker type = {type(tracker)}")
+            print(f"🔍 TRACKER DEBUG: Available methods = {[method for method in dir(tracker) if not method.startswith('_')]}")
+        else:
+            print(f"🔍 TRACKER DEBUG: No tracker provided (tracker is None)")
+        
     def start_workflow(self, user_id: str, query: str):
         """Start tracking a multi-agent workflow"""
         self.start_time = time.time()
@@ -118,12 +184,19 @@ class AIMetricsTracker:
                 else:
                     self.ld_tracker.track_error()
                 
-                # Track token usage if available
-                if tokens_used:
-                    # Estimate input and output tokens (simplified)
-                    estimated_input = tokens_used // 2
-                    estimated_output = tokens_used - estimated_input
-                    self.ld_tracker.track_token_usage(estimated_input, estimated_output)
+                # Track token usage using proper TokenUsage object if available
+                if tokens_used and hasattr(self.ld_tracker, 'track_tokens'):
+                    try:
+                        # Create proper TokenUsage object
+                        token_usage = TokenUsage(
+                            input=tokens_used // 2,  # Estimate
+                            output=tokens_used - (tokens_used // 2),  # Estimate
+                            total=tokens_used
+                        )
+                        self.ld_tracker.track_tokens(token_usage)
+                        print(f"🎯 PROPER TOKEN TRACKING: {tokens_used} tokens")
+                    except Exception as token_error:
+                        print(f"⚠️  TOKEN TRACKING ERROR: {token_error}")
                     
                 print(f"✅ AI METRICS: Tracked {agent_name} metrics to LaunchDarkly")
                 
@@ -133,32 +206,54 @@ class AIMetricsTracker:
         print(f"📊 AI METRICS: Agent {agent_name} completed - Duration: {duration_ms:.2f}ms, Success: {success}, Tools: {len(tool_calls)}")
         
     def track_model_call(self, model_call_func, agent_name: str, *args, **kwargs):
-        """Track a model call with automatic duration and error handling"""
+        """Track a model call using the official LaunchDarkly AI SDK pattern"""
         if not self.ld_tracker:
             # No tracker available, just execute the call
             return model_call_func(*args, **kwargs)
             
+        print(f"🚀 USING PROPER LAUNCHDARKLY AI SDK TRACKING for {agent_name}")
+        
+        # Use the official track_langchain_metrics pattern from LaunchDarkly
+        result = track_langchain_metrics(self.ld_tracker, lambda: model_call_func(*args, **kwargs))
+        
+        print(f"✅ PROPER LD AI SDK TRACKING COMPLETED for {agent_name}")
+        return result
+    
+    def _extract_token_usage(self, response) -> Optional[int]:
+        """Extract token usage from model response"""
         try:
-            # Use LaunchDarkly's track_anthropic_metrics or similar if available
-            # For now, we'll track manually
-            start_time = time.time()
-            result = model_call_func(*args, **kwargs)
-            duration_ms = (time.time() - start_time) * 1000
+            # For Anthropic Claude responses
+            if hasattr(response, 'response_metadata'):
+                metadata = response.response_metadata
+                if isinstance(metadata, dict):
+                    # Check for usage info in various formats
+                    usage = metadata.get('usage', {})
+                    if isinstance(usage, dict):
+                        input_tokens = usage.get('input_tokens', 0)
+                        output_tokens = usage.get('output_tokens', 0)
+                        return input_tokens + output_tokens
             
-            # Track duration and success
-            self.ld_tracker.track_duration(int(duration_ms))
-            self.ld_tracker.track_success()
+            # For OpenAI responses
+            if hasattr(response, 'usage'):
+                usage = response.usage
+                if hasattr(usage, 'total_tokens'):
+                    return usage.total_tokens
+                elif hasattr(usage, 'prompt_tokens') and hasattr(usage, 'completion_tokens'):
+                    return usage.prompt_tokens + usage.completion_tokens
             
-            print(f"🔄 AI METRICS: Model call for {agent_name} tracked - {duration_ms:.2f}ms")
-            return result
+            # Alternative check for usage in response dict
+            if hasattr(response, '__dict__'):
+                response_dict = response.__dict__
+                if 'usage' in response_dict:
+                    usage = response_dict['usage']
+                    if isinstance(usage, dict):
+                        return usage.get('total_tokens', 0)
+            
+            return None
             
         except Exception as e:
-            duration_ms = (time.time() - start_time) * 1000
-            self.ld_tracker.track_duration(int(duration_ms))
-            self.ld_tracker.track_error()
-            
-            print(f"❌ AI METRICS: Model call for {agent_name} failed - {duration_ms:.2f}ms, Error: {e}")
-            raise
+            print(f"⚠️  AI METRICS: Failed to extract token usage: {e}")
+            return None
     
     def finalize_workflow(self, final_response: str) -> MultiAgentMetrics:
         """Finalize workflow tracking and return comprehensive metrics"""
@@ -182,15 +277,21 @@ class AIMetricsTracker:
         # Track final metrics to LaunchDarkly if available
         if self.ld_tracker:
             try:
-                # Track overall workflow satisfaction (simplified as success)
-                if self.overall_success:
-                    self.ld_tracker.track_output_satisfaction(1.0)  # 100% satisfaction for successful workflows
-                else:
-                    self.ld_tracker.track_output_satisfaction(0.0)  # 0% satisfaction for failed workflows
+                # Use feedback tracking for overall workflow satisfaction if available
+                if hasattr(self.ld_tracker, 'track_feedback'):
+                    try:
+                        # Track success as positive feedback, failure as negative
+                        satisfaction = 1.0 if self.overall_success else 0.0
+                        self.ld_tracker.track_feedback(satisfaction)
+                    except Exception as feedback_error:
+                        print(f"⚠️  FEEDBACK TRACKING ERROR: {feedback_error}")
                     
-                # Flush metrics to LaunchDarkly
-                summary = self.ld_tracker.get_summary()
-                print(f"🚀 AI METRICS: Flushed metrics to LaunchDarkly - Duration: {summary.duration}ms")
+                # Get summary to show metrics were tracked
+                try:
+                    summary = self.ld_tracker.get_summary()
+                    print(f"🚀 AI METRICS: Flushed metrics to LaunchDarkly - Duration: {summary.duration}ms")
+                except Exception as summary_error:
+                    print(f"🚀 AI METRICS: Metrics tracked to LaunchDarkly (no summary available: {summary_error})")
                 
             except Exception as e:
                 print(f"⚠️  AI METRICS WARNING: Failed to finalize LaunchDarkly metrics: {e}")
@@ -206,9 +307,27 @@ class AIMetricsTracker:
                 print(f"⚠️  AI METRICS: No LaunchDarkly tracker available for feedback submission")
                 return False
             
-            # Track satisfaction based on thumbs up/down
-            satisfaction_score = 1.0 if thumbs_up else 0.0
-            self.ld_tracker.track_output_satisfaction(satisfaction_score)
+            # Track satisfaction based on thumbs up/down using correct method
+            try:
+                if hasattr(self.ld_tracker, 'track_feedback'):
+                    # The track_feedback method might expect different parameters
+                    # Let's try different approaches based on the LaunchDarkly AI SDK
+                    satisfaction_score = 1.0 if thumbs_up else 0.0
+                    self.ld_tracker.track_feedback(satisfaction_score)
+                    print(f"📊 FEEDBACK TRACKED: {satisfaction_score}")
+                else:
+                    print(f"⚠️  No track_feedback method available")
+            except Exception as feedback_error:
+                print(f"⚠️  FEEDBACK TRACKING ERROR: {feedback_error}")
+                # Try alternative - treat feedback as success/error
+                try:
+                    if thumbs_up:
+                        self.ld_tracker.track_success()
+                    else:
+                        self.ld_tracker.track_error()
+                    print(f"📊 FEEDBACK AS SUCCESS/ERROR: {'success' if thumbs_up else 'error'}")
+                except Exception as alt_error:
+                    print(f"⚠️  ALTERNATIVE FEEDBACK TRACKING ERROR: {alt_error}")
             
             # Track additional metrics
             response_length = len(ai_response)

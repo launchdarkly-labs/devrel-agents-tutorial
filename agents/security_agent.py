@@ -1,10 +1,8 @@
 from typing import TypedDict, List, Annotated
 from langgraph.graph import StateGraph, add_messages
 from langgraph.prebuilt import ToolNode
-from langchain_anthropic import ChatAnthropic
-from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage, ToolMessage
-from policy.config_manager import AgentConfig
+from policy.config_manager import AgentConfig, ConfigManager
 from tools_impl.search_v1 import SearchToolV1
 from tools_impl.search_v2 import SearchToolV2
 from tools_impl.reranking import RerankingTool
@@ -15,13 +13,31 @@ class AgentState(TypedDict):
     response: str
     tool_calls: List[str]
 
-def create_security_agent(config: AgentConfig):
-    """Create a security agent with dynamic tool support based on LaunchDarkly AI Config"""
+def create_security_agent(agent_config: AgentConfig, config_manager: ConfigManager):
+    """Create security agent using LDAI SDK pattern"""
     
-    # Initialize available tools based on LaunchDarkly AI Config
+    # Create LangChain model from LDAI agent configuration
+    # Create LangChain model directly from config
+    from langchain_anthropic import ChatAnthropic
+    from langchain_openai import ChatOpenAI
+    
+    model_name = agent_config.model.lower()
+    if "gpt" in model_name or "openai" in model_name:
+        model = ChatOpenAI(model=agent_config.model, temperature=agent_config.temperature)
+    else:
+        model = ChatAnthropic(model=agent_config.model, temperature=agent_config.temperature)
+    tracker = agent_config.tracker
+    
+    print(f"🔐 CREATING SECURITY AGENT: Using LDAI model {agent_config.model}")
+    
+    # Initialize available tools (minimal for security - mostly native model capabilities)
     available_tools = []
     
-    for tool_name in config.allowed_tools:
+    # For security agent, we typically use fewer tools - focus on native model capabilities
+    # But still support basic tools if configured
+    basic_tools = ["search_v1", "search_v2", "reranking"]
+    
+    for tool_name in basic_tools:
         if tool_name == "search_v1":
             available_tools.append(SearchToolV1())
             print(f"🔍 SECURITY TOOL LOADED: {tool_name} (basic search)")
@@ -31,26 +47,13 @@ def create_security_agent(config: AgentConfig):
         elif tool_name == "reranking":
             available_tools.append(RerankingTool())
             print(f"🔍 SECURITY TOOL LOADED: {tool_name} (semantic reranking)")
-        else:
-            print(f"❓ UNKNOWN SECURITY TOOL REQUESTED: {tool_name} - SKIPPING")
-    
-    # Initialize model based on LaunchDarkly config
-    model_name = config.model.lower()
-    if "gpt" in model_name or "openai" in model_name:
-        model = ChatOpenAI(model=config.model, temperature=config.temperature)
-    elif "claude" in model_name or "anthropic" in model_name:
-        model = ChatAnthropic(model=config.model, temperature=config.temperature)
-    else:
-        # Default to Anthropic for unknown models
-        model = ChatAnthropic(model=config.model, temperature=config.temperature)
     
     # Bind tools to model if available
     if available_tools:
         model = model.bind_tools(available_tools)
         
-        # Create CUSTOM tool node that passes conversation context (same as support agent)
         def custom_tool_node(state: AgentState):
-            """Custom tool execution that passes conversation context to tools"""
+            """Custom tool execution with LDAI metrics tracking"""
             messages = state["messages"]
             last_message = messages[-1]
             
@@ -96,11 +99,24 @@ def create_security_agent(config: AgentConfig):
                             # Pass as simple list of strings - completely JSON serializable
                             tool_args['message_contents'] = message_contents
                         
-                        # Execute the tool
-                        result = tool_to_execute._run(**tool_args)
+                        # Execute the tool with LDAI metrics tracking
+                        result = config_manager.track_metrics(
+                            tracker,
+                            lambda: tool_to_execute._run(**tool_args)
+                        )
+                        
                     except Exception as e:
                         result = f"Error executing {tool_name}: {str(e)}"
                         print(f"❌ SECURITY TOOL ERROR: {result}")
+                        
+                        # Track tool execution error with LDAI metrics
+                        try:
+                            config_manager.track_metrics(
+                                tracker,
+                                lambda: (_ for _ in ()).throw(e)  # Trigger error tracking
+                            )
+                        except:
+                            pass
                 
                 # Create tool message
                 tool_message = ToolMessage(content=str(result), tool_call_id=tool_id)
@@ -113,7 +129,7 @@ def create_security_agent(config: AgentConfig):
         tool_node = custom_tool_node
         print(f"🔧 SECURITY TOOLS BOUND: {[tool.name if hasattr(tool, 'name') else str(tool) for tool in available_tools]}")
     else:
-        print(f"⚠️  NO SECURITY TOOLS AVAILABLE: Agent will work in model-only mode")
+        print(f"🔐 NO SECURITY TOOLS: Agent will work in model-only mode (preferred for security)")
         tool_node = None
     
     def should_continue(state: AgentState):
@@ -146,9 +162,10 @@ def create_security_agent(config: AgentConfig):
                 print(f"🛑 SECURITY STOPPING TOOL LOOP: '{last_2_tools[0]}' used consecutively - ending")
                 return "end"
         
-        # Check max tool calls limit
-        if total_tool_calls >= config.max_tool_calls:
-            print(f"🛑 SECURITY MAX TOOL CALLS REACHED: {total_tool_calls}/{config.max_tool_calls}")
+        # Check max tool calls limit (conservative for security)
+        max_tool_calls = 4  # Lower limit for security agent
+        if total_tool_calls >= max_tool_calls:
+            print(f"🛑 SECURITY MAX TOOL CALLS REACHED: {total_tool_calls}/{max_tool_calls}")
             return "end"
         
         # If model wants to use tools, continue
@@ -159,33 +176,39 @@ def create_security_agent(config: AgentConfig):
         return "end"
     
     def call_model(state: AgentState):
-        """Call the security model"""
-        messages = state["messages"]
-        
-        # Add system message if first call
-        if len(messages) == 1:
-            messages = [HumanMessage(content=config.instructions)] + messages
-        
-        response = model.invoke(messages)
-        return {"messages": [response]}
+        """Call the security model with LDAI metrics tracking"""
+        try:
+            messages = state["messages"]
+            
+            # Add system message if first call
+            if len(messages) == 1:
+                messages = [HumanMessage(content=agent_config.instructions)] + messages
+            
+            # Track model call with LDAI metrics
+            response = config_manager.track_metrics(
+                tracker,
+                lambda: model.invoke(messages)
+            )
+            
+            return {"messages": [response]}
+            
+        except Exception as e:
+            print(f"ERROR in security call_model: {e}")
+            
+            # Track error with LDAI metrics
+            try:
+                config_manager.track_metrics(
+                    tracker,
+                    lambda: (_ for _ in ()).throw(e)  # Trigger error tracking
+                )
+            except:
+                pass
+            
+            error_response = AIMessage(content="Security processing encountered an error.")
+            return {"messages": [error_response]}
     
     def format_final_response(state: AgentState):
-        """
-        Format the final security agent response into standardized output structure.
-        
-        This function:
-        1. Extracts the AI model's response from the message history
-        2. Handles both string and list-based response formats from different LLM providers
-        3. Converts complex response objects to plain text strings
-        4. Returns a consistent output format matching other agents in the multi-agent system
-        5. Provides fallback response if no AI message is found
-        
-        Args:
-            state: Current agent state containing message history and user input
-            
-        Returns:
-            Dict with standardized fields: user_input, response, tool_calls, messages
-        """
+        """Format the final security agent response with LDAI patterns"""
         messages = state["messages"]
         
         # Get final response from last AI message

@@ -5,19 +5,38 @@ from langchain_mcp_adapters.sessions import StdioConnection
 import asyncio
 from typing import List, Optional
 import logging
+import time
+import random
 
 logger = logging.getLogger(__name__)
 
+# Process-lifetime singleton to prevent repeated MCP server startup
+_MCP_SINGLETON = None
+_MCP_LOCK = asyncio.Lock()
+
 class MCPResearchTools:
-    """MCP Research Tools integration using real MCP servers"""
+    """MCP Research Tools integration using real MCP servers with process lifetime reuse"""
     
     def __init__(self):
         self.client = None
         self.tools = {}
+        self._initialized = False
         
     async def initialize(self):
-        """Initialize MCP client with research servers"""
-        print("DEBUG: MCPResearchTools.initialize() called")
+        """Initialize MCP client with research servers using process lifetime reuse"""
+        global _MCP_SINGLETON
+        
+        async with _MCP_LOCK:
+            if _MCP_SINGLETON is not None:
+                # Reuse existing singleton
+                self.client = _MCP_SINGLETON.client
+                self.tools = _MCP_SINGLETON.tools
+                self._initialized = True
+                print(f"🔄 MCP: Reusing singleton with {len(self.tools)} tools")
+                return
+                
+            print("🏗️  MCP: Initializing process-lifetime singleton...")
+        
         try:
             # Configure MCP servers for research
             # NOTE: MCP servers can cause initialization timeouts in some environments
@@ -88,10 +107,17 @@ class MCPResearchTools:
                         
                 print(f"DEBUG: Initialized MCP tools: {list(self.tools.keys())}")
                 
+                # Store singleton for process lifetime reuse
+                async with _MCP_LOCK:
+                    if _MCP_SINGLETON is None:
+                        _MCP_SINGLETON = self
+                        print("✅ MCP: Singleton initialized for process lifetime")
+                
         except Exception as e:
             print(f"DEBUG: Failed to initialize MCP client: {e}")
             self.client = None
         
+        self._initialized = True
         print("DEBUG: MCPResearchTools.initialize() completed")
     
     def get_tool(self, tool_name: str) -> Optional[BaseTool]:
