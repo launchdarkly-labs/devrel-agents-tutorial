@@ -1,11 +1,9 @@
 from typing import TypedDict, List, Annotated, Literal, Optional
 from langgraph.graph import StateGraph, add_messages
-from langchain_anthropic import ChatAnthropic
-from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from .support_agent import create_support_agent
 from .security_agent import create_security_agent
-from policy.config_manager import AgentConfig
+from policy.config_manager import AgentConfig, ConfigManager
 
 class SupervisorState(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]
@@ -16,74 +14,116 @@ class SupervisorState(TypedDict):
     support_tool_calls: List[str]
     support_tool_details: List[dict]
     final_response: str
-    workflow_stage: str  # "initial_security", "research", "revision", "final_compliance"
+    workflow_stage: str
 
-def create_supervisor_agent(supervisor_config: AgentConfig, support_config: AgentConfig, security_config: AgentConfig, metrics_tracker: Optional['AIMetricsTracker'] = None):
-    """Create supervisor agent that orchestrates the workflow"""
+def create_supervisor_agent(supervisor_config: AgentConfig, support_config: AgentConfig, security_config: AgentConfig, config_manager: ConfigManager):
+    """Create supervisor agent using LDAI SDK pattern"""
     
-    # Initialize supervisor model
+    # Create LangChain model directly from config
+    from langchain_anthropic import ChatAnthropic
+    from langchain_openai import ChatOpenAI
+    
     model_name = supervisor_config.model.lower()
     if "gpt" in model_name or "openai" in model_name:
         supervisor_model = ChatOpenAI(model=supervisor_config.model, temperature=supervisor_config.temperature)
     else:
         supervisor_model = ChatAnthropic(model=supervisor_config.model, temperature=supervisor_config.temperature)
     
-    # Create child agents
-    support_agent = create_support_agent(support_config)
-    security_agent = create_security_agent(security_config)
+    # Create child agents with config manager
+    support_agent = create_support_agent(support_config, config_manager)
+    security_agent = create_security_agent(security_config, config_manager)
     
     def supervisor_node(state: SupervisorState):
-        """Supervisor decides next step in workflow"""
-        messages = state["messages"]
-        workflow_stage = state.get("workflow_stage", "initial_security")
-        security_cleared = state.get("security_cleared", False)
-        support_response = state.get("support_response", "")
-        
-        print(f"DEBUG: Supervisor decision - Stage: {workflow_stage}, Security cleared: {security_cleared}, Has support response: {bool(support_response)}")
-        
-        # Simplified logic based on workflow stage
-        if workflow_stage == "initial_security" and not security_cleared:
-            next_agent = "security_agent"
-        elif workflow_stage == "research" and not support_response:
-            next_agent = "support_agent"
-        elif workflow_stage == "final_compliance" and support_response:
-            next_agent = "security_agent"  # Final compliance check
-        elif support_response and security_cleared:
-            next_agent = "complete"
-        else:
-            # Fallback to model decision
-            system_prompt = f"""
-            {supervisor_config.instructions}
+        """Supervisor decides next step in workflow with LDAI metrics tracking"""
+        try:
+            messages = state["messages"]
+            workflow_stage = state.get("workflow_stage", "initial_security")
+            security_cleared = state.get("security_cleared", False)
+            support_response = state.get("support_response", "")
             
-            Current stage: {workflow_stage}
-            Security cleared: {security_cleared}
-            Has support response: {bool(support_response)}
+            print(f"🎯 SUPERVISOR: Stage={workflow_stage}, Security={security_cleared}, Support={bool(support_response)}")
             
-            Choose next action:
-            - "security_agent": For PII removal or compliance
-            - "support_agent": For research and information
-            - "complete": When workflow is finished
+            # Track supervisor decision-making process
+            decision_start = config_manager.track_metrics(
+                supervisor_config.tracker,
+                lambda: "supervisor_decision_start"  # Track decision start
+            )
             
-            Respond with ONLY the agent name.
-            """
+            # Simplified routing logic
+            if workflow_stage == "initial_security" and not security_cleared:
+                next_agent = "security_agent"
+                print(f"🎯 SUPERVISOR: Rule-based routing -> {next_agent}")
+            elif workflow_stage == "research" and not support_response:
+                next_agent = "support_agent"
+                print(f"🎯 SUPERVISOR: Rule-based routing -> {next_agent}")
+            elif workflow_stage == "final_compliance" and support_response:
+                next_agent = "security_agent"
+                print(f"🎯 SUPERVISOR: Rule-based routing -> {next_agent}")
+            elif support_response and security_cleared:
+                next_agent = "complete"
+                print(f"🎯 SUPERVISOR: Rule-based routing -> {next_agent}")
+            else:
+                # Use model for complex routing decisions
+                print(f"🎯 SUPERVISOR: Using model for complex routing decision")
+                system_prompt = f"""
+                {supervisor_config.instructions}
+                
+                Current stage: {workflow_stage}
+                Security cleared: {security_cleared}
+                Has support response: {bool(support_response)}
+                
+                Choose next action:
+                - "security_agent": For PII removal or compliance
+                - "support_agent": For research and information
+                - "complete": When workflow is finished
+                
+                Respond with ONLY the agent name.
+                """
+                
+                prompt = HumanMessage(content=system_prompt + f"\n\nLast message: {messages[-1].content if messages else state['user_input']}")
+                
+                # Track model call with LDAI metrics
+                response = config_manager.track_metrics(
+                    supervisor_config.tracker,
+                    lambda: supervisor_model.invoke([prompt])
+                )
+                
+                next_agent = response.content.strip().lower()
+                print(f"🎯 SUPERVISOR: Model-based routing -> {next_agent}")
             
-            prompt = HumanMessage(content=system_prompt + f"\n\nLast message: {messages[-1].content if messages else state['user_input']}")
-            response = supervisor_model.invoke([prompt])
-            next_agent = response.content.strip().lower()
-        
-        print(f"DEBUG: Supervisor routing to: {next_agent}")
-        
-        return {"current_agent": next_agent}
+            # Track successful supervisor decision
+            config_manager.track_metrics(
+                supervisor_config.tracker,
+                lambda: f"supervisor_decision_success_{next_agent}"
+            )
+            
+            print(f"🎯 SUPERVISOR: Final routing decision -> {next_agent}")
+            return {"current_agent": next_agent}
+            
+        except Exception as e:
+            print(f"❌ SUPERVISOR ERROR: {e}")
+            
+            # Track supervisor error with LDAI metrics
+            config_manager.track_metrics(
+                supervisor_config.tracker,
+                lambda: (_ for _ in ()).throw(e)  # Trigger error tracking
+            )
+            
+            # Fallback to security agent
+            return {"current_agent": "security_agent"}
     
     def security_node(state: SupervisorState):
-        """Route to security agent"""
-        # Track security agent start
-        agent_start = None
-        if metrics_tracker:
-            agent_start = metrics_tracker.track_agent_start("security-agent", security_config.model, security_config.variation_key)
-        
+        """Route to security agent with LDAI metrics tracking"""
         try:
-            # Prepare input for security agent
+            print(f"🎯 SUPERVISOR: Orchestrating security agent execution")
+            
+            # Track supervisor orchestration start for security agent
+            config_manager.track_metrics(
+                supervisor_config.tracker,
+                lambda: "supervisor_orchestrating_security_start"
+            )
+            
+            # Prepare security agent input
             security_input = {
                 "user_input": state["user_input"],
                 "response": "",
@@ -91,46 +131,49 @@ def create_supervisor_agent(supervisor_config: AgentConfig, support_config: Agen
                 "messages": [HumanMessage(content=state["messages"][-2].content if len(state["messages"]) >= 2 else state["user_input"])]
             }
             
+            # Execute security agent
             result = security_agent.invoke(security_input)
             
-            # Track security agent completion
-            if metrics_tracker and agent_start:
-                metrics_tracker.track_agent_completion(
-                    "security-agent", security_config.model, security_config.variation_key,
-                    agent_start, [], True  # Security agent doesn't use tools
-                )
-                
+            # Track successful supervisor orchestration for security agent
+            config_manager.track_metrics(
+                supervisor_config.tracker,
+                lambda: "supervisor_orchestrating_security_success"
+            )
+            
+            # Update workflow stage
+            current_stage = state.get("workflow_stage", "initial_security")
+            new_stage = "research" if current_stage == "initial_security" else "complete"
+            
+            print(f"🎯 SUPERVISOR: Security agent completed, transitioning {current_stage} -> {new_stage}")
+            
+            return {
+                "messages": [AIMessage(content=result["response"])],
+                "workflow_stage": new_stage,
+                "security_cleared": True
+            }
+            
         except Exception as e:
-            # Track security agent failure
-            if metrics_tracker and agent_start:
-                metrics_tracker.track_agent_completion(
-                    "security-agent", security_config.model, security_config.variation_key,
-                    agent_start, [], False, str(e)
-                )
+            print(f"❌ SUPERVISOR: Security agent orchestration error: {e}")
+            
+            # Track error with LDAI metrics
+            config_manager.track_metrics(
+                supervisor_config.tracker,
+                lambda: (_ for _ in ()).throw(e)  # Trigger error tracking
+            )
             raise
-        
-        # Update workflow stage
-        current_stage = state.get("workflow_stage", "initial_security")
-        if current_stage == "initial_security":
-            new_stage = "research"
-        else:
-            new_stage = "complete"
-        
-        return {
-            "messages": [AIMessage(content=result["response"])],
-            "workflow_stage": new_stage,
-            "security_cleared": True
-        }
     
     def support_node(state: SupervisorState):
-        """Route to support agent"""
-        # Track support agent start
-        agent_start = None
-        if metrics_tracker:
-            agent_start = metrics_tracker.track_agent_start("support-agent", support_config.model, support_config.variation_key)
-        
+        """Route to support agent with LDAI metrics tracking"""
         try:
-            # Prepare input for support agent
+            print(f"🎯 SUPERVISOR: Orchestrating support agent execution")
+            
+            # Track supervisor orchestration start for support agent
+            config_manager.track_metrics(
+                supervisor_config.tracker,
+                lambda: "supervisor_orchestrating_support_start"
+            )
+            
+            # Prepare support agent input
             support_input = {
                 "user_input": state["user_input"],
                 "response": "",
@@ -139,36 +182,38 @@ def create_supervisor_agent(supervisor_config: AgentConfig, support_config: Agen
                 "messages": [HumanMessage(content=state["user_input"])]
             }
             
+            # Execute support agent
             result = support_agent.invoke(support_input)
             
-            print(f"🔧 SUPERVISOR RECEIVED FROM SUPPORT:")
-            print(f"   📊 tool_calls: {result.get('tool_calls', [])}")
-            print(f"   📊 tool_details: {result.get('tool_details', [])}")
+            # Track successful supervisor orchestration for support agent
+            tool_calls = result.get("tool_calls", [])
+            config_manager.track_metrics(
+                supervisor_config.tracker,
+                lambda: f"supervisor_orchestrating_support_success_tools_{len(tool_calls)}"
+            )
             
-            # Track support agent completion
-            if metrics_tracker and agent_start:
-                tool_calls = result.get("tool_calls", [])
-                metrics_tracker.track_agent_completion(
-                    "support-agent", support_config.model, support_config.variation_key,
-                    agent_start, tool_calls, True
-                )
-                
+            print(f"🔧 SUPERVISOR RECEIVED FROM SUPPORT:")
+            print(f"   📊 tool_calls: {tool_calls}")
+            print(f"   📊 tool_details: {result.get('tool_details', [])}")
+            print(f"🎯 SUPERVISOR: Support agent completed with {len(tool_calls)} tools used")
+            
+            return {
+                "messages": [AIMessage(content=result["response"])],
+                "support_response": result["response"],
+                "support_tool_calls": tool_calls,
+                "support_tool_details": result.get("tool_details", []),
+                "workflow_stage": "final_compliance"
+            }
+            
         except Exception as e:
-            # Track support agent failure
-            if metrics_tracker and agent_start:
-                metrics_tracker.track_agent_completion(
-                    "support-agent", support_config.model, support_config.variation_key,
-                    agent_start, [], False, str(e)
-                )
+            print(f"❌ SUPERVISOR: Support agent orchestration error: {e}")
+            
+            # Track error with LDAI metrics
+            config_manager.track_metrics(
+                supervisor_config.tracker,
+                lambda: (_ for _ in ()).throw(e)  # Trigger error tracking
+            )
             raise
-        
-        return {
-            "messages": [AIMessage(content=result["response"])],
-            "support_response": result["response"],
-            "support_tool_calls": result.get("tool_calls", []),
-            "support_tool_details": result.get("tool_details", []),
-            "workflow_stage": "final_compliance"
-        }
     
     def revise_node(state: SupervisorState):
         """Ask support agent to revise for clarity"""
@@ -209,25 +254,54 @@ def create_supervisor_agent(supervisor_config: AgentConfig, support_config: Agen
             return "complete"
     
     def format_final(state: SupervisorState):
-        """Format final response"""
-        # Use the support response as the main response, since it contains the helpful answer
-        support_response = state.get("support_response", "")
-        support_tool_calls = state.get("support_tool_calls", [])
-        
-        # If we have a support response, use it; otherwise fall back to last message
-        if support_response:
-            final_content = support_response
-        else:
-            final_message = state["messages"][-1]
-            final_content = final_message.content
-        
-        return {
-            "final_response": final_content,
-            "actual_tool_calls": support_tool_calls,
-            "support_tool_details": state.get("support_tool_details", []),
-            "user_input": state["user_input"],
-            "workflow_stage": "complete"
-        }
+        """Format final response with supervisor completion metrics"""
+        try:
+            print(f"🎯 SUPERVISOR: Finalizing workflow")
+            
+            # Track supervisor workflow completion
+            support_tool_calls = state.get("support_tool_calls", [])
+            config_manager.track_metrics(
+                supervisor_config.tracker,
+                lambda: f"supervisor_workflow_complete_tools_{len(support_tool_calls)}"
+            )
+            
+            support_response = state.get("support_response", "")
+            
+            if support_response:
+                final_content = support_response
+            else:
+                final_message = state["messages"][-1]
+                final_content = final_message.content
+            
+            print(f"🎯 SUPERVISOR: Workflow completed successfully")
+            print(f"   📊 Final response length: {len(final_content)} chars")
+            print(f"   📊 Tools used in workflow: {support_tool_calls}")
+            
+            return {
+                "final_response": final_content,
+                "actual_tool_calls": support_tool_calls,
+                "support_tool_details": state.get("support_tool_details", []),
+                "user_input": state["user_input"],
+                "workflow_stage": "complete"
+            }
+            
+        except Exception as e:
+            print(f"❌ SUPERVISOR: Final formatting error: {e}")
+            
+            # Track supervisor final formatting error
+            config_manager.track_metrics(
+                supervisor_config.tracker,
+                lambda: (_ for _ in ()).throw(e)  # Trigger error tracking
+            )
+            
+            # Return error response
+            return {
+                "final_response": f"I apologize, but I encountered an error finalizing the response: {e}",
+                "actual_tool_calls": [],
+                "support_tool_details": [],
+                "user_input": state["user_input"],
+                "workflow_stage": "error"
+            }
     
     # Build supervisor workflow
     workflow = StateGraph(SupervisorState)

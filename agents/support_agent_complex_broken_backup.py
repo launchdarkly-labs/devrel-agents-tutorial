@@ -4,7 +4,7 @@ from langgraph.graph import StateGraph, add_messages
 from langgraph.prebuilt import ToolNode
 from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, BaseMessage, SystemMessage
+from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, BaseMessage
 from tools_impl.search_v1 import SearchToolV1
 from tools_impl.search_v2 import SearchToolV2
 from tools_impl.reranking import RerankingTool
@@ -28,13 +28,13 @@ class AgentState(TypedDict):
     response: str
     tool_calls: List[str]
     tool_details: List[dict]  # Add support for detailed tool information with search queries
+    most_recent_search_results: Optional[str]  # Store the most recent search results for reranking
+    most_recent_query: Optional[str]  # Store the most recent search query
 
 def create_support_agent(config: AgentConfig, config_manager=None):
     """Create a universal agent that works with any model provider"""
     # Handle both old and new AgentConfig formats for compatibility
     tools_list = getattr(config, 'allowed_tools', None) or getattr(config, 'tools', [])
-    if not tools_list:
-        tools_list = []
     print(f"🏗️  CREATING SUPPORT AGENT: Starting with tools {tools_list}")
     
     # Create tools based on LaunchDarkly configuration
@@ -160,34 +160,18 @@ def create_support_agent(config: AgentConfig, config_manager=None):
                         object.__setattr__(self, 'wrapped_tool', mcp_tool)
                         object.__setattr__(self, 'name', ld_name)
                     
-                    async def _arun(self, config=None, **kwargs) -> str:
-                        """Execute the wrapped MCP tool asynchronously."""
+                    def _run(self, config=None, **kwargs) -> str:
+                        """Execute the wrapped MCP tool"""
                         try:
-                            # Handle nested kwargs structure from MCP tools
-                            if 'kwargs' in kwargs and isinstance(kwargs['kwargs'], dict):
-                                actual_kwargs = kwargs['kwargs']
-                            else:
-                                actual_kwargs = kwargs
-                            
-                            # Use await to call the async tool method
-                            if hasattr(self.wrapped_tool, '_arun'):
-                                result = await self.wrapped_tool._arun(config=config, **actual_kwargs)
-                            elif hasattr(self.wrapped_tool, 'ainvoke'):
-                                invoke_args = dict(actual_kwargs)
-                                invoke_args['config'] = config
-                                result = await self.wrapped_tool.ainvoke(invoke_args)
+                            # Call the MCP tool directly (ignore config parameter)
+                            if hasattr(self.wrapped_tool, '_run'):
+                                result = self.wrapped_tool._run(**kwargs)
                             elif hasattr(self.wrapped_tool, 'invoke'):
-                                # Some tools might be sync, run in executor
-                                invoke_args = dict(actual_kwargs)
-                                invoke_args['config'] = config
-                                loop = asyncio.get_event_loop()
-                                result = await loop.run_in_executor(None, self.wrapped_tool.invoke, invoke_args)
+                                result = self.wrapped_tool.invoke(kwargs)
                             else:
-                                # Fallback, attempt to run in default executor
-                                loop = asyncio.get_event_loop()
-                                result = await loop.run_in_executor(None, self.wrapped_tool, config, **actual_kwargs)
-
-                            # Format result
+                                # Fallback: try to call the tool directly
+                                result = self.wrapped_tool(**kwargs)
+                            
                             if isinstance(result, dict):
                                 return json.dumps(result, indent=2)
                             elif isinstance(result, list):
@@ -196,21 +180,6 @@ def create_support_agent(config: AgentConfig, config_manager=None):
                                 return str(result)
                         except Exception as e:
                             print(f"❌ MCP TOOL ERROR: {e}")
-                            return f"MCP tool error: {str(e)}"
-                    
-                    def _run(self, config=None, **kwargs) -> str:
-                        """Synchronous fallback - run async version in new event loop."""
-                        try:
-                            # Create new event loop for sync execution
-                            loop = asyncio.new_event_loop()
-                            asyncio.set_event_loop(loop)
-                            try:
-                                result = loop.run_until_complete(self._arun(config=config, **kwargs))
-                                return result
-                            finally:
-                                loop.close()
-                        except Exception as e:
-                            print(f"❌ MCP TOOL SYNC ERROR: {e}")
                             return f"MCP tool error: {str(e)}"
                 
                 wrapped_mcp_tool = MCPToolWrapper(mcp_tool, tool_name)
@@ -274,26 +243,23 @@ def create_support_agent(config: AgentConfig, config_manager=None):
                     result = f"Error: Tool '{tool_name}' not found"
                 else:
                     try:
-                        # Pass recent search results to reranking tool by looking at message history
+                        # PASS CONVERSATION CONTEXT to tools (especially reranking)
                         if tool_name == 'reranking':
-                            # Find the most recent ToolMessage from search_v2 in conversation history
-                            latest_search_message = None
-                            for msg in reversed(messages):
-                                if isinstance(msg, ToolMessage) and hasattr(msg, 'tool_call_id'):
-                                    # More flexible matching - check if this is a search_v2 tool result
-                                    if ('search_v2' in str(msg.tool_call_id).lower() or 
-                                        (hasattr(msg, 'content') and 'Found' in str(msg.content) and 'relevant document' in str(msg.content))):
-                                        latest_search_message = msg
-                                        break
+                            # For reranking tool, pass conversation content as simple strings
+                            message_contents = []
+                            for msg in messages:
+                                try:
+                                    # Extract just the content as plain string
+                                    if hasattr(msg, 'content') and msg.content:
+                                        content = str(msg.content)
+                                        if content.strip():  # Only include non-empty content
+                                            message_contents.append(content)
+                                except Exception as e:
+                                    print(f"   ⚠️ Error extracting message content: {e}")
+                                    continue
                             
-                            if latest_search_message:
-                                # Pass the raw search_v2 output content to reranking tool
-                                tool_args['results'] = latest_search_message.content
-                                print(f"🔧 RERANKING: Found search_v2 output in message history, passing to tool")
-                            else:
-                                # Fallback: no search_v2 results found
-                                tool_args['results'] = ""
-                                print(f"⚠️ RERANKING: No search_v2 output found in message history")
+                            # Pass as simple list of strings - completely JSON serializable
+                            tool_args['message_contents'] = message_contents
                         
                         # For MCP tools, ensure config parameter is handled
                         if tool_name in ['arxiv_search', 'semantic_scholar']:
@@ -303,32 +269,6 @@ def create_support_agent(config: AgentConfig, config_manager=None):
                         
                         # Execute the tool
                         result = tool_to_execute._run(**tool_args)
-                        
-                        # Analyze search_v2 results for relevance threshold
-                        if tool_name == "search_v2":
-                            try:
-                                import re
-                                # Extract relevance scores from search_v2 result
-                                relevance_pattern = r'\[Relevance: ([\d.]+)\]'
-                                scores = re.findall(relevance_pattern, str(result))
-                                if scores:
-                                    max_score = max(float(score) for score in scores)
-                                    print(f"🔍 SEARCH_V2 MAX RELEVANCE: {max_score}")
-                                    
-                                    # If relevance is low, suggest escalation
-                                    if max_score < 0.6:
-                                        print(f"⚠️ LOW RELEVANCE DETECTED ({max_score}) - Consider external research tools")
-                                        # Store low relevance flag in state for potential escalation
-                                        state["low_relevance_detected"] = True
-                                        state["last_search_query"] = tool_args.get('query', '')
-                                else:
-                                    print(f"🔍 SEARCH_V2: No relevance scores found in result")
-                            except Exception as e:
-                                print(f"⚠️ Error analyzing search_v2 relevance: {e}")
-                        
-                        # Search results are automatically stored in ToolMessage content
-                        # No need for manual state management
-                        
                     except Exception as e:
                         result = f"Error executing {tool_name}: {str(e)}"
                         print(f"❌ TOOL ERROR: {result}")
@@ -376,17 +316,11 @@ def create_support_agent(config: AgentConfig, config_manager=None):
                     else:
                         print(f"🔧 UNKNOWN TOOL CALLED: {tool_name} ({query_display})")
         
-        # RELAXED: Allow up to 4 consecutive calls of the same tool before stopping
-        if len(recent_tool_calls) >= 4:
-            last_4_tools = recent_tool_calls[-4:]
-            if len(set(last_4_tools)) == 1:  # Same tool used 4 times in a row
-                print(f"🛑 STOPPING TOOL LOOP: '{last_4_tools[-1]}' used 4+ times consecutively - ending workflow")
-                return "end"
-        
-        # Stop if any single tool is used more than 5 times total in conversation
-        for tool_name in set(recent_tool_calls):
-            if recent_tool_calls.count(tool_name) >= 5:
-                print(f"🛑 STOPPING TOOL LOOP: '{tool_name}' used {recent_tool_calls.count(tool_name)} times total - ending workflow")
+        # AGGRESSIVE: Stop tool loops immediately
+        if len(recent_tool_calls) >= 2:
+            last_2_tools = recent_tool_calls[-2:]
+            if len(set(last_2_tools)) == 1:  # Same tool used twice in a row
+                print(f"🛑 STOPPING TOOL LOOP: '{last_2_tools[0]}' used consecutively - ending workflow")
                 return "end"
         
         print(f"DEBUG: should_continue - total_tool_calls: {total_tool_calls}, max: 10")
@@ -434,19 +368,14 @@ def create_support_agent(config: AgentConfig, config_manager=None):
                 Available tools:
                 {tools_text}
                 
-                TOOL USAGE STRATEGY:
-                1. Start with search_v2 for internal knowledge base
-                2. If results look weak/irrelevant (low relevance scores), escalate to arxiv_search and semantic_scholar
-                3. Use reranking on search results to improve quality
-                4. Try different search queries to explore various aspects
-                5. Synthesize a comprehensive comparison answer before finishing
-                
-                GUIDELINES:
-                - Use different tools strategically for complementary information
-                - Escalate to external research tools when internal KB is insufficient
+                TOOL USAGE GUIDELINES:
+                - Be strategic and efficient with tool usage
+                - Use different tools to gather complementary information
+                - Avoid repeating the same tool unnecessarily
+                - When you have sufficient information, provide your answer
                 - Maximum 10 tool calls allowed
                 """
-                messages = [SystemMessage(content=system_prompt)] + messages
+                messages = [HumanMessage(content=system_prompt)] + messages
             
             # Simple and effective: Check for tool overuse and REMOVE tools if needed
             recent_tool_calls = []
@@ -455,25 +384,28 @@ def create_support_agent(config: AgentConfig, config_manager=None):
                     for tool_call in message.tool_calls:
                         recent_tool_calls.append(tool_call['name'])
             
-            # If at max tool calls, disable tools for final completion
-            if total_tool_calls >= 10:
-                print(f"🛑 DISABLING TOOLS: Reached maximum tool calls ({total_tool_calls}/10)")
-                
-                # Add synthesis instruction for final completion
-                synthesis_prompt = HumanMessage(content="""
-                You've now gathered information from multiple sources. Please synthesize your findings into a comprehensive answer that:
-                1. Summarizes the key insights from your research
-                2. Compares information from different sources (internal knowledge, ArXiv, Semantic Scholar)
-                3. Provides actionable conclusions and recommendations
-                4. Addresses the user's original question directly
-                """)
-                messages.append(synthesis_prompt)
-                
-                # Use the base model without any tools bound for final completion
+            # STRICT tool limits - force completion
+            should_disable_tools = False
+            
+            # If approaching max tool calls, disable tools
+            if total_tool_calls >= 9:
+                should_disable_tools = True
+                print(f"🛑 DISABLING TOOLS: Reached max tools ({total_tool_calls}/10)")
+            
+            # If repeating the same tool too much, disable tools
+            elif len(recent_tool_calls) >= 2:
+                last_2_tools = recent_tool_calls[-2:]
+                if len(set(last_2_tools)) == 1:  # Same tool used twice in a row
+                    should_disable_tools = True
+                    print(f"🛑 DISABLING TOOLS: Repeated tool '{last_2_tools[0]}' - forcing completion")
+            
+            # Actually disable tools by creating a model without tools
+            if should_disable_tools:
+                # Use the base model without any tools bound
                 model_name_for_completion = getattr(config, 'model', None) or getattr(config, 'model_name', 'claude-3-haiku-20240307')
                 completion_model = get_model_instance(model_name_for_completion, config_temperature)
                 response = completion_model.invoke(messages)
-                print(f"🎯 FORCED SYNTHESIS: Model completing with synthesis instructions")
+                print(f"🎯 FORCED COMPLETION: Model response without tools")
                 return {"messages": [response]}
             
             response = model.invoke(messages)
@@ -599,5 +531,4 @@ def create_support_agent(config: AgentConfig, config_manager=None):
     # Format is the final step
     workflow.set_finish_point("format")
     
-    print("✅ SUPPORT AGENT COMPILED: Ready for execution")
     return workflow.compile()

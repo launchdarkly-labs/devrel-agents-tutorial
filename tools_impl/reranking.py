@@ -1,11 +1,18 @@
-from langchain.tools import BaseTool
-from typing import List
+from langchain_core.tools import BaseTool
+from typing import List, Dict, Any, Optional
 from rank_bm25 import BM25Okapi
+from pydantic import BaseModel, Field
 import re
+import json
+
+class RerankingInput(BaseModel):
+    query: str = Field(..., description="The search query to rerank results for")
+    results: Optional[List[Dict[str, Any]]] = Field(None, description="Optional: search results. If not provided, will look for recent search_v2 output")
 
 class RerankingTool(BaseTool):
     name: str = "reranking"
-    description: str = "Rerank search results using BM25 algorithm for better relevance ordering. IMPORTANT: This tool requires two parameters: 'query' (the search query) and 'results' (the actual search results text from search_v2). Only call this tool AFTER you have search results to rerank."
+    description: str = "Rerank search results using BM25 algorithm. Pass 'query' (str) and 'results' (the JSON items array from search_v2, not the human summary)."
+    args_schema: type[BaseModel] = RerankingInput
     
     def _tokenize(self, text: str) -> List[str]:
         """Simple tokenization for BM25"""
@@ -14,115 +21,139 @@ class RerankingTool(BaseTool):
         # Split on whitespace and filter empty strings
         return [token for token in text.split() if token.strip()]
     
-    def _run(self, query=None, results=None, **kwargs) -> str:
-        print(f"🔧 RERANKING TOOL INPUT:")
-        print(f"   📝 Query param: '{query}' (type: {type(query)})")
-        print(f"   📝 Results param: '{results}' (type: {type(results)})")
-        print(f"   📝 Kwargs: {kwargs}")
-        
-        # Handle different input formats based on LaunchDarkly config
-        # Convert query (object) to string
-        if isinstance(query, dict):
-            query_str = query.get('q', '') or query.get('query', '') or str(query)
+    def _parse_search_v2_output(self, search_output: str) -> List[Dict[str, Any]]:
+        """Parse search_v2 text output format into structured results."""
+        try:
+            # First try to extract JSON payload from search_v2 output
+            json_match = re.search(r'```json\s*({.*?})\s*```', search_output, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(1)
+                data = json.loads(json_str)
+                if isinstance(data, dict) and 'items' in data:
+                    print(f"🔧 RERANKING: Successfully parsed JSON payload with {len(data['items'])} items")
+                    return data['items']
+            
+            # Fallback: Search_v2 returns format like: "Found N relevant document(s):\n[Relevance: 0.454] content..."
+            relevance_entries = re.findall(r'\[Relevance: ([\d.]+)\] (.+?)(?=\[Relevance:|$)', search_output, re.DOTALL)
+            
+            if relevance_entries:
+                search_results = []
+                for i, (score, content) in enumerate(relevance_entries):
+                    search_results.append({
+                        "text": content.strip(),
+                        "score": float(score),
+                        "metadata": {"source": "search_v2", "rank": i+1}
+                    })
+                print(f"🔧 RERANKING: Successfully parsed {len(search_results)} items from relevance format")
+                return search_results
+            else:
+                print(f"⚠️ RERANKING: Could not parse search_v2 format from: {search_output[:200]}...")
+                return []
+        except Exception as e:
+            print(f"⚠️ RERANKING: Error parsing search_v2 output: {e}")
+            return []
+
+    def _extract_items_from_string(self, results_str: str) -> List[Dict[str, Any]]:
+        """Extract JSON items array from fenced JSON string if needed."""
+        try:
+            # Try to find fenced JSON block
+            import re
+            json_match = re.search(r'```json\s*(\{.*?\})\s*```', results_str, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(1)
+                data = json.loads(json_str)
+                if isinstance(data, dict) and 'items' in data:
+                    return data['items']
+            # If no fenced JSON, maybe it's just a JSON string
+            data = json.loads(results_str)
+            if isinstance(data, dict) and 'items' in data:
+                return data['items']
+            elif isinstance(data, list):
+                return data
+        except (json.JSONDecodeError, AttributeError):
+            pass
+        return []
+
+    def _run(self, query: str, results: Optional[List[Dict[str, Any]]] = None, **kwargs) -> str:
+        # Handle different input formats for results
+        if results is None:
+            # No results provided, need to parse from conversation context
+            # Try to get state from kwargs or other context
+            print(f"🔧 RERANKING: No results provided, looking for recent search_v2 output...")
+            
+            # For now, return an error - we'll need to access the conversation state
+            # This would require the agent to pass the state or search results
+            return "ERROR: No search results provided. Please run search_v2 first to get results to rerank."
+            
+        elif isinstance(results, str):
+            print(f"🔧 RERANKING: Got string results, trying to parse...")
+            # First try search_v2 format (which includes JSON payload)
+            items = self._parse_search_v2_output(results)
+            if not items:
+                # Fallback to JSON format
+                items = self._extract_items_from_string(results)
+            if not items:
+                print(f"⚠️ RERANKING: Failed to parse. Input preview: {results[:300]}...")
+                return f"ERROR: Could not parse search results from string format. Expected search_v2 output with [Relevance: X.XX] format or JSON payload."
         else:
-            query_str = str(query) if query else ""
-        
-        # Convert results (array) to string
-        if isinstance(results, list):
-            results_str = '\n'.join([str(item) for item in results])
-        else:
-            results_str = str(results) if results else ""
-        
-        # If no results provided, look for recent search results in the conversation
-        # This is the KEY FIX - extract from LangChain conversation history
-        if not results_str:
-            print("   🔍 SEARCHING FOR PREVIOUS SEARCH RESULTS...")
-            
-            # Get message contents from kwargs (simple list of strings)
-            message_contents = kwargs.get('message_contents', [])
-            
-            # Look through recent message contents for search results
-            found_results = False
-            for content in reversed(message_contents):  # Search backwards through conversation
-                try:
-                    if content and isinstance(content, str):
-                        print(f"   🔍 CHECKING CONTENT: {content[:100]}...")
-                        
-                        # Look SPECIFICALLY for ToolMessage content with search results (NOT AI messages)
-                        if ('found 3 relevant documents' in content.lower() or 
-                            'found 2 relevant documents' in content.lower() or
-                            'found 1 relevant documents' in content.lower()) and '[relevance:' in content.lower():
-                            # This is actual search results from search_v2 tool
-                            results_str = content
-                            print(f"   ✅ FOUND ACTUAL SEARCH RESULTS: {len(results_str)} chars")
-                            found_results = True
-                            break
-                        elif content.startswith("Now, I'll rerank") or "try one more" in content.lower():
-                            # Skip AI agent messages about reranking - these are not search results
-                            print(f"   ⏭️  SKIPPING AI MESSAGE: {content[:50]}...")
-                            continue
-                except Exception as e:
-                    print(f"   ⚠️ Error processing message content: {e}")
-                    continue
-            
-            if not found_results:
-                print("   ❌ NO SEARCH RESULTS FOUND in conversation history")
-        
-        # If still no results, provide a helpful message for the agent
-        if not results_str:
-            return "ERROR: No search results found to rerank. This tool requires search results from search_v2. Please call search_v2 first to get search results, then the reranking tool can access them from the conversation history."
-            
-        print(f"   📊 Processed query: '{query_str}'")
-        print(f"   📊 Results length: {len(results_str)} characters")
-        print(f"   📊 Results preview: '{results_str[:200]}...' " if results_str and len(results_str) > 200 else f"   📊 Results: '{results_str}'")
+            items = results
         
         # Validate inputs
-        if not query_str or not results_str:
-            error_msg = f"Error: Reranking requires both query and results parameters. Got query='{query_str}', results='{results_str}'"
-            print(f"   ❌ RERANKING ERROR: {error_msg}")
-            return error_msg
+        if not query:
+            return "ERROR: `query` parameter is required."
         
-        # Split results into individual documents
-        lines = [line.strip() for line in results_str.split('\n') if line.strip()]
+        if not isinstance(items, list) or not items:
+            return "ERROR: `results` must be a non-empty list of search result items from search_v2."
         
-        if not lines:
-            return "No results to rerank."
+        print(f"🔧 RERANKING: Query='{query}', Items={len(items)}")
         
-        if len(lines) == 1:
-            return f"Single result (no reranking needed):\n{lines[0]}"
+        # Extract text content from each item
+        docs = []
+        for item in items:
+            if isinstance(item, dict) and 'text' in item:
+                docs.append(item['text'])
+            elif isinstance(item, str):
+                docs.append(item)
+            else:
+                docs.append(str(item))
+        
+        if len(docs) == 1:
+            return f"Single result (no reranking needed):\n[BM25: N/A] {docs[0]}"
         
         try:
             # Tokenize all documents for BM25
-            tokenized_docs = [self._tokenize(doc) for doc in lines]
+            tokenized_docs = [self._tokenize(doc) for doc in docs]
             
             # Create BM25 model
             bm25 = BM25Okapi(tokenized_docs)
             
             # Tokenize query
-            query_tokens = self._tokenize(query_str)
+            query_tokens = self._tokenize(query)
             
             # Get BM25 scores for all documents
             scores = bm25.get_scores(query_tokens)
             
-            # Pair documents with their scores
-            doc_scores = list(zip(lines, scores))
+            # Pair items with their BM25 scores
+            item_scores = list(zip(items, scores))
             
             # Sort by BM25 score (descending)
-            doc_scores.sort(key=lambda x: x[1], reverse=True)
+            item_scores.sort(key=lambda x: x[1], reverse=True)
             
             # Format results with scores
             reranked_results = []
-            for i, (doc, score) in enumerate(doc_scores, 1):
-                reranked_results.append(f"{i}. [BM25: {score:.3f}] {doc}")
+            for i, (item, score) in enumerate(item_scores, 1):
+                if isinstance(item, dict):
+                    text = item.get('text', str(item))
+                    orig_score = item.get('score', 'N/A')
+                    metadata = item.get('metadata', {})
+                    reranked_results.append(
+                        f"{i}. [BM25: {score:.3f}, Orig: {orig_score}] {text}"
+                    )
+                else:
+                    reranked_results.append(f"{i}. [BM25: {score:.3f}] {item}")
             
-            result = f"BM25 reranked results for '{query_str}':\n\n" + '\n\n'.join(reranked_results)
-            
-            print(f"🔧 RERANKING TOOL OUTPUT:")
-            print(f"   📊 Reranked {len(doc_scores)} documents")
-            print(f"   📊 Output length: {len(result)} characters")
-            print(f"   📊 Top 3 scores: {[f'{score:.3f}' for _, score in doc_scores[:3]]}")
-            print(f"   📄 Output preview: '{result[:300]}...'" if len(result) > 300 else f"   📄 Full output: '{result}'")
-            
+            result = f"BM25 reranked results for '{query}':\n\n" + '\n\n'.join(reranked_results)
+            print(f"🔧 RERANKING COMPLETE: {len(item_scores)} items reranked")
             return result
             
         except Exception as e:

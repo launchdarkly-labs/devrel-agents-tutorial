@@ -28,29 +28,6 @@ async def chat(request: ChatRequest):
         print(f"🌐 API ERROR: {e}")
         raise
 
-@app.post("/feedback", response_model=FeedbackResponse)
-async def submit_feedback(request: FeedbackRequest):
-    """Submit user feedback for a chat response - for traffic simulation"""
-    print(f"📝 FEEDBACK: User {request.user_id} gave feedback for {request.request_id}")
-    print(f"📝 FEEDBACK: Thumbs up: {request.thumbs_up}, Rating: {request.rating}")
-    
-    try:
-        # In a real system, you'd store this feedback in a database
-        # For the simulation, we just log it and could send to LaunchDarkly as a custom event
-        
-        # TODO: Send feedback to LaunchDarkly as custom events for experiment tracking
-        # ldclient.track('feedback_received', user_context, {'thumbs_up': request.thumbs_up, 'rating': request.rating})
-        
-        return FeedbackResponse(
-            success=True, 
-            message=f"Feedback received for request {request.request_id}"
-        )
-    except Exception as e:
-        print(f"📝 FEEDBACK ERROR: {e}")
-        return FeedbackResponse(
-            success=False,
-            message=f"Failed to record feedback: {e}"
-        )
 
 @app.post("/admin/flush")
 async def flush_metrics():
@@ -73,14 +50,23 @@ async def submit_feedback(feedback: FeedbackRequest):
     try:
         print(f"📝 FEEDBACK RECEIVED: {feedback.source} - {feedback.feedback} for message {feedback.message_id}")
         
-        # Initialize AI metrics tracker if needed
+        # Initialize AI metrics tracker with real LaunchDarkly tracker
         tracker = None
         try:
             from ai_metrics.metrics_tracker import AIMetricsTracker
-            tracker = AIMetricsTracker()
-            print("✅ AI METRICS: Feedback tracker initialized")
+            # Get a real LaunchDarkly AI config to get the tracker
+            support_config = await agent_service.config_manager.get_config(feedback.user_id, "support-agent")
+            tracker = AIMetricsTracker(support_config.tracker)
+            print("✅ AI METRICS: Feedback tracker initialized with LaunchDarkly tracker")
         except Exception as e:
-            print(f"⚠️  AI METRICS: Could not initialize tracker: {e}")
+            print(f"⚠️  AI METRICS: Could not initialize tracker with LaunchDarkly: {e}")
+            try:
+                # Fallback to no tracker
+                from ai_metrics.metrics_tracker import AIMetricsTracker
+                tracker = AIMetricsTracker()
+                print("⚠️  AI METRICS: Feedback tracker initialized without LaunchDarkly")
+            except Exception as fallback_error:
+                print(f"⚠️  AI METRICS: Could not initialize tracker at all: {fallback_error}")
         
         # Submit feedback to LaunchDarkly AI metrics
         if tracker:

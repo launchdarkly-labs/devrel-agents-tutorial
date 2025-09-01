@@ -140,6 +140,19 @@ class ConfigManager:
             workflow_type=workflow_type
         )
     
+    def track_metrics(self, tracker, func):
+        """Wrapper for tracking operations with LaunchDarkly metrics."""
+        if tracker:
+            try:
+                # Use the tracker's track_duration_of method if available
+                return tracker.track_duration_of(func)
+            except Exception as e:
+                print(f"⚠️ Metrics tracking failed: {e}")
+                return func()
+        else:
+            # No tracker available, just execute function
+            return func()
+    
     def _parse_config(self, ai_config: dict, ai_config_key: str) -> AgentConfig:
         """Parse AI config into AgentConfig object"""
         # Extract variation key from AI Config metadata
@@ -243,3 +256,16 @@ class ConfigManager:
             temperature=temperature,
             workflow_type=workflow_type
         )
+    
+    def track_metrics(self, tracker, func):
+        """Wrapper for tracking operations with LaunchDarkly metrics."""
+        if tracker:
+            try:
+                # Use the tracker's track_duration_of method if available
+                return tracker.track_duration_of(func)
+            except Exception as e:
+                print(f"⚠️ Metrics tracking failed: {e}")
+                return func()
+        else:
+            # No tracker available, just execute function
+            return func()
