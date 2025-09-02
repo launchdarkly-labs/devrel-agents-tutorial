@@ -6,7 +6,7 @@ from ..models import ChatResponse, AgentConfig as APIAgentConfig
 from agents.supervisor_agent import create_supervisor_agent
 from agents.support_agent import create_support_agent
 from agents.security_agent import create_security_agent
-from fixed_config_manager import FixedConfigManager as ConfigManager
+from config_manager import FixedConfigManager as ConfigManager
 
 # Ensure .env is loaded before ConfigManager initialization
 load_dotenv()

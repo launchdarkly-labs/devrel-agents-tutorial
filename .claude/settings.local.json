@@ -30,7 +30,8 @@
       "Bash($HOME/.local/bin/arxiv-mcp-server:*)",
       "Bash(echo $HOME)",
       "Bash(kill:*)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(rm:*)"
     ],
     "deny": [],
     "ask": [],
