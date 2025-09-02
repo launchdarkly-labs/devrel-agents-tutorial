@@ -10,7 +10,7 @@ from tools_impl.search_v2 import SearchToolV2
 from tools_impl.reranking import RerankingTool
 from tools_impl.mcp_research_tools import get_research_tools
 import asyncio
-from policy.config_manager import AgentConfig
+from config_manager import AgentConfig
 
 # Simplified approach - no caching for demo clarity
 

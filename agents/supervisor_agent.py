@@ -3,7 +3,7 @@ from langgraph.graph import StateGraph, add_messages
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from .support_agent import create_support_agent
 from .security_agent import create_security_agent
-from policy.config_manager import AgentConfig, ConfigManager
+from config_manager import AgentConfig, FixedConfigManager as ConfigManager
 
 class SupervisorState(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]

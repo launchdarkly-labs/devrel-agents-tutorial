@@ -52,7 +52,7 @@ This is an advanced tutorial project demonstrating LaunchDarkly AI Configs with 
 ### Multi-Agent Architecture:
 1. **FastAPI** (`api/main.py`) receives chat requests
 2. **AgentService** (`api/services/agent_service.py`) orchestrates the multi-agent workflow
-3. **ConfigManager** (`policy/config_manager.py`) fetches LaunchDarkly AI Configs
+3. **ConfigManager** (`config_manager.py`) fetches LaunchDarkly AI Configs
 4. **Supervisor Agent** (`agents/supervisor_agent.py`) routes between specialized agents
 5. **Security Agent** (`agents/security_agent.py`) handles PII detection using native model capabilities
 6. **Support Agent** (`agents/support_agent.py`) performs research using RAG + MCP tools
