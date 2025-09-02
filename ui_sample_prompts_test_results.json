@@ -1,0 +1,104 @@
+[
+  {
+    "prompt_name": "Internal Knowledge",
+    "query": "What information do you have about machine learning in your knowledge base?",
+    "duration_seconds": 33.17869997024536,
+    "success": false,
+    "tool_validation": {
+      "passed": false,
+      "details": [
+        "\u274c Expected no tools but used: ['search_v2']"
+      ],
+      "score": 0
+    },
+    "content_validation": {
+      "passed": true,
+      "details": [
+        "\u2705 Tool results integrated (signals: ['based on', 'found', 'search results'])",
+        "\u2705 Keywords found: ['machine learning', 'knowledge']"
+      ],
+      "score": 100
+    },
+    "response_length": 2166,
+    "tools_used": [
+      "search_v2"
+    ],
+    "error": null
+  },
+  {
+    "prompt_name": "ArXiv Research",
+    "query": "Find recent ArXiv papers on reinforcement learning from the last 6 months",
+    "duration_seconds": 45.472815990448,
+    "success": true,
+    "tool_validation": {
+      "passed": true,
+      "details": [
+        "\u2705 Found expected tools: ['arxiv_search']"
+      ],
+      "score": 50
+    },
+    "content_validation": {
+      "passed": true,
+      "details": [
+        "\u2705 Tool results integrated (signals: ['based on', 'found', 'arxiv'])",
+        "\u2705 Keywords found: ['reinforcement learning', 'arxiv', 'papers', 'recent']"
+      ],
+      "score": 100
+    },
+    "response_length": 2579,
+    "tools_used": [
+      "arxiv_search",
+      "arxiv_search",
+      "arxiv_search"
+    ],
+    "error": null
+  },
+  {
+    "prompt_name": "Academic Search",
+    "query": "Search Semantic Scholar for papers on federated learning",
+    "duration_seconds": 60.00465416908264,
+    "success": false,
+    "tool_validation": {},
+    "content_validation": {},
+    "response_length": 0,
+    "tools_used": [],
+    "error": "Request failed: HTTPConnectionPool(host='localhost', port=8000): Read timed out. (read timeout=60)"
+  },
+  {
+    "prompt_name": "RAG + Reranking",
+    "query": "Find the best matches for 'deep learning algorithms' in your documentation",
+    "duration_seconds": 26.77095890045166,
+    "success": true,
+    "tool_validation": {
+      "passed": true,
+      "details": [
+        "\u2705 Found expected tools: ['search_v2']"
+      ],
+      "score": 50
+    },
+    "content_validation": {
+      "passed": true,
+      "details": [
+        "\u2705 Tool results integrated (signals: ['based on', 'found', 'search results'])",
+        "\u2705 Keywords found: ['deep learning algorithms', 'documentation']"
+      ],
+      "score": 83
+    },
+    "response_length": 1772,
+    "tools_used": [
+      "search_v2"
+    ],
+    "error": null
+  },
+  {
+    "prompt_name": "Full Stack Search",
+    "query": "Compare what you know about transformers from your knowledge base with recent ArXiv and Semantic Scholar papers",
+    "duration_seconds": 60.0057578086853,
+    "success": false,
+    "tool_validation": {},
+    "content_validation": {},
+    "response_length": 0,
+    "tools_used": [],
+    "error": "Request failed: HTTPConnectionPool(host='localhost', port=8000): Read timed out. (read timeout=60)"
+  }
+]

@@ -476,7 +476,22 @@ def create_support_agent(config: AgentConfig, config_manager=None):
                 print(f"🎯 FORCED SYNTHESIS: Model completing with synthesis instructions")
                 return {"messages": [response]}
             
-            response = model.invoke(messages)
+            # Track the core model invocation with LaunchDarkly tracker when available
+            tracker = getattr(config, 'tracker', None)
+            print(f"🔍 SUPPORT AGENT DEBUG: config_manager={config_manager is not None}, tracker={tracker is not None}")
+            if tracker:
+                print(f"🔍 TRACKER TYPE: {type(tracker)}")
+                print(f"🔍 TRACKER METHODS: {[m for m in dir(tracker) if not m.startswith('_')]}")
+            
+            if config_manager and tracker:
+                print(f"🚀 USING LAUNCHDARKLY TRACKER for model call")
+                response = config_manager.track_metrics(
+                    config.tracker,
+                    lambda: model.invoke(messages)
+                )
+            else:
+                print(f"⚠️  NO TRACKER AVAILABLE - using direct model call")
+                response = model.invoke(messages)
             print(f"DEBUG: Model response received, has_tool_calls: {hasattr(response, 'tool_calls') and bool(response.tool_calls)}")
             return {"messages": [response]}
         except Exception as e:

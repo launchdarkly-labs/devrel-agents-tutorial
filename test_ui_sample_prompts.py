@@ -12,7 +12,7 @@ import time
 from typing import Dict, List, Any
 
 # Test configuration
-API_BASE_URL = "http://localhost:8001"
+API_BASE_URL = "http://localhost:8000"
 TEST_USER_ID = "test_user_ui_validation"
 
 # The 5 UI sample prompts with expected tool usage

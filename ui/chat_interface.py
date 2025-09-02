@@ -115,7 +115,7 @@ for message in st.session_state.messages:
                         # Send feedback for historical message
                         try:
                             feedback_response = requests.post(
-                                "http://localhost:8001/feedback",
+                                "http://localhost:8000/feedback",
                                 json={
                                     "user_id": st.session_state.user_id,
                                     "message_id": message_id,
@@ -143,7 +143,7 @@ for message in st.session_state.messages:
                         # Send feedback for historical message
                         try:
                             feedback_response = requests.post(
-                                "http://localhost:8001/feedback",
+                                "http://localhost:8000/feedback",
                                 json={
                                     "user_id": st.session_state.user_id,
                                     "message_id": message_id,
@@ -216,7 +216,7 @@ if prompt:
     # Get agent response
     try:
         response = requests.post(
-            "http://localhost:8001/chat",
+            "http://localhost:8000/chat",
             json={
                 "user_id": st.session_state.user_id,
                 "message": prompt
@@ -276,7 +276,7 @@ if prompt:
                                 # Send positive feedback to backend
                                 try:
                                     feedback_response = requests.post(
-                                        "http://localhost:8001/feedback",
+                                        "http://localhost:8000/feedback",
                                         json={
                                             "user_id": st.session_state.user_id,
                                             "message_id": message_id,
@@ -307,7 +307,7 @@ if prompt:
                                 # Send negative feedback to backend
                                 try:
                                     feedback_response = requests.post(
-                                        "http://localhost:8001/feedback",
+                                        "http://localhost:8000/feedback",
                                         json={
                                             "user_id": st.session_state.user_id,
                                             "message_id": message_id,
