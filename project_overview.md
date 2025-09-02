@@ -83,12 +83,6 @@ initialize_embeddings.py # One-time vector embedding initialization
 - **Automatic Loading**: Search tools automatically load pre-computed embeddings
 - **No Re-computation**: Eliminates embedding computation on every tool initialization
 
-### Benefits Over TF-IDF
-- **Better Semantic Understanding**: OpenAI embeddings capture meaning vs. keyword matching
-- **Persistent Storage**: Embeddings computed once and reused across sessions
-- **Faster Startup**: Tools load instantly without re-computing vectors
-- **Consistent Results**: Same embeddings across all tool instances and sessions
-
 ## Experiment Design
 
 ### Variation Comparisons

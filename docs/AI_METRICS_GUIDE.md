@@ -41,10 +41,6 @@ The LaunchDarkly AI Config Multi-Agent Demo now includes comprehensive AI metric
    - Workflow-level metrics tracking
    - Error handling and failure tracking
 
-4. **Supervisor Agent** (`agents/supervisor_agent.py`)
-   - Individual agent performance tracking
-   - Tool usage monitoring
-
 ### Data Flow
 
 ```
