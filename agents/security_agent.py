@@ -1,8 +1,8 @@
 from typing import TypedDict, List, Annotated
 from langgraph.graph import StateGraph, add_messages
 from langgraph.prebuilt import ToolNode
-from langchain_core.messages import HumanMessage, AIMessage, BaseMessage, ToolMessage
-from policy.config_manager import AgentConfig, ConfigManager
+from langchain_core.messages import HumanMessage, AIMessage, BaseMessage, ToolMessage, SystemMessage
+from config_manager import AgentConfig, FixedConfigManager as ConfigManager
 from tools_impl.search_v1 import SearchToolV1
 from tools_impl.search_v2 import SearchToolV2
 from tools_impl.reranking import RerankingTool
@@ -12,6 +12,7 @@ class AgentState(TypedDict):
     user_input: str
     response: str
     tool_calls: List[str]
+    tool_details: List[dict]  # Add support for detailed tool information with search queries
 
 def create_security_agent(agent_config: AgentConfig, config_manager: ConfigManager):
     """Create security agent using LDAI SDK pattern"""
@@ -30,23 +31,30 @@ def create_security_agent(agent_config: AgentConfig, config_manager: ConfigManag
     
     print(f"🔐 CREATING SECURITY AGENT: Using LDAI model {agent_config.model}")
     
+    # Store config values for nested functions
+    config_instructions = agent_config.instructions
+    config_temperature = agent_config.temperature
+    
     # Initialize available tools (minimal for security - mostly native model capabilities)
+    # Handle both old and new AgentConfig formats for compatibility
+    tools_list = getattr(agent_config, 'allowed_tools', None) or getattr(agent_config, 'tools', [])
+    if not tools_list:
+        tools_list = []
+    print(f"🔐 CREATING SECURITY AGENT: Starting with tools {tools_list}")
+    
     available_tools = []
     
     # For security agent, we typically use fewer tools - focus on native model capabilities
-    # But still support basic tools if configured
-    basic_tools = ["search_v1", "search_v2", "reranking"]
+    # But still support basic tools if configured from LaunchDarkly
+    print(f"🔧 PROCESSING SECURITY TOOLS: {tools_list}")
     
-    for tool_name in basic_tools:
+    for tool_name in tools_list:
         if tool_name == "search_v1":
             available_tools.append(SearchToolV1())
-            print(f"🔍 SECURITY TOOL LOADED: {tool_name} (basic search)")
         elif tool_name == "search_v2":
             available_tools.append(SearchToolV2())
-            print(f"🔍 SECURITY TOOL LOADED: {tool_name} (vector search)")
         elif tool_name == "reranking":
             available_tools.append(RerankingTool())
-            print(f"🔍 SECURITY TOOL LOADED: {tool_name} (semantic reranking)")
     
     # Bind tools to model if available
     if available_tools:
@@ -81,23 +89,24 @@ def create_security_agent(agent_config: AgentConfig, config_manager: ConfigManag
                     result = f"Error: Tool '{tool_name}' not found"
                 else:
                     try:
-                        # PASS CONVERSATION CONTEXT to tools (especially reranking)
+                        # Pass recent search results to reranking tool by looking at message history
                         if tool_name == 'reranking':
-                            # For reranking tool, pass conversation content as simple strings
-                            message_contents = []
-                            for msg in messages:
-                                try:
-                                    # Extract just the content as plain string
-                                    if hasattr(msg, 'content') and msg.content:
-                                        content = str(msg.content)
-                                        if content.strip():  # Only include non-empty content
-                                            message_contents.append(content)
-                                except Exception as e:
-                                    print(f"   ⚠️ Error extracting message content: {e}")
-                                    continue
+                            # Find the most recent ToolMessage from search_v2 in conversation history
+                            latest_search_message = None
+                            for msg in reversed(messages):
+                                if isinstance(msg, ToolMessage) and hasattr(msg, 'tool_call_id'):
+                                    # Check if this is a search_v2 tool result
+                                    if ('search_v2' in str(msg.tool_call_id).lower() or 
+                                        (hasattr(msg, 'content') and 'Found' in str(msg.content) and 'relevant document' in str(msg.content))):
+                                        latest_search_message = msg
+                                        break
                             
-                            # Pass as simple list of strings - completely JSON serializable
-                            tool_args['message_contents'] = message_contents
+                            if latest_search_message:
+                                # Pass the raw search_v2 output content to reranking tool
+                                tool_args['results'] = latest_search_message.content
+                            else:
+                                # Fallback: no search_v2 results found
+                                tool_args['results'] = ""
                         
                         # Execute the tool with LDAI metrics tracking
                         result = config_manager.track_metrics(
@@ -130,7 +139,10 @@ def create_security_agent(agent_config: AgentConfig, config_manager: ConfigManag
         print(f"🔧 SECURITY TOOLS BOUND: {[tool.name if hasattr(tool, 'name') else str(tool) for tool in available_tools]}")
     else:
         print(f"🔐 NO SECURITY TOOLS: Agent will work in model-only mode (preferred for security)")
-        tool_node = None
+        # Create empty tool node that won't be used
+        def empty_tool_node(state: AgentState):
+            return {"messages": []}
+        tool_node = empty_tool_node
     
     def should_continue(state: AgentState):
         """Decide whether to continue with tools or end"""
@@ -180,9 +192,27 @@ def create_security_agent(agent_config: AgentConfig, config_manager: ConfigManag
         try:
             messages = state["messages"]
             
-            # Add system message if first call
-            if len(messages) == 1:
-                messages = [HumanMessage(content=agent_config.instructions)] + messages
+            # Add system message with instructions if this is the first call
+            if len(messages) == 1:  # Only user message
+                # Create detailed tool descriptions for the prompt
+                tool_descriptions = []
+                for tool in available_tools:
+                    if hasattr(tool, 'name') and hasattr(tool, 'description'):
+                        tool_descriptions.append(f"- {tool.name}: {tool.description}")
+                
+                tools_text = '\n'.join(tool_descriptions)
+                system_prompt = f"""
+                {config_instructions}
+                
+                Available tools:
+                {tools_text}
+                
+                SECURITY FOCUS:
+                - Use tools sparingly and only when necessary for security analysis
+                - Focus on native model capabilities for PII detection and security tasks
+                - Maximum 4 tool calls allowed for security agent
+                """
+                messages = [SystemMessage(content=system_prompt)] + messages
             
             # Track model call with LDAI metrics
             response = config_manager.track_metrics(
@@ -229,25 +259,40 @@ def create_security_agent(agent_config: AgentConfig, config_manager: ConfigManag
         else:
             final_response = "Security processing completed."
         
-        # Extract tool calls from messages
+        # Extract all tool calls from the conversation with search queries
         tool_calls = []
+        tool_details = []
+        
         for message in messages:
             if hasattr(message, 'tool_calls') and message.tool_calls:
-                for tool_call in message.tool_calls:
-                    tool_name = tool_call['name']
-                    tool_args = tool_call.get('args', {})
-                    # Extract search query for display
-                    search_query = tool_args.get('query', '') or tool_args.get('search_query', '') or tool_args.get('q', '')
-                    tool_calls.append({
+                for call in message.tool_calls:
+                    tool_name = call['name']
+                    tool_args = call.get('args', {})
+                    # Extract search query from tool arguments (check multiple possible field names)
+                    search_query = (
+                        tool_args.get('query', '') or 
+                        tool_args.get('search_query', '') or 
+                        tool_args.get('q', '') or
+                        tool_args.get('results', '') or
+                        tool_args.get('text', '')
+                    )
+                    
+                    # Always append tool name as string for API compatibility
+                    tool_calls.append(tool_name)
+                    
+                    # Also store detailed info with search query for UI
+                    tool_detail = {
                         "name": tool_name,
-                        "args": tool_args,
-                        "search_query": search_query
-                    })
+                        "search_query": search_query if search_query else None,
+                        "args": tool_args
+                    }
+                    tool_details.append(tool_detail)
         
         return {
             "user_input": state["user_input"],
             "response": final_response,
             "tool_calls": tool_calls,
+            "tool_details": tool_details,
             "messages": messages
         }
     
@@ -256,18 +301,23 @@ def create_security_agent(agent_config: AgentConfig, config_manager: ConfigManag
     workflow.add_node("agent", call_model)
     workflow.add_node("format", format_final_response)
     
-    # Add tool node if tools are available
-    if tool_node:
-        workflow.add_node("tools", tool_node)
+    # Add tool node
+    workflow.add_node("tools", tool_node)
     
     workflow.set_entry_point("agent")
     
-    # Add conditional edges based on tool availability
-    if tool_node:
-        workflow.add_conditional_edges("agent", should_continue, {"tools": "tools", "end": "format"})
-        workflow.add_edge("tools", "agent")
-    else:
-        workflow.add_conditional_edges("agent", should_continue, {"end": "format"})
+    # Add conditional edges
+    workflow.add_conditional_edges(
+        "agent",
+        should_continue,
+        {
+            "tools": "tools",
+            "end": "format"
+        }
+    )
+    
+    # After tools, go back to agent (for multi-turn)
+    workflow.add_edge("tools", "agent")
     
     workflow.set_finish_point("format")
     

@@ -153,7 +153,7 @@ uv run streamlit run ui/chat_interface.py --server.port 8501
 - `agents/` - LangGraph multi-agent definitions and workflows
 - `tools_impl/` - RAG tools + MCP research integrations
 - `utils/` - Performance utilities
-- `policy/` - LaunchDarkly AI Config management with caching
+- `config_manager.py` - LaunchDarkly AI Config management with caching
 - `ui/` - Streamlit chat interface
 - `docs/` - MCP Research Integration Guide (setup and troubleshooting)
 

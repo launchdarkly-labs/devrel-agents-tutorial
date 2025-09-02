@@ -33,7 +33,7 @@ The LaunchDarkly AI Config Multi-Agent Demo now includes comprehensive AI metric
    - LaunchDarkly AI SDK integration
    - Multi-agent workflow coordination
 
-2. **ConfigManager** (`policy/config_manager.py`)
+2. **ConfigManager** (`config_manager.py`)
    - LaunchDarkly AI Config retrieval with tracker
    - Fallback to standard flag approach when AI Config unavailable
 
