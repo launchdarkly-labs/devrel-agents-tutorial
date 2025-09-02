@@ -4,7 +4,11 @@ from dataclasses import dataclass
 import ldclient
 from ldclient import Context
 from ldai.client import LDAIClient
-from ldai.tracker import LDAIConfigTracker
+from typing import Optional as _OptionalObjectTypeAlias  # local alias for annotations only
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 @dataclass
 class AgentConfig:
@@ -16,7 +20,7 @@ class AgentConfig:
     max_cost: float
     temperature: float = 0.0  # Model temperature
     workflow_type: str = "sequential"  # sequential, parallel, conditional
-    tracker: Optional[LDAIConfigTracker] = None  # AI metrics tracker
+    tracker: _OptionalObjectTypeAlias[object] = None  # AI metrics tracker
 
 class ConfigManager:
     def __init__(self):
@@ -24,15 +28,26 @@ class ConfigManager:
         if not sdk_key:
             raise ValueError("LD_SDK_KEY environment variable is required")
         
-        # Configure LaunchDarkly with startup wait time
-        ldclient.set_config(ldclient.Config(sdk_key, initial_reconnect_delay=1))
+        # Configure LaunchDarkly with proper initialization wait
+        import time
+        # Create a fresh client instance to avoid sharing issues
+        config = ldclient.Config(sdk_key, initial_reconnect_delay=1)
+        ldclient.set_config(config)
         self.ld_client = ldclient.get()
         
-        # Wait for client initialization
+        # Wait for client initialization with timeout
+        max_wait = 10  # seconds
+        wait_time = 0
+        while not self.ld_client.is_initialized() and wait_time < max_wait:
+            time.sleep(0.1)
+            wait_time += 0.1
+        
         if self.ld_client.is_initialized():
             print("✅ LaunchDarkly client initialized successfully")
         else:
-            print("⚠️ LaunchDarkly client not initialized - configs may not be available")
+            print(f"⚠️ LaunchDarkly client failed to initialize after {max_wait}s - check SDK key and network")
+            print(f"⚠️ SDK Key: {sdk_key[:20]}...")
+            # Continue anyway - will use fallback configs
         
         # Initialize LaunchDarkly AI client
         self.ai_client = LDAIClient(self.ld_client)
@@ -51,11 +66,24 @@ class ConfigManager:
             print("DEBUG: LaunchDarkly cache flushed and client recreated")
         except Exception as e:
             print(f"DEBUG: Cache flush failed: {e}")
+        
+    def close(self):
+        """Flush and close LaunchDarkly client to ensure metrics/events are sent"""
+        try:
+            try:
+                self.ld_client.flush()
+            except Exception:
+                pass
+        finally:
+            try:
+                self.ld_client.close()
+            except Exception:
+                pass
             
-    async def get_ai_config_with_tracker(self, user_id: str, config_key: str = None, user_context: dict = None) -> tuple[dict, LDAIConfigTracker]:
+    async def get_ai_config_with_tracker(self, user_id: str, config_key: str = None, user_context: dict = None) -> tuple[dict, object]:
         """Get AI Config from LaunchDarkly with tracker for metrics"""
         # Build user context with optional geographic and other attributes
-        context_builder = Context.builder(user_id)
+        context_builder = Context.builder(user_id).kind('user')
         
         if user_context:
             # Add geographic targeting attributes
@@ -90,6 +118,8 @@ class ConfigManager:
             print(f"🔍 DEBUG: Config type: {type(config)}")
             print(f"🔍 DEBUG: Config enabled: {getattr(config, 'enabled', 'no enabled attr')}")
             print(f"🔍 DEBUG: Config: {config}")
+            print(f"🔍 DEBUG: Tracker type: {type(tracker)}")
+            print(f"🔍 DEBUG: Tracker methods: {[m for m in dir(tracker) if not m.startswith('_')] if tracker else 'None'}")
             
             if config and hasattr(config, 'enabled') and config.enabled:
                 print(f"✅ AI CONFIG LOADED: {ai_config_key} for user {user_id}")
@@ -129,7 +159,7 @@ class ConfigManager:
         temperature = 0.0
         workflow_type = "sequential"
         
-        return AgentConfig(
+        config = AgentConfig(
             variation_key=variation_key,
             model=model,
             instructions=instructions,
@@ -139,13 +169,36 @@ class ConfigManager:
             temperature=temperature,
             workflow_type=workflow_type
         )
+        
+        print(f"🔍 DEBUG: Created AgentConfig with tracker placeholder")
+        return config
     
     def track_metrics(self, tracker, func):
         """Wrapper for tracking operations with LaunchDarkly metrics."""
         if tracker:
             try:
-                # Use the tracker's track_duration_of method if available
-                return tracker.track_duration_of(func)
+                # Use the comprehensive tracking function that includes success/error and token tracking
+                from ai_metrics.metrics_tracker import track_langchain_metrics
+                print(f"🎯 PROPER LD TRACKING: Using track_langchain_metrics with tracker {type(tracker)}")
+                result = track_langchain_metrics(tracker, func)
+                # Try to fetch tracker summary and flush events to ensure visibility in dashboard
+                try:
+                    summary = tracker.get_summary()
+                    try:
+                        duration_ms = getattr(summary, 'duration', None)
+                        print(f"🚀 LD SUMMARY: duration={duration_ms}ms")
+                    except Exception:
+                        pass
+                except Exception as summary_error:
+                    print(f"⚠️  LD SUMMARY ERROR: {summary_error}")
+                # Best-effort flush of SDK events
+                try:
+                    if hasattr(self, 'ld_client') and self.ld_client:
+                        self.ld_client.flush()
+                except Exception:
+                    pass
+                print(f"🎯 PROPER LD TRACKING: Completed successfully")
+                return result
             except Exception as e:
                 print(f"⚠️ Metrics tracking failed: {e}")
                 return func()
@@ -261,11 +314,26 @@ class ConfigManager:
         """Wrapper for tracking operations with LaunchDarkly metrics."""
         if tracker:
             try:
-                # Use the tracker's track_duration_of method if available
-                return tracker.track_duration_of(func)
+                # Use the comprehensive tracking function that includes success/error and token tracking
+                from ai_metrics.metrics_tracker import track_langchain_metrics
+                print(f"🎯 PROPER LD TRACKING: Using track_langchain_metrics with tracker {type(tracker)}")
+                print(f"🎯 LD CLIENT STATUS: initialized={self.ld_client.is_initialized()}")
+                
+                result = track_langchain_metrics(tracker, func)
+                
+                # Force immediate flush after each tracking call
+                try:
+                    flush_result = self.ld_client.flush()
+                    print(f"🎯 IMMEDIATE FLUSH: {flush_result}")
+                except Exception as flush_error:
+                    print(f"⚠️ FLUSH ERROR: {flush_error}")
+                
+                print(f"🎯 PROPER LD TRACKING: Completed successfully")
+                return result
             except Exception as e:
                 print(f"⚠️ Metrics tracking failed: {e}")
                 return func()
         else:
             # No tracker available, just execute function
+            print(f"⚠️ NO TRACKER: tracker={tracker}, ld_client_init={self.ld_client.is_initialized() if self.ld_client else 'no_client'}")
             return func()
