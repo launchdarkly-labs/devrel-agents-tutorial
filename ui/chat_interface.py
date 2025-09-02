@@ -290,12 +290,12 @@ if prompt:
                                         }
                                     )
                                     if feedback_response.status_code == 200:
-                                        # Update message in session state
+                                        # Update message in session state immediately
                                         for msg in st.session_state.messages:
                                             if msg.get("message_id") == message_id:
                                                 msg["feedback"] = "positive"
                                                 break
-                                        st.success("Thanks for your feedback! 👍")
+                                        # Force a rerun to update UI immediately
                                         st.rerun()
                                     else:
                                         st.error("Failed to submit feedback")
@@ -321,12 +321,12 @@ if prompt:
                                         }
                                     )
                                     if feedback_response.status_code == 200:
-                                        # Update message in session state
+                                        # Update message in session state immediately
                                         for msg in st.session_state.messages:
                                             if msg.get("message_id") == message_id:
                                                 msg["feedback"] = "negative"
                                                 break
-                                        st.success("Thanks for your feedback! 👎")
+                                        # Force a rerun to update UI immediately
                                         st.rerun()
                                     else:
                                         st.error("Failed to submit feedback")
