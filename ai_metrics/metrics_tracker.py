@@ -326,9 +326,12 @@ class AIMetricsTracker:
             # Track satisfaction based on thumbs up/down using correct SDK method
             try:
                 if hasattr(self.ld_tracker, 'track_feedback'):
-                    # Use simple feedback format - just pass the satisfaction score
-                    satisfaction_score = 1.0 if thumbs_up else 0.0
-                    self.ld_tracker.track_feedback(satisfaction_score)
+                    # Use proper feedback format with FeedbackKind enum
+                    from ldai.tracker import FeedbackKind
+                    feedback_dict = {
+                        "kind": FeedbackKind.Positive if thumbs_up else FeedbackKind.Negative
+                    }
+                    self.ld_tracker.track_feedback(feedback_dict)
                     print(f"📊 FEEDBACK TRACKED: {'👍 Positive' if thumbs_up else '👎 Negative'}")
                 else:
                     print(f"⚠️  No track_feedback method available")

@@ -48,6 +48,8 @@ def test_direct_tracking():
     
     # Get AI config with tracker
     try:
+
+        
         # Use a proper fallback config
         fallback = AIConfig(
             enabled=True,
