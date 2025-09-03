@@ -201,9 +201,11 @@ cp .env.example .env
 
 ### Step 4: Add Your Documents (1 minute)
 
+**Want to adapt this for your specific domain?** Here are proven use cases:
+
 **Domain Examples:**
 - **Legal**: contracts, case law, compliance guidelines
-- **Healthcare**: protocols, research papers, care guidelines
+- **Healthcare**: protocols, research papers, care guidelines  
 - **SaaS**: API docs, user guides, troubleshooting manuals
 - **Financial**: policies, regulations, investment research
 - **Education**: course materials, research papers, curricula
@@ -249,17 +251,6 @@ uv run streamlit run ui/chat_interface.py
 4. **Notice**: Real-time tool usage, model selection, and performance metrics in the sidebar
 
 **✅ You now have a working multi-agent system that measures its own performance and can be optimized through LaunchDarkly without code changes.**
-
-## Domain-Specific Examples
-
-**Want to adapt this for your specific domain?** Here are proven use cases:
-
-**Domain Examples:**
-- **Legal**: contracts, case law, compliance guidelines
-- **Healthcare**: protocols, research papers, care guidelines  
-- **SaaS**: API docs, user guides, troubleshooting manuals
-- **Financial**: policies, regulations, investment research
-- **Education**: course materials, research papers, curricula
 
 ## Advanced AI Config Setup: Business Tiers & A/B Testing
 
