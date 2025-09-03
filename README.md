@@ -24,18 +24,6 @@ You'll build a robust system that adapts to users in real-time while giving you 
 - **Live external data**: MCP integration with academic databases, GitHub, business APIs
 - **Zero-downtime configuration**: Change models, tools, and behavior through LaunchDarkly dashboard
 
-### 📊 **Measurable Outcomes** (Based on Real Performance Data)
-- **67% cost reduction** through intelligent tool deployment (expensive research tools only when needed)
-- **43% latency improvement** with optimized model selection (Claude vs OpenAI comparison)
-- **31% better semantic understanding** using RAG vector search vs keyword matching
-- **Right-sized tool stacks** - discover which expensive tools actually provide value
-
-### 🏢 **Business-Aligned Deployment**
-- **Enterprise users**: Get research-enhanced AI with full MCP tool access
-- **Free tier**: Cost-optimized basic search while maintaining quality
-- **EU compliance**: Automatic privacy-focused model selection
-- **A/B testing**: Compare configurations with statistical significance before committing budgets
-
 **Instead of guessing which configuration works, you'll have data proving which one delivers better outcomes at lower cost.**
 
 ## Get It Running in 5 Minutes
