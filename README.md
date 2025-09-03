@@ -16,35 +16,32 @@ keywords: tutorial, AI, LaunchDarkly, multi-agent, MCP, RAG, FAISS, LangGraph, p
 
 ## Overview
 
-This tutorial shows you how to build a multi-agent AI system that actually adapts to your users in real-time. You'll create three specialized agents—a supervisor, security checker, and research assistant—that can swap models, tools, and behavior instantly through LaunchDarkly AI Configs.
+This tutorial walks you through building a multi-agent AI system that adapts to your users in real-time. You'll start with a working system, then customize it for your own use case by:
+
+- **Replacing the knowledge base** with your own documents
+- **Customizing agent instructions** for your domain  
+- **Creating AI Config variations** that match your business tiers
+- **Running experiments** to optimize performance
+
+By the end, you'll have three specialized agents (supervisor, security checker, and research assistant) that work with YOUR content and YOUR business logic.
 
 
 ## Why Dynamic Configuration Matters
 
-Here's a painfully familiar scenario: You built an AI support system using GPT-4, but now you're curious if Claude 3.5 might be cheaper without reducing user satisfaction (spoiler: your AWS bill is getting scary). In traditional architectures, this "simple" test requires:
+Here's a painfully familiar scenario: You built a system using GPT-4, but now you're curious if Claude 3.5 might be cheaper without reducing user satisfaction (i.e. your AWS bill is getting scary). In traditional architectures, this "simple" test requires:
 
 - Development time to swap model integrations (there goes your weekend)
 - Testing across multiple environments
 - Coordinated deployment and rollback planning
 - Potential downtime during the switch (and angry users)
 
-The result? Teams avoid experimenting with new models, missing out on potential cost savings and performance improvements. Worse, AI decisions get made based on vibes rather than data.
+The result? You avoid experimenting with new models, missing out on potential cost savings and performance improvements. Worse, your AI decisions get made based on vibes rather than data.
 
-This tutorial demonstrates a different approach: **runtime configuration** that brings order to the chaos of AI model selection. Instead of endless debates about which model is "better," you get data-driven answers. You can justify every AI decision with real metrics while getting instant model switching, subscription-based tool access, and geographic customization—all controlled through LaunchDarkly AI Configs.
+This tutorial demonstrates a different approach: **runtime configuration** that brings order to the chaos of AI model selection. Instead of endless debates about which model is "better," you get data-driven answers. You can justify every AI decision with real metrics while getting model switching, subscription-based tool access, and geographic customization (all controlled through LaunchDarkly AI Configs).
 
 ## What We're Building
 
-A **multi-agent AI system** with three specialized agents that demonstrates dynamic configuration in action:
-
-**Key Features**:
-- **Geographic Flexibility**: Different models can be served based on user location and regulatory requirements
-- **Subscription-Based Tools**: Different tool access based on user subscription tiers including RAG and MCP research capabilities
-- **Real-Time Experimentation**: A/B test different model and tool combinations without code changes
-- **Automated PII Detection**: Security agent with configurable PII detection capabilities
-
-## System Architecture
-
-The key architectural difference is **external configuration control**. Instead of hardcoding agent behavior, every decision flows through LaunchDarkly AI Configs:
+A **multi-agent AI system** with three specialized agents that demonstrates dynamic configuration in action. The key architectural difference is **external configuration control** - instead of hardcoding agent behavior, every decision flows through LaunchDarkly AI Configs:
 
 ```
 User Query → Supervisor Agent → Security Agent (PII Detection)
@@ -55,7 +52,7 @@ User Query → Supervisor Agent → Security Agent (PII Detection)
      LaunchDarkly AI Configs
 ```
 
-**The advantage**: Configuration changes happen instantly. Model selection, tool access, and agent instructions are all controlled through the LaunchDarkly dashboard.
+**The advantage**: Configuration changes happen quickly. Model selection, tool access, and agent instructions are all controlled through the LaunchDarkly dashboard.
 
 ## Technology Stack Overview
 
@@ -64,36 +61,31 @@ This system integrates five key technologies that work together to create a flex
 ### **1. Dynamic AI Configuration (LaunchDarkly AI Configs)**
 Runtime control over model selection, tool access, and agent instructions.
 
-### **2. RAG Tooling (Retrieval-Augmented Generation)** 
+### **2. Retrieval-Augmented Generation** 
 Vector search with FAISS indexing, BM25 reranking for improved relevance, and semantic document chunking.
 
-### **3. MCP (Model Context Protocol) Integration**
+### **3. Model Context Protocol Integration**
 Live data access through academic databases (ArXiv, Semantic Scholar) for real-time research capabilities.
 
 ### **4. Multi-Agent LangGraph Orchestration**  
-Sophisticated workflow management with state persistence and conditional routing between specialized agents.
-
-### **5. Automated PII Detection**
-Privacy protection using native model capabilities with configurable detection based on regional requirements.
+Workflow management with state persistence and conditional routing between specialized agents.
 
 ## Prerequisites
 
 In order to complete this tutorial, you must have the following prerequisites:
 
 - Python 3.9+ with `uv` package manager
-- A LaunchDarkly account with AI Configs enabled — [sign up for a free one here](https://app.launchdarkly.com/signup)
+- A LaunchDarkly account with AI Configs enabled ([sign up for a free one here](https://app.launchdarkly.com/signup))
 - API keys for Anthropic Claude and/or OpenAI GPT models
 - Basic familiarity with FastAPI and LangChain concepts
 
-<Callout intent="info">
-**📸 Screenshots**: This tutorial includes screenshot placeholders showing LaunchDarkly UI interactions. Replace these with actual screenshots from your LaunchDarkly dashboard when setting up the system.
-</Callout>
+
 
 ## Detailed Technology Implementation
 
 ### **🔍 RAG (Retrieval-Augmented Generation) Implementation**
 
-This system implements advanced RAG with several key components:
+This system implements RAG with several key components:
 
 **Core Features**:
 - **FAISS vector indexing** for efficient semantic document retrieval
@@ -248,8 +240,8 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
 Here's the key insight: instead of hardcoding configurations in your code, you can manage them as a service through LaunchDarkly.
 
 **Why this matters more than arguing about which model is "better"**:
-- **Zero-downtime model switching** (swap models instantly without deployments)
-- **Subscription-aware intelligence** (enterprise users get advanced research tools, free users get basic search)
+- **Zero-downtime model switching** (swap models without deployments)
+- **Subscription-based access** (enterprise users get research tools, free users get basic search)
 - **Geographic compliance** happens automatically
 - **Real-time A/B testing** with statistical significance that would make a data scientist shed a tear of joy
 
@@ -266,7 +258,7 @@ response = config_manager.track_metrics(
 
 ## Why This Architecture Works
 
-This system puts configuration first. LaunchDarkly AI Configs control everything—model choice, tool access, and agent behavior—before any agent runs.
+This system puts configuration first. LaunchDarkly AI Configs control everything: model choice, tool access, and agent behavior, before any agent runs.
 
 **The flow that actually scales**:
 1. **LaunchDarkly AI Configs** decide everything before any agent runs (model choice, tool access, compliance requirements)
@@ -649,6 +641,69 @@ The current system uses a single security configuration, but the architecture su
   ![LaunchDarkly Targeting Rules](screenshots/targeting-rules.png)
 </Frame>
 
+## Customizing Your AI Configs
+
+Now that you understand the structure, let's make this system work for YOUR use case:
+
+### **Step 1: Customize Agent Instructions**
+
+In your LaunchDarkly dashboard:
+
+1. **Navigate to your `support-agent` AI Config**
+2. **Edit the instructions** to match your domain:
+
+```json
+{
+  "instructions": "You are a helpful assistant specialized in [YOUR DOMAIN]. Provide clear, accurate explanations about [YOUR TOPICS]. Use available tools to search through [YOUR COMPANY] documentation when needed.",
+  "tools": ["search_v2", "reranking"]
+}
+```
+
+**Examples for different domains**:
+- **E-commerce**: "You are a customer support specialist for [COMPANY]. Help users with orders, returns, product questions, and account issues."
+- **Healthcare**: "You are a medical information assistant. Provide accurate information about treatments, procedures, and health conditions based on our medical knowledge base."
+- **Legal**: "You are a legal research assistant. Help users find relevant case law, statutes, and legal precedents from our legal database."
+
+### **Step 2: Create Your Own Variations**
+
+Instead of using our AI/ML focused variations, create ones for your business:
+
+**Example: Customer Support Tiers**
+```json
+// Free tier - basic search only
+{
+  "model": {"name": "claude-3-haiku-20240307"},
+  "instructions": "You are a basic customer support assistant. Answer common questions using our FAQ database.",
+  "tools": ["search_v1"],
+  "max_cost": 0.50
+}
+
+// Premium tier - full capabilities  
+{
+  "model": {"name": "claude-3-5-sonnet-20241022"},
+  "instructions": "You are an expert customer support specialist with access to our full knowledge base and external resources.",
+  "tools": ["search_v2", "reranking", "external_api"],
+  "max_cost": 2.0
+}
+```
+
+### **Step 3: Test Your Customizations**
+
+<CodeBlocks>
+<CodeBlock>
+```bash
+# Test with questions specific to your domain
+curl -X POST http://localhost:8001/chat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "test_user",
+    "message": "Your domain-specific question here",
+    "user_context": {"plan": "premium", "country": "US"}
+  }'
+```
+</CodeBlock>
+</CodeBlocks>
+
 **What These 5 Variations Demonstrate**:
 
 These configurations show how dynamic AI systems can support different business models and use cases:
@@ -910,7 +965,29 @@ uv add requests beautifulsoup4 mcp semanticscholar
 </CodeBlock>
 </CodeBlocks>
 
-### 3. Start the Application
+### 3. Customize Your Knowledge Base
+
+Before running the system, let's make it yours by adding your own documents:
+
+<CodeBlocks>
+<CodeBlock>
+```bash
+# Replace the sample PDF with your own documents
+rm kb/SuttonBartoIPRLBook2ndEd.pdf
+
+# Add your own PDFs (company docs, research papers, etc.)
+cp /path/to/your-document.pdf kb/
+cp /path/to/another-document.pdf kb/
+
+# Initialize embeddings with your documents
+uv run initialize_embeddings.py --force
+```
+</CodeBlock>
+</CodeBlocks>
+
+**What this does**: Creates a vector database from YOUR documents so the RAG system searches through your content instead of generic AI/ML papers.
+
+### 4. Start the Application
 
 <CodeBlocks>
 <CodeBlock>
@@ -924,7 +1001,7 @@ uv run streamlit run ui/chat_interface.py
 </CodeBlock>
 </CodeBlocks>
 
-### 4. Generate Test Traffic
+### 5. Generate Test Traffic
 
 <CodeBlocks>
 <CodeBlock>
@@ -946,7 +1023,7 @@ python tools/traffic_generator.py --queries 500 --delay 0.5
 Once you run the system, you'll see experiment data flowing to your LaunchDarkly dashboard:
 
 - **Geographic Targeting**: EU users receive Claude models for compliance
-- **Plan-Based Features**: Enterprise users get advanced research tools
+- **Plan-Based Features**: Enterprise users get research tools
 - **Performance Metrics**: Response times, tool usage, and satisfaction rates
 - **Cost Control**: Feature access controlled by subscription tier
 
@@ -967,7 +1044,7 @@ LaunchDarkly AI Configs provide automatic metrics tracking including:
 
 LaunchDarkly AI Configs enable the kind of experimentation that makes data scientists do happy dances. You can A/B test different aspects to find what works best and finally settle those "my model is better" arguments with actual data.
 
-**Why this matters**: AI development often feels like chaos—too many models, too many variables, too many opinions. LaunchDarkly brings order to this chaos by letting you test everything systematically and justify your AI model selections with real metrics instead of gut feelings.
+**Why this matters**: AI development often feels like chaos (too many models, too many variables, too many opinions). LaunchDarkly brings order to this chaos by letting you test everything systematically and justify your AI model selections with real metrics instead of gut feelings.
 
 ### **Experiment 1: RAG Enhancement Impact**
 
@@ -1095,7 +1172,7 @@ python tools/traffic_generator.py --queries 200 --delay 1
 </CodeBlock>
 </CodeBlocks>
 
-The traffic generator will automatically hit both variations based on your targeting rules, creating the data you need to validate your hypotheses.
+The traffic generator will hit both variations based on your targeting rules, creating the data you need to validate your hypotheses.
 
 
 ## What You've Learned
@@ -1120,7 +1197,7 @@ You've built a multi-agent AI system that's actually pretty impressive. Here's t
 ### **🕸️ LangGraph Orchestration**
 - Built complex multi-agent workflows with state management
 - Implemented conditional routing and parallel processing
-- Created sophisticated supervisor-agent coordination patterns
+- Created supervisor-agent coordination patterns
 
 ### **⚙️ LaunchDarkly AI Configs**
 - Achieved dynamic model selection without code deployments
@@ -1134,14 +1211,14 @@ Extend and customize the system by:
 - 🧠 Update the knowledge base so your RAG-agent knows your business inside and out
 - 🔌 Connect MCP tools that extend your capabilities
 - 🎯 Implement targeting rules that adapt to user behavior in real-time
-- 🌍 Build compliance workflows that automatically handle different regulatory requirements
+- 🌍 Build compliance workflows that handle different regulatory requirements
 - 🛡️ Implement guardrails and cost controls that keep quality high while preventing budget surprises
 - 🗣️ Create truly localized experiences with models that are optimized for your users' native languages
 - 📊 Support AI configuration changes with experiments
 
 And then every detail is now in your control with instant updates. No redeployments. No code edits. No restarts.
 
-To get started with AI Configs, [sign up for a free trial](https://app.launchdarkly.com/signup). Questions? Reach out at `aiproduct@launchdarkly.com`—we'd love to hear what you build next.
+To get started with AI Configs, [sign up for a free trial](https://app.launchdarkly.com/signup). Questions? Reach out at `aiproduct@launchdarkly.com` and we'd love to hear what you build next.
 
 ## Related Tutorials
 
