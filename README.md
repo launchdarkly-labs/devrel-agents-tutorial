@@ -18,9 +18,9 @@ You'll build a robust system that adapts to users in real-time while giving you 
 
 **In 20 minutes**, you'll have a production-ready multi-agent system that **measures and improves itself**:
 
-### 🎯 **Immediate Value**
+### **Immediate Value**
 - **Multi-agent orchestration**: Supervisor, security, and support agents working together
-- **Your domain expertise**: RAG search through *your* business documents 
+- **Your domain expertise**: RAG search through your business documents 
 - **Live external data**: MCP integration with academic databases, GitHub, business APIs
 - **Zero-downtime configuration**: Change models, tools, and behavior through LaunchDarkly dashboard
 
@@ -28,12 +28,12 @@ You'll build a robust system that adapts to users in real-time while giving you 
 
 ## Get It Running in 5 Minutes
 
-**Ready to see data-driven AI optimization in action?** You'll have a working system faster than most AI demos take to load.
+**Ready to see data-driven AI optimization in action?** 
 
 ### Prerequisites
 - **Python 3.9+** with `uv` package manager ([install uv](https://docs.astral.sh/uv/getting-started/installation/))
-- **LaunchDarkly account** ([sign up for free](https://app.launchdarkly.com/signup)) - your AI optimization control center
-- **API keys** for Anthropic Claude and/or OpenAI GPT models - we'll show you which one actually performs better
+- **LaunchDarkly account** ([sign up for free](https://app.launchdarkly.com/signup)) your AI optimization control center
+- **API keys** for Anthropic Claude and/or OpenAI GPT models we'll show you which one actually performs better
 
 ### Step 1: Install & Configure (2 minutes)
 
@@ -47,7 +47,7 @@ cp .env.example .env
 # Edit .env with your keys:
 # - LD_SDK_KEY (enables real-time AI configuration)
 # - ANTHROPIC_API_KEY (from console.anthropic.com) 
-# - OPENAI_API_KEY (from platform.openai.com) - optional but enables A/B testing
+# - OPENAI_API_KEY (from platform.openai.com) optional but enables A/B testing
 ```
 
 ### Step 2: Add Your Documents (1 minute)
@@ -69,9 +69,9 @@ cp /path/to/your-legal-policies.pdf kb/
 ```bash
 # Turn documents into searchable AI knowledge
 uv run python initialize_embeddings.py
-# ✅ Creates vector embeddings for RAG search
-# ✅ Enables semantic understanding vs keyword matching
-# ✅ Processes all PDFs in kb/ directory
+# Creates vector embeddings for RAG search
+# Enables semantic understanding vs keyword matching
+# Processes all PDFs in kb/ directory
 ```
 
 ### Step 4: Launch Your Multi-Agent System (1 minute)
@@ -387,7 +387,7 @@ Replace generic instructions with your domain expertise:
 **Legal Research:**
 ```json
 {
-  "instructions": "You are a legal research assistant. Find case law, statutes, and precedents. Cite accurately, highlight jurisdictional differences. Never provide legal advice—only research."
+  "instructions": "You are a legal research assistant. Find case law, statutes, and precedents. Cite accurately, highlight jurisdictional differences. Never provide legal advice, only research."
 }
 ```
 
@@ -516,7 +516,7 @@ curl -X POST http://localhost:8001/chat \
 ```bash
 uv run python -c "
 import openai, anthropic, faiss, streamlit
-print('✅ All dependencies installed')
+print('All dependencies installed')
 "
 ```
 
@@ -524,22 +524,22 @@ print('✅ All dependencies installed')
 
 ## What You've Built: The Components of a Self-Optimizing AI System
 
-### 🧠 **Multi-Agent Intelligence Architecture**
+### **Multi-Agent Intelligence Architecture**
 - **Supervisor Agent**: Orchestrates workflow between specialized agents with state management
 - **Security Agent**: PII detection with geographic targeting (GDPR/CCPA compliance)
 - **Support Agent**: Your domain expertise + live external research capabilities
 
-### 🔍 **Intelligent Search & Knowledge Stack**
+### **Intelligent Search & Knowledge Stack**
 - **RAG Search**: Vector embeddings of your documents + semantic reranking for contextual understanding
 - **MCP Integration**: Live external data from academic databases, GitHub, business APIs
 - **Cost-Optimized Deployment**: Expensive research tools only deployed when they add genuine value
 
-### ⚡ **Data-Driven Optimization Engine**  
+### **Data-Driven Optimization Engine**  
 - **A/B Testing Platform**: Compare model performance, tool effectiveness, and cost efficiency with statistical significance
 - **Real-time Configuration**: Switch models, adjust tool access, modify behavior through LaunchDarkly dashboard
 - **Business Logic Integration**: Different user segments get different AI capabilities automatically
 
-### 📊 **Performance Measurement & Control**
+### **Performance Measurement & Control**
 - **Success Rate Tracking**: Which configurations actually resolve user queries
 - **Cost Attribution**: Measure per-query costs across different model and tool combinations  
 - **Latency Optimization**: Performance data guides model selection and tool deployment decisions
@@ -548,8 +548,8 @@ print('✅ All dependencies installed')
 
 ## Next Steps
 
-- **🎨 Custom UI**: React/Vue frontend matching your brand
-- **🎯 Advanced Targeting**: Behavior-based model selection
+- **Custom UI**: React/Vue frontend matching your brand
+- **Advanced Targeting**: Behavior-based model selection
 
 
 ## Resources
