@@ -15,7 +15,7 @@ import argparse
 from pathlib import Path
 
 # Dead simple configuration - edit these if you want!
-API_BASE_URL = "http://localhost:8000"
+API_BASE_URL = "http://localhost:8001"
 USERS_FILE = "data/fake_users.json"
 QUERIES_FILE = "data/sample_queries.json"
 

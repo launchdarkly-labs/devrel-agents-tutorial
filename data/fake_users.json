@@ -84,15 +84,45 @@
       "region": "north_america",
       "plan": "pro",
       "description": "Canadian professional user"
+    },
+    {
+      "id": "user_us_basic_001",
+      "country": "US",
+      "region": "general",
+      "plan": "basic",
+      "description": "US basic tier user"
+    },
+    {
+      "id": "user_eu_basic_001",
+      "country": "DE",
+      "region": "general", 
+      "plan": "basic",
+      "description": "German basic tier user"
+    },
+    {
+      "id": "user_healthcare_001",
+      "country": "US",
+      "region": "healthcare",
+      "plan": "enterprise",
+      "description": "US healthcare enterprise user"
+    },
+    {
+      "id": "user_healthcare_002", 
+      "country": "CA",
+      "region": "healthcare",
+      "plan": "pro",
+      "description": "Canadian healthcare professional"
     }
   ],
   "notes": {
     "targeting_strategy": {
-      "free_tier": "Get basic tools only to control costs",
-      "pro_tier": "Get enhanced tools for better experience", 
+      "free_tier": "Get no tools only to control costs",
+      "basic_tier": "Get basic keyword search tools",
+      "pro_tier": "Get enhanced RAG search tools for better experience", 
       "enterprise": "Get full research tools including expensive MCP",
       "eu_users": "Always get Claude for privacy compliance",
-      "us_users": "Mixed variations for A/B testing"
+      "us_users": "Mixed variations for A/B testing",
+      "healthcare_users": "Get strict privacy controls and full research access"
     },
     "easy_to_modify": "High school students can easily add more users or change attributes"
   }
