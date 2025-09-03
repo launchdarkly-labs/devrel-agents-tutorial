@@ -242,7 +242,22 @@ uv run python initialize_embeddings.py
 # Processes all PDFs in kb/ directory
 ```
 
-### Step 6: Launch Your Multi-Agent System (1 minute)
+### Step 6: Install MCP Research Tools (2 minutes)
+
+**Optional:** Install external research tools for the `full-research-claude` and `full-research-openai` variations:
+
+```bash
+# Install ArXiv MCP Server
+uv tool install arxiv-mcp-server
+
+# Install Semantic Scholar MCP Server in project directory
+git clone https://github.com/JackKuo666/semanticscholar-MCP-Server.git mcp_servers/semantic-scholar
+uv add requests beautifulsoup4 mcp semanticscholar
+```
+
+**Note:** Skip this step if you only plan to use basic search tools (`search-only-v1`, `search-only-v2`).
+
+### Step 7: Launch Your Multi-Agent System (1 minute)
 
 ```bash
 # Terminal 1: Start the AI agents backend
@@ -252,7 +267,7 @@ uv run uvicorn api.main:app --reload --port 8001
 uv run streamlit run ui/chat_interface.py
 ```
 
-### Step 7: See It Work (1 minute)
+### Step 8: See It Work (1 minute)
 
 1. **Open http://localhost:8501** 
 2. **Ask**: "What is reinforcement learning?" (if using sample docs) OR ask about your specific documents
