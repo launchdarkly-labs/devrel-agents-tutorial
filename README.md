@@ -2,32 +2,17 @@
 
 *Transform AI development from expensive trial-and-error into data-driven engineering with LaunchDarkly AI Configs*
 
-## The Problem Most AI Teams Don't Talk About
+## Overview
 
-**95% of AI teams are building blind.** They choose models based on benchmarks, add tools based on intuition, and deploy configurations based on what *looks* impressive rather than what provides measurable value.
+Here's what's broken about AI development right now: You spend weeks building an AI system, only to discover GPT-4 is too expensive, Claude might be better for your use case, and European users need different privacy handling. Making changes means code deploys, testing cycles, and crossing your fingers.
 
-Here's the reality check: You spend weeks building a sophisticated AI system, only to discover:
-- GPT-4 is eating your budget alive
-- Claude actually performs better for your specific use case  
-- European users need completely different privacy handling
-- That expensive research tool you added only helps 8% of queries
-- Your "enhanced" configuration is actually slower and less accurate
+**Meanwhile, your competitors are shipping faster because they solved this problem.**
 
-**Making changes means code deploys, testing cycles, and crossing your fingers.** Meanwhile, your competitors are optimizing AI systems in real-time based on actual user data.
+This tutorial shows you how to build AI systems the smart way. Instead of hardcoding everything, you'll create **LangGraph multi-agent workflows** that get their intelligence from **RAG search** through your business documents, enhanced with **MCP tools** for live external data, all controlled dynamically through **LaunchDarkly AI Configs**.
 
-## What If You Could Build AI Systems That Improve Themselves?
+**The result?** Change models, adjust privacy settings, or add new tools with a few clicks. Test everything with real A/B experiments. Make AI decisions backed by actual data instead of developer intuition.
 
-This repository shows you how to **turn AI development from guesswork into measurable engineering**. Instead of hardcoding everything and hoping for the best, you'll build systems that:
-
-- **Test configurations with real A/B experiments** before committing to expensive deployments
-- **Optimize model selection based on actual performance data** rather than marketing benchmarks  
-- **Right-size tool stacks** by measuring which tools provide genuine value vs unnecessary cost
-- **Deploy contextually** - different user segments get different AI capabilities based on business logic
-- **Adapt in real-time** without code changes or downtime
-
-**The technology:** Multi-agent LangGraph workflows powered by your business documents (RAG), enhanced with live external data (MCP tools), all controlled dynamically through LaunchDarkly AI Configs.
-
-**The result:** AI systems that optimize themselves through data, not developer intuition.
+You'll build a robust system that adapts to users in real-time while giving you the metrics to prove what actually works for your business.
 
 ## What You'll Build: A Self-Optimizing AI System
 
@@ -77,16 +62,31 @@ cp .env.example .env
 # - OPENAI_API_KEY (from platform.openai.com) - optional but enables A/B testing
 ```
 
-### Step 2: Build Your Knowledge Base (1 minute)
+### Step 2: Add Your Documents (1 minute)
 
 ```bash
-# Turn sample documents into searchable AI knowledge
+# Option A: Start with sample content (AI/ML knowledge base)
+# Sample document already included: kb/SuttonBartoIPRLBook2ndEd.pdf
+
+# Option B: Use YOUR business documents instead
+rm kb/SuttonBartoIPRLBook2ndEd.pdf  # Remove sample
+# Add your domain-specific documents:
+cp /path/to/your-company-handbook.pdf kb/
+cp /path/to/your-product-docs.pdf kb/
+cp /path/to/your-legal-policies.pdf kb/
+```
+
+### Step 3: Build Your Knowledge Base (1 minute)
+
+```bash
+# Turn documents into searchable AI knowledge
 uv run python initialize_embeddings.py
 # ✅ Creates vector embeddings for RAG search
 # ✅ Enables semantic understanding vs keyword matching
+# ✅ Processes all PDFs in kb/ directory
 ```
 
-### Step 3: Launch Your Multi-Agent System (1 minute)
+### Step 4: Launch Your Multi-Agent System (1 minute)
 
 ```bash
 # Terminal 1: Start the AI agents backend
@@ -96,38 +96,43 @@ uv run uvicorn api.main:app --reload --port 8001
 uv run streamlit run ui/chat_interface.py
 ```
 
-### Step 4: See It Work (1 minute)
+### Step 5: See It Work (1 minute)
 
 1. **Open http://localhost:8501** 
-2. **Ask**: "What is reinforcement learning?"
+2. **Ask**: "What is reinforcement learning?" (if using sample docs) OR ask about your specific documents
 3. **Watch**: Multiple agents coordinate to search your knowledge base and provide an intelligent response
 4. **Notice**: Real-time tool usage, model selection, and performance metrics in the sidebar
 
 **✅ You now have a working multi-agent system that measures its own performance and can be optimized through LaunchDarkly without code changes.**
 
-## Make It Yours: Customize the Knowledge Base
+## Domain-Specific Examples
 
-Replace the sample documents with your own:
-
-```bash
-# Remove sample document
-rm kb/SuttonBartoIPRLBook2ndEd.pdf
-
-# Add YOUR documents (PDFs work best)
-cp /path/to/your-company-handbook.pdf kb/
-cp /path/to/your-product-docs.pdf kb/
-cp /path/to/your-legal-policies.pdf kb/
-
-# Rebuild embeddings
-uv run python initialize_embeddings.py --force
-```
+**Want to adapt this for your specific domain?** Here are proven use cases:
 
 **Domain Examples:**
 - **Legal**: contracts, case law, compliance guidelines
 - **Healthcare**: protocols, research papers, care guidelines  
 - **SaaS**: API docs, user guides, troubleshooting manuals
+- **Financial**: policies, regulations, investment research
+- **Education**: course materials, research papers, curricula
 
-**Test** with domain-specific questions:
+**To switch domains after initial setup:**
+
+```bash
+# 1. Replace documents
+rm kb/*.pdf  # Clear existing
+cp /path/to/your-domain-docs/*.pdf kb/
+
+# 2. Rebuild knowledge base
+uv run python initialize_embeddings.py --force
+
+# 3. Test with domain-specific questions
+curl -X POST http://localhost:8001/chat \
+  -H "Content-Type: application/json" \
+  -d '{"user_id": "test", "message": "What are our standard contract terms?"}'
+```
+
+**Test** different query types:
 ```bash
 curl -X POST http://localhost:8001/chat \
   -H "Content-Type: application/json" \
