@@ -39,9 +39,7 @@ You'll build a robust system that adapts to users in real-time while giving you 
 
 **First, create your tool definitions in LaunchDarkly Dashboard → Tools → Create New Tool:**
 
-**Core Search Tools:**
-
-**Tool 1: Basic Search**
+**Tool 1: Keyword Search (created in repo)**
 ```json
 {
   "name": "search_v1",
@@ -56,7 +54,7 @@ You'll build a robust system that adapts to users in real-time while giving you 
 }
 ```
 
-**Tool 2: Advanced RAG Search**
+**Tool 2: Advanced RAG Search (created in repo)**
 ```json
 {
   "name": "search_v2", 
@@ -76,7 +74,7 @@ You'll build a robust system that adapts to users in real-time while giving you 
 }
 ```
 
-**Tool 3: Result Reranking**
+**Tool 3: Result Reranking (created in repo)**
 ```json
 {
   "name": "reranking",
@@ -95,9 +93,7 @@ You'll build a robust system that adapts to users in real-time while giving you 
 }
 ```
 
-**Research Tools (MCP):**
-
-**Tool 4: ArXiv Search**
+**Tool 4: ArXiv Search (MCP)**
 ```json
 {
   "name": "arxiv_search",
@@ -117,7 +113,7 @@ You'll build a robust system that adapts to users in real-time while giving you 
 }
 ```
 
-**Tool 5: Semantic Scholar**
+**Tool 5: Semantic Scholar (MCP)**
 ```json
 {
   "name": "semantic_scholar",
@@ -154,32 +150,45 @@ You'll build a robust system that adapts to users in real-time while giving you 
 **AI Config: `supervisor-agent`**
 ```json
 {
-  "model": {"name": "claude-3-5-sonnet-20241022"},
+  "model": {"name": "claude-3-7-sonnet-latest"},
   "instructions": "You are an AI supervisor that coordinates between security and support agents. Route requests efficiently and track workflow state.",
-  "temperature": 0.1,
   "tools": [],
-  "variationKey": "main"
+  "variationKey": "supervisor-basic",
+  "customParameters": {
+    "max_cost": 0.5,
+    "max_tool_calls": 3,
+    "workflow_type": "supervisor"
+  }
 }
 ```
 
 **AI Config: `security-agent`**
 ```json
 {
-  "model": {"name": "claude-3-5-sonnet-20241022"},
+  "model": {"name": "claude-3-7-sonnet-latest"},
   "instructions": "You are a privacy and security agent. Detect PII and sensitive information. Flag any personal identifiers, financial data, or confidential information.",
-  "temperature": 0.0,
   "tools": [],
-  "variationKey": "pii-detection"
+  "variationKey": "pii-basic",
+  "customParameters": {
+    "max_cost": 0.25,
+    "max_tool_calls": 2,
+    "workflow_type": "security"
+  }
 }
 ```
 
 **AI Config: `support-agent`** (Start with basic version)
 ```json
 {
-  "model": {"name": "claude-3-5-sonnet-20241022"},
-  "instructions": "You are a helpful AI assistant. Provide accurate answers using available documentation and search tools.",
+  "model": {"name": "claude-3-7-sonnet-latest"},
+  "instructions": "You are a helpful AI assistant specialized in comprehensive research. Use all available tools strategically to provide thorough, well-researched responses.",
   "tools": ["search_v2", "reranking"],
-  "variationKey": "basic"
+  "variationKey": "search-only-v2",
+  "customParameters": {
+    "max_cost": 1,
+    "max_tool_calls": 8,
+    "workflow_type": "conditional"
+  }
 }
 ```
 ✅ Checkpoint: Your AI agents now have roles and tools.
@@ -260,43 +269,63 @@ Now that your system is running, you can create sophisticated configurations for
 
 Add multiple variations to your existing `support-agent` config for different service tiers:
 
-**Variation 1: `free-tier`**
+**Variation 1: No Tools (Basic)**
 ```json
 {
-  "model": {"name": "claude-3-haiku-20240307"},
-  "instructions": "You are a helpful assistant for [YOUR COMPANY]. Provide basic answers using available documentation.",
+  "model": {"name": "claude-3-7-sonnet-latest"},
+  "instructions": "You are a helpful AI assistant. Provide basic responses using only your training knowledge.",
+  "tools": [],
+  "variationKey": "no-tools",
+  "customParameters": {
+    "max_cost": 0.1,
+    "max_tool_calls": 0,
+    "workflow_type": "basic"
+  }
+}
+```
+
+**Variation 2: Search Only v1 (Keyword)**
+```json
+{
+  "model": {"name": "claude-3-7-sonnet-latest"},
+  "instructions": "You are a helpful AI assistant. Use basic keyword search through documentation when needed.",
   "tools": ["search_v1"],
-  "variationKey": "free-tier"
+  "variationKey": "search-only-v1",
+  "customParameters": {
+    "max_cost": 0.5,
+    "max_tool_calls": 4,
+    "workflow_type": "search-basic"
+  }
 }
 ```
 
-**Variation 2: `pro-tier`**
+**Variation 3: Full Research Claude**
 ```json
 {
-  "model": {"name": "claude-3-5-sonnet-20241022"},
-  "instructions": "You are an expert [YOUR DOMAIN] assistant. Provide detailed, comprehensive answers using advanced search and analysis.",
-  "tools": ["search_v2", "reranking"],
-  "variationKey": "pro-tier"
-}
-```
-
-**Variation 3: `enterprise-claude`**
-```json
-{
-  "model": {"name": "claude-3-5-sonnet-20241022"},
-  "instructions": "You are a premium [YOUR DOMAIN] expert with access to comprehensive research tools.",
+  "model": {"name": "claude-3-7-sonnet-latest"},
+  "instructions": "You are a helpful AI assistant specialized in comprehensive research. Use all available tools strategically to provide thorough, well-researched responses.",
   "tools": ["search_v2", "reranking", "arxiv_search", "semantic_scholar"],
-  "variationKey": "enterprise-claude"
+  "variationKey": "full-research-claude",
+  "customParameters": {
+    "max_cost": 1,
+    "max_tool_calls": 8,
+    "workflow_type": "conditional"
+  }
 }
 ```
 
-**Variation 4: `enterprise-openai`** (for A/B testing)
+**Variation 4: Full Research OpenAI** (for A/B testing)
 ```json
 {
-  "model": {"name": "gpt-4o"},
-  "instructions": "You are a premium [YOUR DOMAIN] expert with access to comprehensive research tools.",
+  "model": {"name": "chatgpt-4o-latest"},
+  "instructions": "You are a helpful AI assistant specialized in comprehensive research. Use all available tools strategically to provide thorough, well-researched responses.",
   "tools": ["search_v2", "reranking", "arxiv_search", "semantic_scholar"],
-  "variationKey": "enterprise-openai"
+  "variationKey": "full-research-openai",
+  "customParameters": {
+    "max_cost": 1,
+    "max_tool_calls": 8,
+    "workflow_type": "conditional"
+  }
 }
 ```
 
@@ -305,10 +334,11 @@ Add multiple variations to your existing `support-agent` config for different se
 1. **Support-agent Config** → **Targeting** → **Create Rules**:
 
 ```
-IF user.plan = "free" THEN serve "free-tier"
-IF user.plan = "pro" THEN serve "pro-tier"
-IF user.plan = "enterprise" AND user.country = "US" THEN serve 50% "enterprise-claude", 50% "enterprise-openai"
-IF user.country IN ["DE", "FR", "GB"] THEN serve "regional-compliance"
+IF user.plan = "free" THEN serve "no-tools"
+IF user.plan = "basic" THEN serve "search-only-v1"
+IF user.plan = "pro" THEN serve "search-only-v2"
+IF user.plan = "enterprise" AND user.country = "US" THEN serve 50% "full-research-claude", 50% "full-research-openai"
+IF user.country IN ["DE", "FR", "GB"] THEN serve "full-research-claude"
 ```
 
 **Test Your Configurations:**
@@ -318,7 +348,7 @@ curl -X POST http://localhost:8001/chat \
   -H "Content-Type: application/json" \
   -d '{
     "user_id": "enterprise_001",
-    "message": "I need comprehensive research on this topic", 
+    "message": "I need comprehensive research on transformer architectures", 
     "user_context": {"plan": "enterprise", "country": "US"}
   }'
 ```
@@ -327,8 +357,11 @@ curl -X POST http://localhost:8001/chat \
 
 ## Add External Tools: MCP Integration
 
+**Note**: You already created the MCP tool definitions (`arxiv_search`, `semantic_scholar`) in Step 1. Now you need to install the actual MCP servers and enable the tools in your AI Configs.
+
 ### Academic Research Tools (Built-in)
 
+**1. Install the MCP Servers:**
 ```bash
 # Install ArXiv MCP Server
 uv tool install arxiv-mcp-server
@@ -336,6 +369,14 @@ uv tool install arxiv-mcp-server
 # Install Semantic Scholar MCP Server  
 git clone https://github.com/JackKuo666/semanticscholar-MCP-Server.git /tmp/semantic-scholar-server
 uv add requests beautifulsoup4 mcp semanticscholar
+```
+
+**2. Enable in LaunchDarkly AI Configs:**
+Go to your `support-agent` AI Config and add the MCP tools to the tools array:
+```json
+{
+  "tools": ["search_v2", "reranking", "arxiv_search", "semantic_scholar"]
+}
 ```
 
 **Test**: Ask "Find recent papers on transformer architectures" - should query both internal docs and external databases.
@@ -350,12 +391,32 @@ The system integrates with **any MCP server**. Browse the [MCP Server Directory]
 
 **Example: Add GitHub Integration**
 
-1. **Install:**
+**1. Create Tool Definition in LaunchDarkly:**
+```json
+{
+  "name": "github_search",
+  "displayName": "GitHub Repository Search", 
+  "description": "Search code, issues, and repositories on GitHub",
+  "parameters": {
+    "query": {
+      "type": "string",
+      "description": "Search query for GitHub repositories and code"
+    },
+    "type": {
+      "type": "string", 
+      "description": "Type of search: code, issues, repositories",
+      "default": "code"
+    }
+  }
+}
+```
+
+**2. Install MCP Server:**
 ```bash
 npm install -g @modelcontextprotocol/server-github
 ```
 
-2. **Configure:** Edit `tools_impl/mcp_research_tools.py`, add to `server_configs`:
+**3. Configure Server:** Edit `tools_impl/mcp_research_tools.py`, add to `server_configs`:
 ```python
 "github": {
     "command": "npx",
@@ -363,8 +424,14 @@ npm install -g @modelcontextprotocol/server-github
 }
 ```
 
-3. **Enable in LaunchDarkly:** Add `"github"` to your AI Config tool lists
-4. **Test:** Ask "Find authentication issues in our repository"
+**4. Enable in AI Config:** Add `"github_search"` to your `support-agent` tools array:
+```json
+{
+  "tools": ["search_v2", "reranking", "github_search"]
+}
+```
+
+**5. Test:** Ask "Find authentication issues in our repository"
 
 **Business Domain Examples:**
 
@@ -386,12 +453,61 @@ Test which configurations work best for your use case.
    - **Control**: `"tools": ["search_v1"]` 
    - **Treatment**: `"tools": ["search_v2", "reranking"]`
 
-2. **Generate Test Data:**
+2. **Set Up Sample User Data:**
+
+The traffic generator needs sample users with the right attributes to test your targeting rules. Your `data/fake_users.json` includes these user types:
+
+```json
+{
+  "users": [
+    {
+      "id": "user_us_free_001",
+      "country": "US",
+      "region": "north_america",
+      "plan": "free"
+    },
+    {
+      "id": "user_us_basic_001", 
+      "country": "US",
+      "region": "general",
+      "plan": "basic"
+    },
+    {
+      "id": "user_us_pro_001",
+      "country": "US",
+      "region": "north_america", 
+      "plan": "pro"
+    },
+    {
+      "id": "user_us_enterprise_001",
+      "country": "US",
+      "region": "north_america",
+      "plan": "enterprise"
+    },
+    {
+      "id": "user_eu_enterprise_001",
+      "country": "DE",
+      "region": "europe", 
+      "plan": "enterprise"
+    },
+    {
+      "id": "user_healthcare_001",
+      "country": "US",
+      "region": "healthcare",
+      "plan": "enterprise"
+    }
+  ]
+}
+```
+
+**Coverage:** These users test all targeting scenarios - free/basic/pro/enterprise tiers, US/EU geographic targeting, and specialized healthcare region targeting.
+
+3. **Generate Test Data:**
 ```bash
 python tools/traffic_generator.py --queries 100 --delay 1
 ```
 
-3. **Monitor Results** in LaunchDarkly dashboard
+4. **Monitor Results** in LaunchDarkly dashboard
 
 **Example Results:**
 | Variation | Satisfaction | Response Time | Cost |
@@ -407,7 +523,7 @@ python tools/traffic_generator.py --queries 100 --delay 1
 
 **1. Set Up Model Comparison Experiment:**
 
-Use the existing `enterprise-claude` and `enterprise-openai` variations from your `support-agent` config:
+Use the existing `full-research-claude` and `full-research-openai` variations from your `support-agent` config:
 
 - **Control (Claude)**: Uses all three agents (supervisor, security, support) with Claude models
 - **Treatment (OpenAI)**: Uses identical agent workflow but with OpenAI models
@@ -417,26 +533,36 @@ Use the existing `enterprise-claude` and `enterprise-openai` variations from you
 **Claude Stack (Control):**
 ```json
 {
-  "model": {"name": "claude-3-5-sonnet-20241022"},
-  "instructions": "You are a premium expert with access to comprehensive research tools. Provide thorough analysis combining internal documentation with external research.",
+  "model": {"name": "claude-3-7-sonnet-latest"},
+  "instructions": "You are a helpful AI assistant specialized in comprehensive research. Use all available tools strategically to provide thorough, well-researched responses.",
   "tools": ["search_v2", "reranking", "arxiv_search", "semantic_scholar"],
-  "variationKey": "full-stack-claude"
+  "variationKey": "full-research-claude",
+  "customParameters": {
+    "max_cost": 1,
+    "max_tool_calls": 8,
+    "workflow_type": "conditional"
+  }
 }
 ```
 
 **OpenAI Stack (Treatment):**
 ```json
 {
-  "model": {"name": "gpt-4o"},
-  "instructions": "You are a premium expert with access to comprehensive research tools. Provide thorough analysis combining internal documentation with external research.",
+  "model": {"name": "chatgpt-4o-latest"},
+  "instructions": "You are a helpful AI assistant specialized in comprehensive research. Use all available tools strategically to provide thorough, well-researched responses.",
   "tools": ["search_v2", "reranking", "arxiv_search", "semantic_scholar"],
-  "variationKey": "full-stack-openai"
+  "variationKey": "full-research-openai",
+  "customParameters": {
+    "max_cost": 1,
+    "max_tool_calls": 8,
+    "workflow_type": "conditional"
+  }
 }
 ```
 
 **3. Configure 50/50 Split:**
 ```
-IF user.plan = "enterprise" AND user.country = "US" THEN serve 50% "full-stack-claude", 50% "full-stack-openai"
+IF user.plan = "enterprise" AND user.country = "US" THEN serve 50% "full-research-claude", 50% "full-research-openai"
 ```
 
 **4. Run Extended Testing:**
@@ -461,6 +587,41 @@ python tools/traffic_generator.py --queries 200 --delay 1
 **✅ Checkpoint**: You're making data-driven AI decisions.
 
 ## Advanced Customization
+
+### Swapping Out Your Knowledge Base Documents
+
+**Ready to change domains or add more documents?** Here's how to update your knowledge base with different content:
+
+**Best document formats:**
+- **PDF**: Contracts, research papers, manuals, policies (recommended)
+- **Text**: Documentation, guides, FAQs
+- **Markdown**: Technical docs, wikis
+
+```bash
+# 1. Stop the system if it's running
+# Ctrl+C in both terminal windows
+
+# 2. Clear existing documents and embeddings
+rm kb/*.pdf
+rm -rf embeddings_store/  # Remove old vector embeddings
+
+# 3. Add your new documents
+cp /path/to/your-new-documents/*.pdf kb/
+
+# 4. Rebuild the knowledge base
+uv run python initialize_embeddings.py
+
+# 5. Restart the system
+# Terminal 1:
+uv run uvicorn api.main:app --reload --port 8001
+# Terminal 2: 
+uv run streamlit run ui/chat_interface.py
+
+# 6. Test with domain-specific queries
+# Legal: "What are our standard contract terms?"
+# Healthcare: "What is the protocol for patient intake?"  
+# Software: "How do I authenticate API requests?"
+```
 
 ### Domain-Specific Instructions
 
@@ -496,29 +657,37 @@ Create multiple security agent variations for different regions by adding variat
 **EU Privacy-Focused Variation:**
 ```json
 {
-  "model": {"name": "claude-3-5-sonnet-20241022"},
+  "model": {"name": "claude-3-7-sonnet-latest"},
   "instructions": "You are a privacy-focused security agent. Apply strict PII detection including: names, emails, phone numbers, addresses, IP addresses, device IDs. Flag any personal identifiers for removal. Err on the side of caution for data protection.",
-  "temperature": 0.0,
   "tools": [],
-  "variationKey": "eu-privacy-strict"
+  "variationKey": "eu-privacy-strict",
+  "customParameters": {
+    "max_cost": 0.25,
+    "max_tool_calls": 2,
+    "workflow_type": "security-strict"
+  }
 }
 ```
 
 **US Standard Privacy Variation:**
 ```json
 {
-  "model": {"name": "claude-3-5-sonnet-20241022"},
+  "model": {"name": "claude-3-7-sonnet-latest"},
   "instructions": "You are a security agent focused on detecting sensitive PII including: SSNs, credit card numbers, banking information, medical records. Apply standard privacy measures while maintaining system functionality.",
-  "temperature": 0.0,
   "tools": [],
-  "variationKey": "us-standard-privacy"
+  "variationKey": "us-standard-privacy",
+  "customParameters": {
+    "max_cost": 0.25,
+    "max_tool_calls": 2,
+    "workflow_type": "security-standard"
+  }
 }
 ```
 
 **Targeting Rules for Security Agent:**
 ```
 IF user.country IN ["DE", "FR", "IT", "GB"] THEN serve "eu-privacy-strict"
-IF user.country = "US" AND user.state = "CA" THEN serve "us-standard-privacy"
+IF user.country = "US" THEN serve "us-standard-privacy"
 IF user.region = "healthcare" THEN serve "eu-privacy-strict"
 ELSE serve "us-standard-privacy"
 ```
@@ -528,34 +697,44 @@ ELSE serve "us-standard-privacy"
 **EU Model Selection:**
 ```json
 {
-  "model": {"name": "claude-3-5-sonnet-20241022"},
+  "model": {"name": "claude-3-7-sonnet-latest"},
   "instructions": "You are a helpful assistant. Prioritize user privacy in all responses. Avoid storing or referencing personal information.",
   "tools": ["search_v2", "reranking"],
-  "variationKey": "eu-privacy-focused"
+  "variationKey": "eu-privacy-focused",
+  "customParameters": {
+    "max_cost": 0.75,
+    "max_tool_calls": 6,
+    "workflow_type": "privacy-first"
+  }
 }
 ```
 
 **US Enterprise Variation:**
 ```json
 {
-  "model": {"name": "claude-3-5-sonnet-20241022"},
+  "model": {"name": "claude-3-7-sonnet-latest"},
   "instructions": "You are a premium expert with access to comprehensive research tools.",
   "tools": ["search_v2", "reranking", "arxiv_search", "semantic_scholar"],
-  "variationKey": "us-full-featured"
+  "variationKey": "us-full-featured",
+  "customParameters": {
+    "max_cost": 1,
+    "max_tool_calls": 8,
+    "workflow_type": "full-featured"
+  }
 }
 ```
 
 **Usage-Based Tiers:**
 ```
-IF user.monthly_usage < 1000 THEN serve "free-tier"
-IF user.monthly_usage > 5000 THEN serve "pro-tier" 
-IF user.contract_value > 50000 THEN serve "enterprise-tier"
+IF user.monthly_usage < 1000 THEN serve "no-tools"
+IF user.monthly_usage > 5000 THEN serve "search-only-v2" 
+IF user.contract_value > 50000 THEN serve "full-research-claude"
 ```
 
 **Time-Based Rules:**
 ```
-IF current_time.hour BETWEEN 9 AND 17 THEN serve "business-hours" (expensive tools)
-IF current_time.hour BETWEEN 17 AND 9 THEN serve "cost-optimized"
+IF current_time.hour BETWEEN 9 AND 17 THEN serve "full-research-claude"
+IF current_time.hour BETWEEN 17 AND 9 THEN serve "search-only-v2"
 ```
 
 ### Cost Management
@@ -563,51 +742,15 @@ IF current_time.hour BETWEEN 17 AND 9 THEN serve "cost-optimized"
 **Tool Access by Tier:**
 ```json
 {
-  "free": ["search_v1"],                                  // $0.01/query
+  "free": [],                                             // $0.001/query
+  "basic": ["search_v1"],                                 // $0.01/query
   "pro": ["search_v2", "reranking"],                     // $0.05/query
-  "enterprise": ["search_v2", "reranking", "mcp_tools"]  // $0.25/query
+  "enterprise": ["search_v2", "reranking", "arxiv_search", "semantic_scholar"]  // $0.25/query
 }
 ```
 
 **✅ Checkpoint**: Fine-grained control over AI behavior, costs, and compliance.
 
-## Troubleshooting
-
-**MCP Connection Issues:**
-```bash
-# Check MCP server installation
-which arxiv-mcp-server
-
-# Test server directly
-/path/to/arxiv-mcp-server --help
-```
-
-**LaunchDarkly Issues:**
-```bash
-# Verify SDK key
-echo $LD_SDK_KEY
-
-# Check AI Configs exist in dashboard
-```
-
-**Knowledge Base Issues:**
-```bash
-# Rebuild embeddings
-uv run python initialize_embeddings.py --force
-
-# Test search
-curl -X POST http://localhost:8001/chat \
-  -H "Content-Type: application/json" \
-  -d '{"user_id": "test", "message": "test query"}'
-```
-
-**Environment Check:**
-```bash
-uv run python -c "
-import openai, anthropic, faiss, streamlit
-print('All dependencies installed')
-"
-```
 
 ---
 
