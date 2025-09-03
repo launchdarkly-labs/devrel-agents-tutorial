@@ -196,7 +196,7 @@ You'll build a robust system that adapts to users in real-time while giving you 
 ### Step 3: Install & Configure Code (2 minutes)
 
 ```bash
-git clone https://github.com/launchdarkly/agents-demo.git
+git clone https://github.com/launchdarkly-labs/devrel-agents-tutorial/
 cd agents-demo
 uv sync  # Installs all dependencies including LangGraph, MCP tools, and LaunchDarkly SDK
 
