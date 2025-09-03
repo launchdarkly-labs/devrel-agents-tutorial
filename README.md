@@ -445,79 +445,36 @@ npm install -g @modelcontextprotocol/server-github
 
 Test which configurations work best for your use case.
 
-### Set Up A/B Test
+### Experiment 1: Search Implementation Comparison
 
 **Hypothesis**: Enhanced RAG increases satisfaction by 15% vs basic search.
 
-1. **LaunchDarkly** → **Support-agent** → **Create Experiment**:
-   - **Control**: `"tools": ["search_v1"]` 
-   - **Treatment**: `"tools": ["search_v2", "reranking"]`
+**1. Set Up Search Implementation Experiment:**
 
-2. **Set Up Sample User Data:**
+Use the existing `search-only-v1` and `search-only-v2` variations from your `support-agent` config:
 
-The traffic generator needs sample users with the right attributes to test your targeting rules. Your `data/fake_users.json` includes these user types:
+- **Control (Basic Search)**: Uses keyword-based search through documents
+- **Treatment (Enhanced RAG)**: Uses vector embeddings with semantic reranking
 
-```json
-{
-  "users": [
-    {
-      "id": "user_us_free_001",
-      "country": "US",
-      "region": "north_america",
-      "plan": "free"
-    },
-    {
-      "id": "user_us_basic_001", 
-      "country": "US",
-      "region": "general",
-      "plan": "basic"
-    },
-    {
-      "id": "user_us_pro_001",
-      "country": "US",
-      "region": "north_america", 
-      "plan": "pro"
-    },
-    {
-      "id": "user_us_enterprise_001",
-      "country": "US",
-      "region": "north_america",
-      "plan": "enterprise"
-    },
-    {
-      "id": "user_eu_enterprise_001",
-      "country": "DE",
-      "region": "europe", 
-      "plan": "enterprise"
-    },
-    {
-      "id": "user_healthcare_001",
-      "country": "US",
-      "region": "healthcare",
-      "plan": "enterprise"
-    }
-  ]
-}
-```
-
-**Coverage:** These users test all targeting scenarios - free/basic/pro/enterprise tiers, US/EU geographic targeting, and specialized healthcare region targeting.
-
-3. **Generate Test Data:**
+**2. Generate Test Data:**
 ```bash
-python tools/traffic_generator.py --queries 100 --delay 1
+python tools/traffic_generator.py --queries 200 --delay 1
 ```
 
-4. **Monitor Results** in LaunchDarkly dashboard
+**Example Results After 200 Queries:**
+| Search Method | Satisfaction | Avg Response Time | Token Usage | Tool Calls | Cost per Query |
+|---------------|-------------|------------------|-------------|------------|----------------|
+| Basic Search | 72% | 1.2s | 1,200 tokens | 2.1 avg | $0.05 |
+| Enhanced RAG | 89% | 1.8s | 1,650 tokens | 2.8 avg | $0.075 |
 
-**Example Results:**
-| Variation | Satisfaction | Response Time | Cost |
-|-----------|-------------|---------------|------|
-| Basic Search | 72% | 1.2s | $0.05 |
-| Enhanced RAG | 89% (+17%) | 1.8s | $0.075 |
+**Key Insights:**
+- **Enhanced RAG**: Higher satisfaction, better semantic understanding, moderate cost increase
+- **Basic Search**: Faster response time, lower cost, but less accurate results
+- **Winner**: Enhanced RAG provides better value with 17% higher satisfaction justifying 50% cost increase
 
-**Decision**: Enhanced RAG wins! 17% satisfaction increase justifies 50% cost increase.
+**Decision**: Deploy Enhanced RAG as default for all users. The 17% satisfaction increase and better semantic understanding outweigh the moderate cost increase.
 
-### Full-Stack Model Comparison: Claude vs OpenAI
+### Experiment 2: Model Comparison
 
 **Hypothesis**: Claude provides better reasoning and tool usage efficiency than OpenAI for multi-agent workflows.
 
@@ -525,47 +482,10 @@ python tools/traffic_generator.py --queries 100 --delay 1
 
 Use the existing `full-research-claude` and `full-research-openai` variations from your `support-agent` config:
 
-- **Control (Claude)**: Uses all three agents (supervisor, security, support) with Claude models
-- **Treatment (OpenAI)**: Uses identical agent workflow but with OpenAI models
+- **Control (Claude)**: Uses comprehensive research tools with Claude models
+- **Treatment (OpenAI)**: Uses identical tools with OpenAI models
 
-**2. Update Your Variations for Fair Testing:**
-
-**Claude Stack (Control):**
-```json
-{
-  "model": {"name": "claude-3-7-sonnet-latest"},
-  "instructions": "You are a helpful AI assistant specialized in comprehensive research. Use all available tools strategically to provide thorough, well-researched responses.",
-  "tools": ["search_v2", "reranking", "arxiv_search", "semantic_scholar"],
-  "variationKey": "full-research-claude",
-  "customParameters": {
-    "max_cost": 1,
-    "max_tool_calls": 8,
-    "workflow_type": "conditional"
-  }
-}
-```
-
-**OpenAI Stack (Treatment):**
-```json
-{
-  "model": {"name": "chatgpt-4o-latest"},
-  "instructions": "You are a helpful AI assistant specialized in comprehensive research. Use all available tools strategically to provide thorough, well-researched responses.",
-  "tools": ["search_v2", "reranking", "arxiv_search", "semantic_scholar"],
-  "variationKey": "full-research-openai",
-  "customParameters": {
-    "max_cost": 1,
-    "max_tool_calls": 8,
-    "workflow_type": "conditional"
-  }
-}
-```
-
-**3. Configure 50/50 Split:**
-```
-IF user.plan = "enterprise" AND user.country = "US" THEN serve 50% "full-research-claude", 50% "full-research-openai"
-```
-
-**4. Run Extended Testing:**
+**2. Generate Test Data:**
 ```bash
 # Generate more data for statistical significance
 python tools/traffic_generator.py --queries 200 --delay 1
