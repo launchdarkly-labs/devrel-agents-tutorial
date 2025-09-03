@@ -389,12 +389,14 @@ def create_support_agent(config: AgentConfig, config_manager=None):
                 print(f"🛑 STOPPING TOOL LOOP: '{tool_name}' used {recent_tool_calls.count(tool_name)} times total - ending workflow")
                 return "end"
         
-        print(f"DEBUG: should_continue - total_tool_calls: {total_tool_calls}, max: 10")
+        # Get max tool calls from config, default to 8 if not specified
+        max_tool_calls = getattr(config, 'max_tool_calls', 8)
+        print(f"DEBUG: should_continue - total_tool_calls: {total_tool_calls}, max: {max_tool_calls}")
         print(f"DEBUG: Recent tool calls: {recent_tool_calls[-5:]}")  # Show last 5
         
         # If we've hit the max tool calls limit, end
-        if total_tool_calls >= 10:
-            print("DEBUG: Hit max tool calls limit, ending")
+        if total_tool_calls >= max_tool_calls:
+            print(f"DEBUG: Hit max tool calls limit ({max_tool_calls}), ending")
             return "end"
         
         # If the last message has tool calls, continue to tools
@@ -421,6 +423,9 @@ def create_support_agent(config: AgentConfig, config_manager=None):
             
             # Add system message with instructions if this is the first call
             if len(messages) == 1:  # Only user message
+                # Get max tool calls from config, default to 8 if not specified
+                max_tool_calls = getattr(config, 'max_tool_calls', 8)
+                
                 # Create detailed tool descriptions for the prompt
                 tool_descriptions = []
                 for tool in available_tools:
@@ -433,18 +438,6 @@ def create_support_agent(config: AgentConfig, config_manager=None):
                 
                 Available tools:
                 {tools_text}
-                
-                TOOL USAGE STRATEGY:
-                1. Start with search_v2 for internal knowledge base
-                2. If results look weak/irrelevant (low relevance scores), escalate to arxiv_search and semantic_scholar
-                3. Use reranking on search results to improve quality
-                4. Try different search queries to explore various aspects
-                5. Synthesize a comprehensive comparison answer before finishing
-                
-                GUIDELINES:
-                - Use different tools strategically for complementary information
-                - Escalate to external research tools when internal KB is insufficient
-                - Maximum 10 tool calls allowed
                 """
                 messages = [SystemMessage(content=system_prompt)] + messages
             
@@ -456,8 +449,9 @@ def create_support_agent(config: AgentConfig, config_manager=None):
                         recent_tool_calls.append(tool_call['name'])
             
             # If at max tool calls, disable tools for final completion
-            if total_tool_calls >= 10:
-                print(f"🛑 DISABLING TOOLS: Reached maximum tool calls ({total_tool_calls}/10)")
+            max_tool_calls = getattr(config, 'max_tool_calls', 8)
+            if total_tool_calls >= max_tool_calls:
+                print(f"🛑 DISABLING TOOLS: Reached maximum tool calls ({total_tool_calls}/{max_tool_calls})")
                 
                 # Add synthesis instruction for final completion
                 synthesis_prompt = HumanMessage(content="""

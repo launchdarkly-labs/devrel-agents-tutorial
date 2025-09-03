@@ -163,7 +163,7 @@ class FixedConfigManager:
         start_time = time.time()
         
         try:
-            print(f"🎯 FIXED TRACKING: Using tracker {type(tracker)}")
+            print(f"📊 METRICS: Using LaunchDarkly tracker {type(tracker)}")
             print(f"🎯 LD CLIENT STATUS: initialized={self.ld_client.is_initialized()}")
             
             # Use the comprehensive tracking function
@@ -213,11 +213,11 @@ class FixedConfigManager:
             flush_result = self.ld_client.flush()
             print(f"🎯 IMMEDIATE FLUSH: {flush_result}")
             
-            print(f"✅ FIXED TRACKING: Completed successfully")
+            print(f"✅ METRICS: Tracking completed successfully")
             return result
             
         except Exception as e:
-            print(f"❌ FIXED TRACKING ERROR: {e}")
+            print(f"❌ METRICS ERROR: {e}")
             # Track error before falling back
             try:
                 tracker.track_error()

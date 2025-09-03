@@ -31,7 +31,9 @@
       "Bash(echo $HOME)",
       "Bash(kill:*)",
       "Bash(pkill:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "WebFetch(domain:docs.launchdarkly.com)",
+      "WebFetch(domain:launchdarkly.com)"
     ],
     "deny": [],
     "ask": [],
