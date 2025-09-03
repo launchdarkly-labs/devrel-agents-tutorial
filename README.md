@@ -26,7 +26,7 @@ You'll build a robust system that adapts to users in real-time while giving you 
 
 **Instead of guessing which configuration works, you'll have data proving which one delivers better outcomes at lower cost.**
 
-## Get It Running in 5 Minutes
+## Quick Start Guide
 
 **Ready to see data-driven AI optimization in action?** 
 
@@ -35,7 +35,156 @@ You'll build a robust system that adapts to users in real-time while giving you 
 - **LaunchDarkly account** ([sign up for free](https://app.launchdarkly.com/signup)) your AI optimization control center
 - **API keys** for Anthropic Claude and/or OpenAI GPT models we'll show you which one actually performs better
 
-### Step 1: Install & Configure (2 minutes)
+### Step 1: Set Up Your Tools in LaunchDarkly (3 minutes)
+
+**First, create your tool definitions in LaunchDarkly Dashboard → Tools → Create New Tool:**
+
+**Core Search Tools:**
+
+**Tool 1: Basic Search**
+```json
+{
+  "name": "search_v1",
+  "displayName": "Basic Document Search",
+  "description": "Performs keyword-based search through uploaded documents using BM25 scoring",
+  "parameters": {
+    "query": {
+      "type": "string",
+      "description": "The search query to find relevant documents"
+    }
+  }
+}
+```
+
+**Tool 2: Advanced RAG Search**
+```json
+{
+  "name": "search_v2", 
+  "displayName": "RAG Vector Search",
+  "description": "Advanced semantic search using vector embeddings for contextual document retrieval",
+  "parameters": {
+    "query": {
+      "type": "string",
+      "description": "The search query for semantic document matching"
+    },
+    "top_k": {
+      "type": "integer",
+      "description": "Number of most relevant documents to return",
+      "default": 5
+    }
+  }
+}
+```
+
+**Tool 3: Result Reranking**
+```json
+{
+  "name": "reranking",
+  "displayName": "Search Result Reranker", 
+  "description": "Improves search results by reordering based on semantic relevance to the query",
+  "parameters": {
+    "query": {
+      "type": "string", 
+      "description": "Original search query for relevance scoring"
+    },
+    "results": {
+      "type": "array",
+      "description": "Search results to rerank for improved relevance"
+    }
+  }
+}
+```
+
+**Research Tools (MCP):**
+
+**Tool 4: ArXiv Search**
+```json
+{
+  "name": "arxiv_search",
+  "displayName": "ArXiv Academic Search",
+  "description": "Search academic papers from ArXiv database with advanced filtering",
+  "parameters": {
+    "query": {
+      "type": "string",
+      "description": "Research query to search ArXiv papers"
+    },
+    "max_results": {
+      "type": "integer", 
+      "description": "Maximum number of papers to return",
+      "default": 10
+    }
+  }
+}
+```
+
+**Tool 5: Semantic Scholar**
+```json
+{
+  "name": "semantic_scholar",
+  "displayName": "Semantic Scholar Research",
+  "description": "Search academic papers with citation analysis via Semantic Scholar API",
+  "parameters": {
+    "query": {
+      "type": "string",
+      "description": "Academic research query"  
+    },
+    "fields": {
+      "type": "array",
+      "description": "Paper fields to include (title, abstract, citations, etc.)",
+      "default": ["title", "abstract", "year", "citationCount"]
+    }
+  }
+}
+```
+
+**✅ Checkpoint**: Your tools are now defined and ready to use in AI Configs.
+
+### Step 2: Set Up LaunchDarkly AI Configs (2 minutes)
+
+**Now let's set up your AI agents in LaunchDarkly.** This is where the magic happens - you'll control your entire AI system from here:
+
+1. **LaunchDarkly Dashboard** → **AI Configs** → **Create New**
+2. **Create three AI Configs** with these exact names:
+   - `supervisor-agent`
+   - `support-agent` 
+   - `security-agent`
+
+**Quick Setup Configs:**
+
+**AI Config: `supervisor-agent`**
+```json
+{
+  "model": {"name": "claude-3-5-sonnet-20241022"},
+  "instructions": "You are an AI supervisor that coordinates between security and support agents. Route requests efficiently and track workflow state.",
+  "temperature": 0.1,
+  "tools": [],
+  "variationKey": "main"
+}
+```
+
+**AI Config: `security-agent`**
+```json
+{
+  "model": {"name": "claude-3-5-sonnet-20241022"},
+  "instructions": "You are a privacy and security agent. Detect PII and sensitive information. Flag any personal identifiers, financial data, or confidential information.",
+  "temperature": 0.0,
+  "tools": [],
+  "variationKey": "pii-detection"
+}
+```
+
+**AI Config: `support-agent`** (Start with basic version)
+```json
+{
+  "model": {"name": "claude-3-5-sonnet-20241022"},
+  "instructions": "You are a helpful AI assistant. Provide accurate answers using available documentation and search tools.",
+  "tools": ["search_v2", "reranking"],
+  "variationKey": "basic"
+}
+```
+✅ Checkpoint: Your AI agents now have roles and tools.
+
+### Step 3: Install & Configure Code (2 minutes)
 
 ```bash
 git clone https://github.com/launchdarkly/agents-demo.git
@@ -50,7 +199,14 @@ cp .env.example .env
 # - OPENAI_API_KEY (from platform.openai.com) optional but enables A/B testing
 ```
 
-### Step 2: Add Your Documents (1 minute)
+### Step 4: Add Your Documents (1 minute)
+
+**Domain Examples:**
+- **Legal**: contracts, case law, compliance guidelines
+- **Healthcare**: protocols, research papers, care guidelines
+- **SaaS**: API docs, user guides, troubleshooting manuals
+- **Financial**: policies, regulations, investment research
+- **Education**: course materials, research papers, curricula
 
 ```bash
 # Option A: Start with sample content (AI/ML knowledge base)
@@ -63,8 +219,9 @@ cp /path/to/your-company-handbook.pdf kb/
 cp /path/to/your-product-docs.pdf kb/
 cp /path/to/your-legal-policies.pdf kb/
 ```
+**✅ Checkpoint**: Your AI agents now have expertise in your specific business domain.
 
-### Step 3: Build Your Knowledge Base (1 minute)
+### Step 5: Build Your Knowledge Base (1 minute)
 
 ```bash
 # Turn documents into searchable AI knowledge
@@ -74,7 +231,7 @@ uv run python initialize_embeddings.py
 # Processes all PDFs in kb/ directory
 ```
 
-### Step 4: Launch Your Multi-Agent System (1 minute)
+### Step 6: Launch Your Multi-Agent System (1 minute)
 
 ```bash
 # Terminal 1: Start the AI agents backend
@@ -84,7 +241,7 @@ uv run uvicorn api.main:app --reload --port 8001
 uv run streamlit run ui/chat_interface.py
 ```
 
-### Step 5: See It Work (1 minute)
+### Step 7: See It Work (1 minute)
 
 1. **Open http://localhost:8501** 
 2. **Ask**: "What is reinforcement learning?" (if using sample docs) OR ask about your specific documents
@@ -104,72 +261,13 @@ uv run streamlit run ui/chat_interface.py
 - **Financial**: policies, regulations, investment research
 - **Education**: course materials, research papers, curricula
 
-**To switch domains after initial setup:**
+## Advanced AI Config Setup: Business Tiers & A/B Testing
 
-```bash
-# 1. Replace documents
-rm kb/*.pdf  # Clear existing
-cp /path/to/your-domain-docs/*.pdf kb/
+Now that your system is running, you can create sophisticated configurations for different user segments and A/B testing.
 
-# 2. Rebuild knowledge base
-uv run python initialize_embeddings.py --force
+### Configure Support Agent Business Tiers
 
-# 3. Test with domain-specific questions
-curl -X POST http://localhost:8001/chat \
-  -H "Content-Type: application/json" \
-  -d '{"user_id": "test", "message": "What are our standard contract terms?"}'
-```
-
-**Test** different query types:
-```bash
-curl -X POST http://localhost:8001/chat \
-  -H "Content-Type: application/json" \
-  -d '{"user_id": "test", "message": "What are our standard contract terms?"}'
-```
-
-**✅ Checkpoint**: Your AI agents now have expertise in your specific business domain.
-
-## Control Everything: LaunchDarkly AI Configs
-
-Instead of hardcoding AI behavior, control everything through LaunchDarkly's dashboard.
-
-### Create AI Configs
-
-1. **LaunchDarkly Dashboard** → **AI Configs** → **Create New**
-2. **Create three AI Configs** with these exact names:
-   - `supervisor-agent`
-   - `support-agent`
-   - `security-agent`
-
-### Configure Supervisor Agent
-**AI Config: `supervisor-agent`**
-```json
-{
-  "model": {"name": "claude-3-5-sonnet-20241022"},
-  "instructions": "You are an AI supervisor that coordinates between security and support agents. Route requests efficiently and track workflow state.",
-  "temperature": 0.1,
-  "tools": [],
-  "variationKey": "main"
-}
-```
-
-### Configure Security Agent
-**AI Config: `security-agent`**
-```json
-{
-  "model": {"name": "claude-3-5-sonnet-20241022"},
-  "instructions": "You are a privacy and security agent. Detect PII and sensitive information. Flag any personal identifiers, financial data, or confidential information.",
-  "temperature": 0.0,
-  "tools": [],
-  "variationKey": "pii-detection"
-}
-```
-
-### Configure Support Agent (Multiple Variations)
-
-This is where you create different service tiers:
-
-**AI Config: `support-agent`**
+Add multiple variations to your existing `support-agent` config for different service tiers:
 
 **Variation 1: `free-tier`**
 ```json
