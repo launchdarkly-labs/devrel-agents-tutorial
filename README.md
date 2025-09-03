@@ -16,15 +16,15 @@ You'll build a robust system that adapts to users in real-time while giving you 
 
 ## What You'll Build in 20 Minutes
 
-A **multi-agent AI system** that works with YOUR content and YOUR business logic:
+A **multi-agent AI system** powered by **LaunchDarkly AI Configs** that works with YOUR content and YOUR business logic:
 
 - **Replace the knowledge base** with your own documents (legal, medical, company docs)
-- **Customize agent instructions** for your domain (customer support, research, compliance)  
+- **Customize agent instructions** via **LaunchDarkly AI Configs** for your domain (customer support, research, compliance)  
 - **Create AI Config variations** that match your business tiers (free, pro, enterprise)
-- **Add any MCP tools** for your specific needs (GitHub, Slack, databases, APIs)
-- **Run experiments** to optimize performance with real data
+- **Control tool availability** through **LaunchDarkly AI Configs** for your specific needs (GitHub, Slack, databases, APIs)
+- **Run A/B experiments** using **LaunchDarkly's experimentation platform** to optimize performance with real data
 
-By the end, you'll have three specialized agents working together: supervisor (orchestrates workflow), security (compliance), and research (your documents + external tools).
+By the end, you'll have three specialized agents working together - all controlled by **LaunchDarkly AI Configs**: supervisor (orchestrates workflow), security (compliance), and research (your documents + external tools).
 
 ## Get It Running in 5 Minutes
 
