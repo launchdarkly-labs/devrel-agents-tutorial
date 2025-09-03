@@ -12,7 +12,7 @@ This tutorial shows you how to build AI systems the smart way. Instead of hardco
 
 **The result?** Change models, adjust privacy settings, or add new tools with a few clicks. Test everything with real A/B experiments. Make AI decisions backed by actual data instead of developer intuition.
 
-You'll build a production-ready system that adapts to users in real-time while giving you the metrics to prove what actually works for your business.
+You'll build a robust system that adapts to users in real-time while giving you the metrics to prove what actually works for your business.
 
 ## What You'll Build in 20 Minutes
 
@@ -25,16 +25,6 @@ A **multi-agent AI system** that works with YOUR content and YOUR business logic
 - **Run experiments** to optimize performance with real data
 
 By the end, you'll have three specialized agents working together: supervisor (orchestrates workflow), security (compliance), and research (your documents + external tools).
-
-## Why This Matters
-
-Here's a painfully familiar scenario: You built an AI system using GPT-4, but now you're curious if Claude 3.5 might be cheaper without reducing user satisfaction. In traditional architectures, this "simple" test requires development time, testing, coordinated deployments, and potential downtime.
-
-**Result**: You avoid experimenting, missing out on cost savings and performance improvements.
-
-This tutorial demonstrates **runtime configuration** through LaunchDarkly AI Configs. Model switching, subscription-based tool access, and geographic customization—all controlled through configuration, not code deployments.
-
----
 
 ## Get It Running in 5 Minutes
 
@@ -505,18 +495,13 @@ A production-ready multi-agent AI system with:
 - **Multi-Agent Orchestration**: Supervisor coordination with state management
 - **Dynamic Configuration**: Zero-downtime model switching, A/B testing, cost controls
 
+Everything is configurable through LaunchDarkly. No deployments needed for AI changes.
+
 ## Next Steps
 
 - **🎨 Custom UI**: React/Vue frontend matching your brand
-- **🧠 Domain Knowledge**: Industry-specific documents and terminology  
-- **🔌 Business Integration**: Connect existing systems (CRM, databases)
 - **🎯 Advanced Targeting**: Behavior-based model selection
-- **🛡️ Enterprise Security**: SSO, audit logging, governance
-- **📊 Analytics**: Custom metrics and business intelligence
 
-Everything is configurable through LaunchDarkly. No deployments needed for AI changes.
-
----
 
 ## Resources
 
