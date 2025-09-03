@@ -35,38 +35,39 @@ def track_langchain_metrics(tracker, func):
         result = tracker.track_duration_of(func)
         
         # The tracker.track_duration_of already handles timing, so we don't need to calculate it again
-        # For time to first token, we'll use a reasonable estimate based on the response
-        if hasattr(result, 'content') or hasattr(result, 'response_metadata'):
-            # Estimate time to first token as a portion of total time (typically much faster)
-            if hasattr(tracker, 'track_time_to_first_token'):
-                # Use a reasonable estimate - first token is typically 10-30% of total generation time
-                estimated_ttft = 500  # 500ms is a reasonable estimate for first token
-                tracker.track_time_to_first_token(estimated_ttft)
-                print(f"🎯 TIME TO FIRST TOKEN: {estimated_ttft}ms (estimated)")
+        # Note: TTFT (Time To First Token) should only be tracked when actual streaming data is available
         
         tracker.track_success()
         print(f"✅ PROPER LAUNCHDARKLY TRACKING: Operation completed successfully")
         
-        # Extract token usage from LangChain response
+        # Extract token usage from LangChain response - only track when data is available
         if hasattr(result, "usage_metadata") and result.usage_metadata:
             usage_data = result.usage_metadata
-            token_usage = TokenUsage(
-                input=usage_data.get("input_tokens", 0),
-                output=usage_data.get("output_tokens", 0),
-                total=usage_data.get("total_tokens", 0)
-            )
-            tracker.track_tokens(token_usage)
-            print(f"🎯 PROPER LD TOKEN TRACKING: {usage_data.get('total_tokens', 0)} tokens")
+            # Only create TokenUsage if we have actual token data (not zeros)
+            input_tokens = usage_data.get("input_tokens")
+            output_tokens = usage_data.get("output_tokens") 
+            total_tokens = usage_data.get("total_tokens")
+            
+            if any(tokens is not None and tokens > 0 for tokens in [input_tokens, output_tokens, total_tokens]):
+                token_usage = TokenUsage(
+                    input=input_tokens or 0,
+                    output=output_tokens or 0,
+                    total=total_tokens or (input_tokens or 0) + (output_tokens or 0)
+                )
+                tracker.track_tokens(token_usage)
+                print(f"🎯 PROPER LD TOKEN TRACKING: {token_usage.total} tokens")
         elif hasattr(result, "response_metadata") and result.response_metadata:
-            # Handle Anthropic Claude response format
+            # Handle Anthropic Claude response format - only track when data is available
             metadata = result.response_metadata
             if isinstance(metadata, dict):
                 usage = metadata.get('usage', {})
                 if isinstance(usage, dict):
-                    input_tokens = usage.get('input_tokens', 0)
-                    output_tokens = usage.get('output_tokens', 0)
-                    total_tokens = input_tokens + output_tokens
-                    if total_tokens > 0:
+                    input_tokens = usage.get('input_tokens')
+                    output_tokens = usage.get('output_tokens')
+                    
+                    # Only track if we have actual token data (not None or 0)
+                    if input_tokens is not None and output_tokens is not None and (input_tokens > 0 or output_tokens > 0):
+                        total_tokens = input_tokens + output_tokens
                         token_usage = TokenUsage(
                             input=input_tokens,
                             output=output_tokens,
@@ -199,16 +200,17 @@ class AIMetricsTracker:
                     self.ld_tracker.track_error()
                 
                 # Track token usage using proper TokenUsage object if available
-                if tokens_used and hasattr(self.ld_tracker, 'track_tokens'):
+                if tokens_used and tokens_used > 0 and hasattr(self.ld_tracker, 'track_tokens'):
                     try:
-                        # Create proper TokenUsage object
+                        # Only track if we have actual token data, not estimates
+                        # Note: This method should ideally receive input/output breakdown from the caller
                         token_usage = TokenUsage(
-                            input=tokens_used // 2,  # Estimate
-                            output=tokens_used - (tokens_used // 2),  # Estimate
+                            input=0,  # Unknown - would need actual data from model response
+                            output=0,  # Unknown - would need actual data from model response  
                             total=tokens_used
                         )
                         self.ld_tracker.track_tokens(token_usage)
-                        print(f"🎯 PROPER TOKEN TRACKING: {tokens_used} tokens")
+                        print(f"🎯 PROPER TOKEN TRACKING: {tokens_used} tokens (total only)")
                     except Exception as token_error:
                         print(f"⚠️  TOKEN TRACKING ERROR: {token_error}")
                     

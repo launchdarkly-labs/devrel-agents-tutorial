@@ -22,10 +22,14 @@ def create_security_agent(agent_config: AgentConfig, config_manager: ConfigManag
     from langchain_anthropic import ChatAnthropic
     from langchain_openai import ChatOpenAI
     
-    model_name = agent_config.model.lower()
-    if "gpt" in model_name or "openai" in model_name:
+    # Use provider.name from config instead of parsing model name
+    provider_name = getattr(agent_config, 'provider', {}).get('name', '').lower()
+    if provider_name == 'openai':
         model = ChatOpenAI(model=agent_config.model, temperature=agent_config.temperature)
+    elif provider_name == 'anthropic':
+        model = ChatAnthropic(model=agent_config.model, temperature=agent_config.temperature)
     else:
+        # Fallback to Anthropic if provider not specified or unknown
         model = ChatAnthropic(model=agent_config.model, temperature=agent_config.temperature)
     tracker = agent_config.tracker
     
@@ -42,6 +46,13 @@ def create_security_agent(agent_config: AgentConfig, config_manager: ConfigManag
         tools_list = []
     print(f"🔐 CREATING SECURITY AGENT: Starting with tools {tools_list}")
     
+    # Define available tools in a dictionary for dynamic access
+    tool_registry = {
+        "search_v1": SearchToolV1(),
+        "search_v2": SearchToolV2(),
+        "reranking": RerankingTool()
+    }
+    
     available_tools = []
     
     # For security agent, we typically use fewer tools - focus on native model capabilities
@@ -49,12 +60,11 @@ def create_security_agent(agent_config: AgentConfig, config_manager: ConfigManag
     print(f"🔧 PROCESSING SECURITY TOOLS: {tools_list}")
     
     for tool_name in tools_list:
-        if tool_name == "search_v1":
-            available_tools.append(SearchToolV1())
-        elif tool_name == "search_v2":
-            available_tools.append(SearchToolV2())
-        elif tool_name == "reranking":
-            available_tools.append(RerankingTool())
+        if tool_name in tool_registry:
+            available_tools.append(tool_registry[tool_name])
+            print(f"✅ SECURITY TOOL ADDED: {tool_name}")
+        else:
+            print(f"❌ UNKNOWN SECURITY TOOL: {tool_name} not found in registry")
     
     # Bind tools to model if available
     if available_tools:

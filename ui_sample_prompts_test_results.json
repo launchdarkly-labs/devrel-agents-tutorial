@@ -1,0 +1,90 @@
+[
+  {
+    "prompt_name": "Internal Knowledge",
+    "query": "What information do you have about machine learning in your knowledge base?",
+    "duration_seconds": 31.02519989013672,
+    "success": false,
+    "tool_validation": {
+      "passed": false,
+      "details": [
+        "\u274c Expected no tools but used: ['search_v2']"
+      ],
+      "score": 0
+    },
+    "content_validation": {
+      "passed": true,
+      "details": [
+        "\u2705 Tool results integrated (signals: ['based on', 'found', 'search results'])",
+        "\u2705 Keywords found: ['machine learning', 'knowledge']"
+      ],
+      "score": 100
+    },
+    "response_length": 2012,
+    "tools_used": [
+      "search_v2"
+    ],
+    "error": null
+  },
+  {
+    "prompt_name": "ArXiv Research",
+    "query": "Find recent ArXiv papers on reinforcement learning from the last 6 months",
+    "duration_seconds": 21.0174458026886,
+    "success": false,
+    "tool_validation": {
+      "passed": true,
+      "details": [
+        "\u2705 Found expected tools: ['arxiv_search']"
+      ],
+      "score": 50
+    },
+    "content_validation": {
+      "passed": false,
+      "details": [
+        "\u274c No clear evidence of tool result integration",
+        "\u2705 Keywords found: ['recent']"
+      ],
+      "score": 12
+    },
+    "response_length": 139,
+    "tools_used": [
+      "arxiv_search",
+      "arxiv_search",
+      "arxiv_search",
+      "arxiv_search"
+    ],
+    "error": null
+  },
+  {
+    "prompt_name": "Academic Search",
+    "query": "Search Semantic Scholar for papers on federated learning",
+    "duration_seconds": 60.00379681587219,
+    "success": false,
+    "tool_validation": {},
+    "content_validation": {},
+    "response_length": 0,
+    "tools_used": [],
+    "error": "Request failed: HTTPConnectionPool(host='localhost', port=8001): Read timed out. (read timeout=60)"
+  },
+  {
+    "prompt_name": "RAG + Reranking",
+    "query": "Find the best matches for 'deep learning algorithms' in your documentation",
+    "duration_seconds": 60.004364013671875,
+    "success": false,
+    "tool_validation": {},
+    "content_validation": {},
+    "response_length": 0,
+    "tools_used": [],
+    "error": "Request failed: HTTPConnectionPool(host='localhost', port=8001): Read timed out. (read timeout=60)"
+  },
+  {
+    "prompt_name": "Full Stack Search",
+    "query": "Compare what you know about transformers from your knowledge base with recent ArXiv and Semantic Scholar papers",
+    "duration_seconds": 60.00588274002075,
+    "success": false,
+    "tool_validation": {},
+    "content_validation": {},
+    "response_length": 0,
+    "tools_used": [],
+    "error": "Request failed: HTTPConnectionPool(host='localhost', port=8001): Read timed out. (read timeout=60)"
+  }
+]

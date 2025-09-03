@@ -23,7 +23,7 @@ curl http://localhost:8001/chat -X POST -H "Content-Type: application/json" \
 # Generate 20 queries with 2-second delays
 python tools/traffic_generator.py --queries 20 --delay 2
 
-# Generate 100 queries quickly (for blog post metrics)
+# Generate 100 queries quickly (for demo metrics)
 python tools/traffic_generator.py --queries 100 --delay 0.5
 
 # Verbose output to see what's happening
@@ -144,7 +144,7 @@ if response_length > 150:  # Changed from 200
 # Slow and steady (for demos)
 python tools/traffic_generator.py --queries 30 --delay 3
 
-# Fast batch (for blog post data)  
+# Fast batch (for demo data)  
 python tools/traffic_generator.py --queries 200 --delay 0.2
 
 # Small test
@@ -179,7 +179,7 @@ python tools/traffic_generator.py --queries 5 --delay 1 --verbose
 
 ## 🎓 Tutorial Integration
 
-### For Blog Posts
+### For Demo Purposes
 1. **Pre-Generate Data**: Run 500+ queries with various users/questions
 2. **Analyze Results**: Export LaunchDarkly experiment data  
 3. **Create Charts**: Show cost, latency, satisfaction by variation
@@ -279,7 +279,7 @@ python tools/traffic_generator.py --queries 75 --delay 2
 
 1. **Customize Your Data**: Add users/queries specific to your use case
 2. **Adjust Feedback Rules**: Fine-tune what makes a "good" response
-3. **Scale Up**: Run 500+ queries for comprehensive blog post data
+3. **Scale Up**: Run 500+ queries for comprehensive demo data
 4. **Create Variations**: Test different tool combinations and model configurations
 5. **Analyze Results**: Use LaunchDarkly's experiment analysis for insights
 

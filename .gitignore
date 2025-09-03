@@ -4,6 +4,18 @@ __pycache__/
 *.pyd
 .Python
 
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Tests
+tests/
+
 # Project documentation files
 project_overview.md
 .claude
