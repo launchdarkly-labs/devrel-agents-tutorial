@@ -16,7 +16,6 @@ class AgentConfig(BaseModel):
     detected: Optional[bool] = None
     types: Optional[List[str]] = None
     redacted: Optional[str] = None
-    safe_to_proceed: Optional[bool] = None
 
 class ChatResponse(BaseModel):
     id: str

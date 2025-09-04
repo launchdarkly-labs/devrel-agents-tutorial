@@ -29,9 +29,9 @@ def create_supervisor_agent(supervisor_config: AgentConfig, support_config: Agen
     
     model_name = supervisor_config.model.lower()
     if "gpt" in model_name or "openai" in model_name:
-        supervisor_model = ChatOpenAI(model=supervisor_config.model, temperature=supervisor_config.temperature)
+        supervisor_model = ChatOpenAI(model=supervisor_config.model, temperature=0.0)
     else:
-        supervisor_model = ChatAnthropic(model=supervisor_config.model, temperature=supervisor_config.temperature)
+        supervisor_model = ChatAnthropic(model=supervisor_config.model, temperature=0.0)
     
     # Create child agents with config manager
     support_agent = create_support_agent(support_config, config_manager)
@@ -144,16 +144,15 @@ def create_supervisor_agent(supervisor_config: AgentConfig, support_config: Agen
             detected = result.get("detected", False)
             types = result.get("types", [])
             redacted_text = result.get("redacted", state["user_input"])
-            safe_to_proceed = result.get("safe_to_proceed", True)
             
-            print(f"🔒 SUPERVISOR: PII detected={detected}, safe_to_proceed={safe_to_proceed}, types={types}")
+            print(f"🔒 SUPERVISOR: PII detected={detected}, types={types}")
             print(f"🔒 SUPERVISOR DEBUG: Security agent result keys: {list(result.keys())}")
             print(f"🔒 SUPERVISOR DEBUG: Security tool_details: {result.get('tool_details', [])}")
             
             return {
                 "messages": [AIMessage(content=result["response"])],
                 "workflow_stage": new_stage,
-                "security_cleared": safe_to_proceed,
+                "security_cleared": True,  # Always proceed after security agent
                 "processed_user_input": redacted_text,  # Use redacted text for support agent
                 "pii_detected": detected,
                 "pii_types": types,
@@ -186,9 +185,8 @@ def create_supervisor_agent(supervisor_config: AgentConfig, support_config: Agen
             processed_input = state.get("processed_user_input", state["user_input"])
             pii_detected = state.get("pii_detected", False)
             pii_types = state.get("pii_types", [])
-            safe_to_proceed = state.get("security_cleared", True)
             
-            print(f"🔒 SUPERVISOR: Passing to support agent - PII detected: {pii_detected}, safe: {safe_to_proceed}")
+            print(f"🔒 SUPERVISOR: Passing to support agent - PII detected: {pii_detected}")
             print(f"📝 SUPERVISOR: Input text: '{processed_input[:100]}...'")
             if pii_types:
                 print(f"🔍 SUPERVISOR: PII types found: {pii_types}")

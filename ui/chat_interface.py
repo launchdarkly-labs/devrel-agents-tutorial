@@ -401,7 +401,7 @@ for message in st.session_state.messages:
                 if current_feedback:
                     feedback_emoji = "👍" if current_feedback == "positive" else "👎"
                     st.caption(f"Feedback: {feedback_emoji}")
-            with st.expander("⚙️ Multi-Agent Configuration"):
+            with st.expander("Workflow Details"):
                 metadata = message["metadata"]
                 if "agent_configurations" in metadata:
                     # Display each agent's configuration
@@ -420,12 +420,14 @@ for message in st.session_state.messages:
                         if processed_tools:
                             config_data["tools_used"] = processed_tools
                         
-                        # Show redacted text for supervisor agent
+                        # Show redacted text for supervisor agent only if PII was detected
                         if agent_config.get("agent_name") == "supervisor-agent":
                             # Look for redacted text from security agent in metadata
                             agent_data = metadata.get("agent_configurations", [])
                             for agent in agent_data:
-                                if agent.get("agent_name") == "security-agent" and agent.get("redacted"):
+                                if (agent.get("agent_name") == "security-agent" and 
+                                    agent.get("detected") == True and 
+                                    agent.get("redacted")):
                                     config_data["redacted_text"] = agent.get("redacted", "")
                                     break
                         
@@ -447,7 +449,6 @@ for message in st.session_state.messages:
                                         config_data["security_clearance"] = {
                                             "detected": agent.get("detected"),
                                             "types": agent.get("types", []),
-                                            "safe_to_proceed": agent.get("safe_to_proceed"),
                                             "redacted": agent.get("redacted", "")
                                         }
                             
@@ -596,7 +597,7 @@ if prompt:
                                 except Exception as e:
                                     st.error(f"Failed to submit feedback: {e}")
                     
-                with st.expander("⚙️ Multi-Agent Configuration"):
+                with st.expander("Workflow Details"):
                     if "agent_configurations" in data and data["agent_configurations"]:
                         # Display each agent's configuration
                         for agent_config in data["agent_configurations"]:
@@ -614,11 +615,13 @@ if prompt:
                             if processed_tools:
                                 config_data["tools_used"] = processed_tools
                             
-                            # Show redacted text for supervisor agent
+                            # Show redacted text for supervisor agent only if PII was detected
                             if agent_config.get("agent_name") == "supervisor-agent":
                                 # Look for redacted text from security agent in data
                                 for agent in data["agent_configurations"]:
-                                    if agent.get("agent_name") == "security-agent" and agent.get("redacted"):
+                                    if (agent.get("agent_name") == "security-agent" and 
+                                        agent.get("detected") == True and 
+                                        agent.get("redacted")):
                                         config_data["redacted_text"] = agent.get("redacted", "")
                                         break
                             

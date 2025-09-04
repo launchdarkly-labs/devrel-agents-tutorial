@@ -236,19 +236,18 @@ def create_support_agent(config: AgentConfig, config_manager=None):
     model_name_attr = getattr(config, 'model', None) or getattr(config, 'model_name', 'claude-3-haiku-20240307')
     model_name = model_name_attr.lower()
     if "gpt" in model_name or "openai" in model_name:
-        model = ChatOpenAI(model=model_name_attr, temperature=config.temperature)
+        model = ChatOpenAI(model=model_name_attr, temperature=0.0)
     elif "claude" in model_name or "anthropic" in model_name:
-        model = ChatAnthropic(model=model_name_attr, temperature=config.temperature)
+        model = ChatAnthropic(model=model_name_attr, temperature=0.0)
     else:
         # Default to Anthropic for unknown models
-        model = ChatAnthropic(model=model_name_attr, temperature=config.temperature)
+        model = ChatAnthropic(model=model_name_attr, temperature=0.0)
     
     # Debug: Show final available tools
     print(f"🔧 FINAL AVAILABLE TOOLS: {[tool.name if hasattr(tool, 'name') else str(tool) for tool in available_tools]}")
     
     # Store config values for nested functions
     config_instructions = config.instructions
-    config_temperature = config.temperature
     
     # Bind tools to model - this works universally across providers
     if available_tools:
@@ -536,7 +535,7 @@ Do not repeat the same search query again."""))
                 
                 # Use the base model without any tools bound for final completion
                 model_name_for_completion = getattr(config, 'model', None) or getattr(config, 'model_name', 'claude-3-haiku-20240307')
-                completion_model = get_model_instance(model_name_for_completion, config_temperature)
+                completion_model = get_model_instance(model_name_for_completion, 0.0)
                 response = completion_model.invoke(messages)
                 print(f"🎯 FORCED SYNTHESIS: Model completing with synthesis instructions")
                 return {"messages": [response]}

@@ -75,7 +75,6 @@ class AgentService:
             security_detected = result.get("pii_detected", False)
             security_types = result.get("pii_types", [])
             security_redacted = result.get("redacted_text", message)
-            security_safe_to_proceed = result.get("security_cleared", True)
             security_tool_details = result.get("security_tool_details", [])
             
             print(f"🔍 API DEBUG: security_tool_details = {security_tool_details}")
@@ -83,7 +82,7 @@ class AgentService:
             print(f"   📊 Tools used: {actual_tool_calls}")
             print(f"   📊 Tool details: {len(tool_details)} items")
             print(f"   💬 Response length: {len(result['final_response'])} chars")
-            print(f"   🔒 Security: detected={security_detected}, safe={security_safe_to_proceed}")
+            print(f"   🔒 Security: detected={security_detected}")
             
             # Create agent configuration metadata showing actual usage
             agent_configurations = [
@@ -102,8 +101,7 @@ class AgentService:
                     # Pass PII detection results to UI
                     detected=security_detected,
                     types=security_types,
-                    redacted=security_redacted,
-                    safe_to_proceed=security_safe_to_proceed
+                    redacted=security_redacted
                 ),
                 APIAgentConfig(
                     agent_name="support-agent",
