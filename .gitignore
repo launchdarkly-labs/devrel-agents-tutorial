@@ -16,6 +16,9 @@ Thumbs.db
 # Tests
 tests/
 
+# Environment files
+.env
+
 # Project documentation files
 project_overview.md
 .claude
