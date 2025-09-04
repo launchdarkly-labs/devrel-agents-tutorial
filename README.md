@@ -148,9 +148,9 @@ In **LaunchDarkly Dashboard Sidebar** → **Library** (under AI) → **Tools** t
 
 ### Create the RAG vector search tool:
 
-> **Key:** `search_v2`
+> **Key:** ```search_v2```
 >
-> **Description:** `Semantic search using vector embeddings`
+> **Description:** ```Semantic search using vector embeddings```
 >
 > **Schema:**
 > ```json
@@ -175,9 +175,9 @@ In **LaunchDarkly Dashboard Sidebar** → **Library** (under AI) → **Tools** t
 
 ### Create the reranking tool:
 
-> **Key:** `reranking`
+> **Key:** ```reranking```
 >
-> **Description:** `Reorders results by relevance`
+> **Description:** ```Reorders results by relevance```
 >
 > **Schema:**
 > ```json
@@ -213,7 +213,7 @@ Configure your **LangGraph** multi-agent system dynamically. **LangGraph** is La
 ### Create the Supervisor Agent
 
 1. Go to **LaunchDarkly Dashboard Sidebar** → **AI Configs** → **Create New**
-2. Select 🤖 `Agent-based`
+2. Select `🤖 Agent-based`
 
 <br>
 
@@ -223,13 +223,13 @@ Configure your **LangGraph** multi-agent system dynamically. **LangGraph** is La
 
 </div>
 
-3. Name it `supervisor-agent`
+3. Name it ```supervisor-agent```
 4. Add this configuration:
 
 
-> **variation:** `supervisor-basic`
+> **variation:** ```supervisor-basic```
 >
-> **Model configuration:** `Anthropic` `claude-3-7-sonnet-latest`
+> **Model configuration:** ```Anthropic``` ```claude-3-7-sonnet-latest```
 >
 > → **Add parameters**
 > → **Click Custom parameters**
@@ -247,11 +247,11 @@ The supervisor agent demonstrates **LangGraph** orchestration by routing request
 
 ### Create the Security Agent
 
-Similarly, create another AI Config called `security-agent`:
+Similarly, create another AI Config called ```security-agent```:
 
-> **variation:** `pii-detector`
+> **variation:** ```pii-detector```
 >
-> **Model configuration:** `Anthropic` `claude-3-7-sonnet-latest`
+> **Model configuration:** ```Anthropic``` ```claude-3-7-sonnet-latest```
 >
 > **Goal or task:** 
 > ```
@@ -262,12 +262,12 @@ This agent detects PII and provides detailed redaction information, showing exac
 
 ### Create the Support Agent
 
-Finally, create `support-agent`:
+Finally, create ```support-agent```:
 
 
-> **variation:** `rag-search-enhanced`
+> **variation:** ```rag-search-enhanced```
 >
-> **Model configuration:** `Anthropic` `claude-3-7-sonnet-latest`
+> **Model configuration:** ```Anthropic``` ```claude-3-7-sonnet-latest```
 >
 > → **Add tools**
 > select **reranking** and **search_v2**
