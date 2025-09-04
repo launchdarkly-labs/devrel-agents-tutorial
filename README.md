@@ -4,11 +4,11 @@ Build a working multi-agent system with dynamic configuration in 20 minutes usin
 
 *Part 1 of 3 of the series **Chaos to Clarity: Defensible AI Systems That Deliver on Your Goals***
 
-Most AI development follows the same broken pattern: build a system, discover GPT-4 costs too much, find out Claude works better for your use case, realize European users need different privacy handling, then struggle to explain which model, prompt, or tool combination actually works best for different scenarios. Every change requires code deploys, testing cycles, and hoping nothing breaks.
+You've been there: your AI chatbot works great in testing, then production hits and GPT-4 costs spiral out of control. You switch to Claude, but now European users need different privacy rules. Every change means another deploy, more testing, and crossed fingers that nothing breaks.
 
-Your competitors ship faster because they control AI behavior dynamically instead of hardcoding everything.
+The teams shipping faster? They control AI behavior dynamically instead of hardcoding everything.
 
-This three-part series shows you how to build **LangGraph multi-agent workflows** that get their intelligence from **RAG search** through your business documents, enhanced with **MCP tools** for live external data, all controlled through **LaunchDarkly AI Configs**.
+This series shows you how to build **LangGraph multi-agent workflows** that get their intelligence from **RAG** search through your business documents, enhanced with **MCP tools** for live external data, all controlled through **LaunchDarkly AI Configs** without touching code.
 
 ## What This Series Covers
 
@@ -38,7 +38,7 @@ You'll need:
 
 ## Step 1: Clone and Configure (2 minutes)
 
-Set up the foundation. We'll explain each part as we go.
+First, let's get everything running locally. We'll explain what each piece does as we build.
 
 ```bash
 # Get the code
@@ -76,8 +76,6 @@ First, you need to get your LaunchDarkly SDK key by creating a project:
 </div>
 
 4. **Get your SDK key**:
-  
-    Go to:
     
     ⚙️ (bottom of sidebar) → **Projects** → **multi-agent-chatbot** → ⚙️ (to the right) 
     
@@ -100,7 +98,7 @@ OPENAI_API_KEY=your-openai-key        # Required for RAG embeddings
 ANTHROPIC_API_KEY=your-anthropic-key  # Required for Claude models
 ```
 
-This sets up a LangGraph application that uses LaunchDarkly to control AI behavior. Now you can swap actors and directors mid-performance without stopping the show.
+This sets up a **LangGraph** application that uses LaunchDarkly to control AI behavior. Think of it like swapping actors mid-performance without stopping the show.
 
 ## Step 2: Add Your Business Knowledge (2 minutes)
 
@@ -123,14 +121,14 @@ Document types that work well:
 
 ## Step 3: Initialize Your Knowledge Base (2 minutes)
 
-Turn documents into searchable **RAG architecture** knowledge:
+Turn your documents into searchable **RAG** knowledge:
 
 ```bash
 # Create vector embeddings for semantic search
 uv run python initialize_embeddings.py --force
 ```
 
-This builds your **RAG architecture** (Retrieval-Augmented Generation) foundation using **OpenAI's text-embedding-3-small** model and **FAISS** vector database. The **RAG architecture** converts documents into 1536-dimensional vector embeddings that capture semantic meaning rather than just keywords.
+This builds your **RAG** (Retrieval-Augmented Generation) foundation using **OpenAI's** text-embedding model and FAISS vector database. **RAG** converts documents into vector embeddings that capture semantic meaning rather than just keywords, making search actually understand context.
 
 ## Step 4: Define Your Tools (3 minutes)
 
@@ -148,9 +146,16 @@ In **LaunchDarkly Dashboard Sidebar** → **Library** (under AI) → **Tools** t
 
 ### Create the RAG vector search tool:
 
-> **Key:** ```search_v2```
+> 
+> **Key:** 
+> ```
+> search_v2
+> ```
 >
-> **Description:** ```Semantic search using vector embeddings```
+> **Description:** 
+> ```
+> Semantic search using vector embeddings
+> ```
 >
 > **Schema:**
 > ```json
@@ -175,9 +180,16 @@ In **LaunchDarkly Dashboard Sidebar** → **Library** (under AI) → **Tools** t
 
 ### Create the reranking tool:
 
-> **Key:** ```reranking```
+> 
+> **Key:** 
+> ```
+> reranking
+> ```
 >
-> **Description:** ```Reorders results by relevance```
+> **Description:** 
+> ```
+> Reorders results by relevance
+> ```
 >
 > **Schema:**
 > ```json
@@ -200,15 +212,17 @@ In **LaunchDarkly Dashboard Sidebar** → **Library** (under AI) → **Tools** t
 > }
 > ```
 
+
 <Callout intent="info">
+
 **🔍 How Your RAG Architecture Works**
 
-These tools implement your **RAG architecture** in two stages: the `search_v2` tool performs semantic similarity search using **FAISS** by converting queries into the same 1536-dimensional vector space as your documents (via **OpenAI text-embedding-3-small**), while `reranking` uses cross-encoder models to reorder results for maximum relevance. This **FAISS**-powered **RAG architecture** significantly outperforms basic keyword search by understanding context and semantic relationships through high-dimensional vector similarity.
+Your **RAG** system works in two stages: `search_v2` performs semantic similarity search using FAISS by converting queries into the same vector space as your documents (via **OpenAI** embeddings), while `reranking` reorders results for maximum relevance. This **RAG** approach significantly outperforms keyword search by understanding context, so asking "How do I cancel?" finds your cancellation policy even without the word "cancel."
 </Callout>
 
 ## Step 5: Create Your AI Agents in LaunchDarkly (5 minutes)
 
-Configure your **LangGraph** multi-agent system dynamically. **LangGraph** is LangChain's framework for building stateful, multi-actor applications that maintain conversation state across agent interactions. Your **LangGraph** architecture enables sophisticated workflows where agents collaborate and pass context between each other.
+Configure your **LangGraph** multi-agent system dynamically. **LangGraph** is LangChain's framework for building stateful, multi-**agent** applications that maintain conversation state across **agent** interactions. Your **LangGraph** architecture enables sophisticated workflows where **agents** collaborate and pass context between each other.
 
 ### Create the Supervisor Agent
 
@@ -223,13 +237,25 @@ Configure your **LangGraph** multi-agent system dynamically. **LangGraph** is La
 
 </div>
 
-3. Name it ```supervisor-agent```
+3. Name it `
+```
+supervisor-agent
+```
 4. Add this configuration:
 
-
-> **variation:** ```supervisor-basic```
+> 
+> **variation:** 
+> ```
+> supervisor-basic
+> ```
 >
-> **Model configuration:** ```Anthropic``` ```claude-3-7-sonnet-latest```
+> **Model configuration:** 
+> ```
+> Anthropic
+> ``` 
+> ```
+> claude-3-7-sonnet-latest
+> ```
 >
 > → **Add parameters**
 > → **Click Custom parameters**
@@ -242,16 +268,29 @@ Configure your **LangGraph** multi-agent system dynamically. **LangGraph** is La
 > You are a helpful assistant that can search documentation and research papers. When search results are available, prioritize information from those results over your general knowledge to provide the most accurate and up-to-date responses. Use available tools to search the knowledge base and external research databases to answer questions accurately and comprehensively.
 > ```
 
-The supervisor agent demonstrates **LangGraph** orchestration by routing requests based on content analysis rather than rigid rules. **LangGraph** enables this agent to maintain conversation context and make intelligent routing decisions that adapt to user needs and LaunchDarkly AI Config parameters.
+The supervisor **agent** demonstrates **LangGraph** orchestration by routing requests based on content analysis rather than rigid rules. **LangGraph** enables this **agent** to maintain conversation context and make intelligent routing decisions that adapt to user needs and LaunchDarkly AI Config parameters.
 
 
 ### Create the Security Agent
 
-Similarly, create another AI Config called ```security-agent```:
+Similarly, create another AI Config called 
+```
+ security-agent
+```
 
-> **variation:** ```pii-detector```
+> 
+> **variation:** 
+> ```
+> pii-detector
+> ```
 >
-> **Model configuration:** ```Anthropic``` ```claude-3-7-sonnet-latest```
+> **Model configuration:** 
+> ```
+> Anthropic
+> ``` 
+> ```
+> claude-3-7-sonnet-latest
+> ```
 >
 > **Goal or task:** 
 > ```
@@ -262,15 +301,29 @@ This agent detects PII and provides detailed redaction information, showing exac
 
 ### Create the Support Agent
 
-Finally, create ```support-agent```:
+Finally, create 
+```
+support-agent
+```
 
 
-> **variation:** ```rag-search-enhanced```
+> 
+> **variation:** 
+> ```
+> rag-search-enhanced
+> ```
 >
-> **Model configuration:** ```Anthropic``` ```claude-3-7-sonnet-latest```
+> **Model configuration:** 
+> ```
+> Anthropic
+> ``` 
+> ```
+> claude-3-7-sonnet-latest
+> ```
 >
 > → **Add tools**
-> select **reranking** and **search_v2**
+> 
+> select:  **✅ reranking** **✅ search_v2**
 >
 > **Goal or task:** 
 > ```
@@ -285,7 +338,7 @@ Finally, create ```support-agent```:
 
 </div>
 
-This agent combines **LangGraph** workflow management with your **RAG architecture** tools. **LangGraph** enables the agent to chain multiple tool calls together: first using the **RAG architecture** for document retrieval, then semantic reranking, all while maintaining conversation state and handling error recovery gracefully.
+This **agent** combines **LangGraph** workflow management with your **RAG** tools. **LangGraph** enables the **agent** to chain multiple tool calls together: first using **RAG** for document retrieval, then semantic reranking, all while maintaining conversation state and handling error recovery gracefully.
 
 ## Step 6: Launch Your System (2 minutes)
 
@@ -327,7 +380,7 @@ Or ask about your specific domain: "What's our refund policy?"
 
 </div>
 
-Watch **LangGraph** in action: the supervisor routes to security first (detecting PII), then to support which uses your **RAG architecture** for document search. **LangGraph** maintains state throughout this multi-agent workflow, ensuring context flows seamlessly between agents.
+Watch **LangGraph** in action: the supervisor **agent** routes to the security **agent** first (detecting PII), then to the support **agent** which uses your **RAG** system for document search. **LangGraph** maintains state throughout this multi-**agent** workflow, ensuring context flows seamlessly between **agents**.
 
 ## Step 8: Make Changes Without Deploying Code
 
@@ -368,19 +421,19 @@ Changes take effect immediately without downtime.
 
 ## Understanding What You Built
 
-Your **LangGraph** multi-agent system with **RAG architecture** includes:
+Your **LangGraph** multi-**agent** system with **RAG** includes:
 
 **1. LangGraph Orchestration**
-The supervisor agent uses **LangGraph** state management to route requests intelligently based on content analysis.
+The supervisor **agent** uses **LangGraph** state management to route requests intelligently based on content analysis.
 
 **2. Privacy Protection**
-The security agent integrates with **LangGraph** workflows to detect PII before processing, supporting compliance.
+The security **agent** integrates with **LangGraph** workflows to detect PII before processing, supporting compliance.
 
-**3. RAG Architecture Knowledge**
-The support agent combines **LangGraph** tool chaining with your **RAG architecture** for semantic document search and reranking.
+**3. RAG Knowledge System**
+The support **agent** combines **LangGraph** tool chaining with your **RAG** system for semantic document search and reranking.
 
 **4. Runtime Control**
-LaunchDarkly controls both **LangGraph** behavior and **RAG architecture** parameters without code changes.
+LaunchDarkly controls both **LangGraph** behavior and **RAG** parameters without code changes.
 
 ## Real-World Use Cases
 
