@@ -1,18 +1,6 @@
----
-slug: /tutorials/langgraph-multi-agent-tutorial
-title: "Build a LangGraph Multi-Agent System in 20 Minutes with LaunchDarkly AI Configs"
-description: Build a working multi-agent system with dynamic configuration in 20 minutes using LangGraph multi-agent workflows, RAG search, and LaunchDarkly AI Configs.
-keywords: tutorial, langgraph, multi-agent, AI configs, typescript, rag, mcp
----
-<p class="publishedDate"><em>Published September 8th, 2025</em></p>
-<div class="authorWrapper">
-  <img
-    src="../../../assets/images/authors/launchdarkly-team.png"
-    alt="LaunchDarkly Team"
-    class="authorAvatar"
-  ></img>
-  <p class="authorName">by Scarlett Attensil</p>
-</div>
+# Build a LangGraph Multi-Agent System in 20 Minutes with LaunchDarkly AI Configs
+
+Build a working multi-agent system with dynamic configuration in 20 minutes using LangGraph multi-agent workflows, RAG search, and LaunchDarkly AI Configs.
 
 *Part 1 of 3 of the series **Chaos to Clarity: Defensible AI Systems That Deliver on Your Goals***
 
