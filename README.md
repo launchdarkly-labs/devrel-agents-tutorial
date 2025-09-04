@@ -294,7 +294,9 @@ Start the system:
 ```bash
 # Terminal 1: Start the backend
 uv run uvicorn api.main:app --reload --port 8001
+```
 
+```bash
 # Terminal 2: Launch the UI  
 uv run streamlit run ui/chat_interface.py --server.port 8501
 ```
