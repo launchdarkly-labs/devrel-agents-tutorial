@@ -16,8 +16,8 @@ API_BASE_URL = f"http://{API_HOST}:{API_PORT}"
 UI_PORT = int(os.getenv('UI_PORT', '8501'))
 
 st.set_page_config(
-    page_title="Enterprise AI Assistant",
-    page_icon="🤖",
+    page_title="LangGraph Multi-Agent System",
+    page_icon="→",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -25,23 +25,225 @@ st.set_page_config(
 st.markdown("""
 <style>
 .main {
-    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
 }
+
+/* Simplified header styling */
+.header-container {
+    background: transparent;
+    padding: 1rem 0;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.header-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin: 0;
+    color: #ffffff;
+    text-align: left;
+    margin-bottom: 0.25rem;
+}
+
+.header-subtitle {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.7);
+    text-align: left;
+    margin: 0;
+    font-weight: 400;
+    line-height: 1.4;
+}
+
+.header-badge {
+    display: inline-block;
+    background: rgba(255, 255, 255, 0.08);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.8);
+    margin-top: 0.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Simplified example queries section */
+.example-queries-container {
+    background: transparent;
+    padding: 0.5rem 0;
+    margin: 1rem 0;
+    border: none;
+}
+
+.example-queries-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 0.25rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.example-queries-subtitle {
+    color: rgba(255, 255, 255, 0.6);
+    margin-bottom: 1rem;
+    font-size: 0.75rem;
+    line-height: 1.4;
+}
+
+/* Gradient button styling inspired by LaunchDarkly cards */
+.stButton > button {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 0.5rem 1rem;
+    font-weight: 500;
+    font-size: 0.8rem;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+    position: relative;
+    overflow: hidden;
+}
+
+.stButton > button::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.5s;
+}
+
+.stButton > button:hover {
+    background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.stButton > button:hover::before {
+    left: 100%;
+}
+
+.stButton > button:active {
+    transform: translateY(0);
+    background: linear-gradient(135deg, #4c51bf 0%, #553c9a 100%);
+}
+
+/* Purple, pink, and green button variations inspired by LaunchDarkly cards */
+/* Use JavaScript to target buttons by text content */
+
+/* Chat message styling */
 .stChatMessage {
     background: rgba(255, 255, 255, 0.05);
     backdrop-filter: blur(10px);
-    border-radius: 8px;
+    border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.1);
+    margin: 0.5rem 0;
 }
+
 .stTitle {
     color: white;
 }
+
+/* Enhanced dropdown styling */
+.stSelectbox > div > div {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    color: white;
+}
+
+.stSelectbox > div > div:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.25);
+}
+
+.stSelectbox > div > div > div {
+    color: white;
+}
+
+/* Sidebar styling */
+.css-1d391kg {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .header-title {
+        font-size: 1.25rem;
+    }
+    
+    .header-subtitle {
+        font-size: 0.8rem;
+    }
+    
+    .example-queries-container {
+        padding: 0.25rem 0;
+    }
+}
 </style>
+
+<script>
+// Apply different colors to buttons based on their text content
+document.addEventListener('DOMContentLoaded', function() {
+    function styleButtons() {
+        const buttons = document.querySelectorAll('.stButton button');
+        
+        buttons.forEach(button => {
+            const text = button.textContent.trim();
+            
+            // Reset any existing styles
+            button.style.background = '';
+            button.style.color = '';
+            
+            // Apply colors based on button text
+            if (text === 'Basic Search' || text === 'ArXiv Research') {
+                // Pink buttons
+                button.style.background = 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)';
+                button.style.color = 'white';
+            } else if (text === 'RAG + Reranking' || text === 'Semantic Scholar') {
+                // Purple buttons
+                button.style.background = 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)';
+                button.style.color = 'white';
+            } else if (text === 'Security Check' || text === 'Full Research Stack') {
+                // Green buttons
+                button.style.background = 'linear-gradient(135deg, #10b981 0%, #047857 100%)';
+                button.style.color = 'white';
+            }
+        });
+    }
+    
+    // Style buttons on page load
+    styleButtons();
+    
+    // Style buttons when new content is added (Streamlit reruns)
+    const observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+            if (mutation.type === 'childList') {
+                styleButtons();
+            }
+        });
+    });
+    
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+});
+</script>
 """, unsafe_allow_html=True)
 
-st.title("🤖 Enterprise RAG Assistant")
-st.markdown("*Advanced document search and research powered by LaunchDarkly AI Configs*")
+# Simplified header section
+st.markdown("""
+<div class="header-container">
+    <h1 class="header-title">LaunchDarkly Multi-Agent System</h1>
+    <p class="header-subtitle">Intelligent document search and research powered by LangGraph and RAG architecture</p>
+</div>
+""", unsafe_allow_html=True)
 
 def process_tool_display(tools, tool_details):
     """Single function to process tools and tool_details for consistent UI display"""
@@ -81,38 +283,42 @@ def process_tool_display(tools, tool_details):
     
     return tool_list
 
-# Add example queries from TOOL_TEST_QUERIES.md
-st.markdown("### 💡 Example Queries:")
-st.markdown("*Test different tool combinations with these curated queries*")
+# Enhanced example queries section
+st.markdown("""
+<div class="example-queries-container">
+    <h3 class="example-queries-title">Example Queries</h3>
+    <p class="example-queries-subtitle">Test different tool combinations with these curated queries</p>
+</div>
+""", unsafe_allow_html=True)
 
 # Row 1: Basic search tools
 col1, col2 = st.columns(2)
 with col1:
-    if st.button("📚 Basic Search", use_container_width=True):
+    if st.button("Basic Search", use_container_width=True):
         st.session_state.example_query = "What are the key concepts I should understand from your knowledge base?"
 
 with col2:
-    if st.button("📊 RAG + Reranking", use_container_width=True):
+    if st.button("RAG + Reranking", use_container_width=True):
         st.session_state.example_query = "Search for implementation guidance, then rerank the results to show me the most relevant information"
 
 # Row 2: Security and research tools
 col4, col5, col6 = st.columns(3)
 with col4:
-    if st.button("🛡️ Security Check", use_container_width=True):
+    if st.button("Security Check", use_container_width=True):
         st.session_state.example_query = "My email is john.doe@example.com and I need help with my account"
 
 with col5:
-    if st.button("🔬 ArXiv Research", use_container_width=True):
+    if st.button("ArXiv Research", use_container_width=True):
         st.session_state.example_query = "Find recent ArXiv papers on machine learning from the last 6 months"
 
 with col6:
-    if st.button("📖 Semantic Scholar", use_container_width=True):
+    if st.button("Semantic Scholar", use_container_width=True):
         st.session_state.example_query = "Search Semantic Scholar for research papers on artificial intelligence with citations"
 
 # Row 3: Advanced research
 col7 = st.columns(1)[0]
 with col7:
-    if st.button("🚀 Full Research Stack", use_container_width=True):
+    if st.button("Full Research Stack", use_container_width=True):
         st.session_state.example_query = "Compare what you know from your internal documentation with recent academic research papers"
 
 st.markdown("---")
@@ -260,7 +466,7 @@ else:
 
 # Chat input
 if not prompt:
-    prompt = st.chat_input("💬 Ask questions about your documents or request research...")
+    prompt = st.chat_input("Ask questions about your documents or request research...")
 
 if prompt:
     # Add user message
@@ -448,14 +654,26 @@ if prompt:
 
 # Sidebar for user settings
 with st.sidebar:
-    st.header("⚙️ Configuration")
-    new_user_id = st.text_input("👤 User ID", value=st.session_state.user_id, 
-                               help="Different User IDs may receive different AI configurations via LaunchDarkly")
-    if new_user_id != st.session_state.user_id:
-        st.session_state.user_id = new_user_id
+    st.header("Context")
+    
+    # Load sample users for context
+    import json
+    try:
+        with open('/Users/ld_scarlett/Documents/Github/agents-demo/data/fake_users.json', 'r') as f:
+            sample_users = json.load(f)['users']
+    except:
+        sample_users = []
+    
+    # User ID selection with improved styling
+    user_options = [user['id'] for user in sample_users] + ['user_001']
+    selected_user_id = st.selectbox("User ID", user_options, index=user_options.index(st.session_state.user_id) if st.session_state.user_id in user_options else 0,
+                                   help="Different User IDs may receive different AI configurations via LaunchDarkly")
+    
+    if selected_user_id != st.session_state.user_id:
+        st.session_state.user_id = selected_user_id
         st.rerun()
     
-    if st.button("🗑️ Clear Chat"):
+    if st.button("Clear Chat"):
         st.session_state.messages = []
         st.rerun()
     
