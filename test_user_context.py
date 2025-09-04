@@ -6,9 +6,17 @@ import json
 import sys
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Add the project root to path so we can import modules
 sys.path.append(str(Path(__file__).parent))
+
+# Get API configuration from environment
+API_HOST = os.getenv('API_HOST', 'localhost')
+API_PORT = os.getenv('API_PORT', '8000')
 
 async def test_user_context():
     """Test that user context attributes are properly handled"""
@@ -95,8 +103,8 @@ async def test_user_context():
             return False
         
         # Check API URL
-        if 'localhost:8001' in traffic_source:
-            print("✅ Traffic generator uses correct API URL (8001)")
+        if f'localhost:{API_PORT}' in traffic_source:
+            print(f"✅ Traffic generator uses correct API URL ({API_PORT})")
         else:
             print("❌ Traffic generator uses wrong API URL")
             return False
@@ -107,7 +115,7 @@ async def test_user_context():
     
     print("\n✅ All user context tests passed!")
     print("\n🎯 Ready for testing:")
-    print("1. Start API: uv run uvicorn api.main:app --reload --port 8001")
+    print(f"1. Start API: uv run uvicorn api.main:app --reload --port {API_PORT}")
     print("2. Test traffic: python tools/traffic_generator.py --queries 10 --delay 1")
     print("3. Check LaunchDarkly dashboard for targeting results")
     

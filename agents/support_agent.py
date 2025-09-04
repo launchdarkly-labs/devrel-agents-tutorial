@@ -33,9 +33,12 @@ def create_support_agent(config: AgentConfig, config_manager=None):
     """Create a universal agent that works with any model provider"""
     # Handle both old and new AgentConfig formats for compatibility
     tools_list = getattr(config, 'allowed_tools', None) or getattr(config, 'tools', [])
+    tool_configs = getattr(config, 'tool_configs', {}) or {}
     if not tools_list:
         tools_list = []
     print(f"🏗️  CREATING SUPPORT AGENT: Starting with tools {tools_list}")
+    if tool_configs:
+        print(f"🔧 TOOL CONFIGS FROM LAUNCHDARKLY: {tool_configs}")
     
     # Create tools based on LaunchDarkly configuration
     available_tools = []
@@ -44,78 +47,85 @@ def create_support_agent(config: AgentConfig, config_manager=None):
     print("🔄 LOADING MCP TOOLS: Connecting to MCP servers...")
     mcp_tool_map = {}
     
-    try:
-        # Get MCP tools using the research tools module
-        print("DEBUG: get_research_tools called")
-        print("DEBUG: Getting MCP research tools instance")
-        
-        # Initialize MCP research tools in background thread to avoid async conflicts
-        import concurrent.futures
-        import threading
-        
-        def initialize_mcp_tools():
-            """Initialize MCP tools in a separate thread with new event loop"""
-            try:
-                # Create fresh event loop for this thread
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                
-                print("DEBUG: Creating new MCPResearchTools instance")
-                from tools_impl.mcp_research_tools import MCPResearchTools
-                mcp_client = MCPResearchTools()
-                
-                print("DEBUG: Initializing MCP tools...")
-                result = loop.run_until_complete(mcp_client.initialize())
-                
-                # Get available MCP tools
-                available_mcp_tools = []
-                if hasattr(mcp_client, 'tools') and mcp_client.tools:
-                    for tool_name, tool_instance in mcp_client.tools.items():
-                        available_mcp_tools.append(tool_instance)
-                        print(f"DEBUG: Found MCP tool: {tool_name} ({tool_instance.description[:50]}...)")
-                
-                print(f"DEBUG: Initialized MCP tools: {[tool.name for tool in available_mcp_tools]}")
-                return available_mcp_tools
-                
-            except Exception as e:
-                print(f"DEBUG: MCP initialization error: {e}")
-                return []
-            finally:
+    # Only load MCP tools if they're requested in allowed_tools
+    mcp_tools_requested = any(tool in tools_list for tool in ['arxiv_search', 'semantic_scholar', 'search_papers', 'search_semantic_scholar'])
+    
+    if mcp_tools_requested:
+        try:
+            # Get MCP tools using the research tools module
+            # print("DEBUG: get_research_tools called")
+            # print("DEBUG: Getting MCP research tools instance")
+            
+            # Initialize MCP research tools in background thread to avoid async conflicts
+            import concurrent.futures
+            import threading
+            
+            def initialize_mcp_tools():
+                """Initialize MCP tools in a separate thread with new event loop"""
                 try:
-                    loop.close()
-                except:
-                    pass
-        
-        # Run MCP initialization in thread with timeout
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(initialize_mcp_tools)
-            try:
-                mcp_tools = future.result(timeout=30)  # 30 second timeout
-                
-                # Create tool map
-                mcp_tool_map = {tool.name: tool for tool in mcp_tools if hasattr(tool, 'name')}
-                print(f"DEBUG: Available MCP tools: {list(mcp_tool_map.keys())}")
-                
-                if mcp_tools:
-                    # Map common tools for easy access
-                    for tool in mcp_tools:
-                        if hasattr(tool, 'name'):
-                            if 'arxiv' in tool.name.lower() or 'search_papers' in tool.name:
-                                print("✅ Added ArXiv MCP tool")
-                            elif 'semantic' in tool.name.lower() or 'scholar' in tool.name.lower():
-                                print("✅ Added Semantic Scholar MCP tool")
+                    # Create fresh event loop for this thread
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
                     
-                    print("DEBUG: Returning {} MCP tools".format(len(mcp_tools)))
-                    print(f"✅ MCP TOOLS LOADED: {list(mcp_tool_map.keys())}")
-                else:
-                    print("📚 NO MCP TOOLS: Using internal tools only")
+                    # print("DEBUG: Creating new MCPResearchTools instance")
+                    from tools_impl.mcp_research_tools import MCPResearchTools
+                    mcp_client = MCPResearchTools()
                     
-            except concurrent.futures.TimeoutError:
-                print("⏰ MCP TIMEOUT: MCP servers not responding - using internal tools only")
-                mcp_tool_map = {}
+                    # print("DEBUG: Initializing MCP tools...")
+                    result = loop.run_until_complete(mcp_client.initialize())
+                    
+                    # Get available MCP tools
+                    available_mcp_tools = []
+                    if hasattr(mcp_client, 'tools') and mcp_client.tools:
+                        for tool_name, tool_instance in mcp_client.tools.items():
+                            available_mcp_tools.append(tool_instance)
+                            # print(f"DEBUG: Found MCP tool: {tool_name} ({tool_instance.description[:50]}...)")
+                    
+                    # print(f"DEBUG: Initialized MCP tools: {[tool.name for tool in available_mcp_tools]}")
+                    return available_mcp_tools
+                    
+                except Exception as e:
+                    # print(f"DEBUG: MCP initialization error: {e}")
+                    return []
+                finally:
+                    try:
+                        loop.close()
+                    except:
+                        pass
+            
+            # Run MCP initialization in thread with timeout
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(initialize_mcp_tools)
+                try:
+                    mcp_tools = future.result(timeout=30)  # 30 second timeout
+                    
+                    # Create tool map
+                    mcp_tool_map = {tool.name: tool for tool in mcp_tools if hasattr(tool, 'name')}
+                    # print(f"DEBUG: Available MCP tools: {list(mcp_tool_map.keys())}")
+                    
+                    if mcp_tools:
+                        # Map common tools for easy access
+                        for tool in mcp_tools:
+                            if hasattr(tool, 'name'):
+                                if 'arxiv' in tool.name.lower() or 'search_papers' in tool.name:
+                                    print("✅ Added ArXiv MCP tool")
+                                elif 'semantic' in tool.name.lower() or 'scholar' in tool.name.lower():
+                                    print("✅ Added Semantic Scholar MCP tool")
+                        
+                        # print("DEBUG: Returning {} MCP tools".format(len(mcp_tools)))
+                        print(f"✅ MCP TOOLS LOADED: {list(mcp_tool_map.keys())}")
+                    else:
+                        print("📚 NO MCP TOOLS: Using internal tools only")
+                        
+                except concurrent.futures.TimeoutError:
+                    print("⏰ MCP TIMEOUT: MCP servers not responding - using internal tools only")
+                    mcp_tool_map = {}
                 
-    except Exception as e:
-        print(f"❌ MCP ERROR: {e} - Using internal tools only")
+        except Exception as e:
+            print(f"❌ MCP ERROR: {e} - Using internal tools only")
+            mcp_tool_map = {}
+    else:
+        print("📚 NO MCP TOOLS REQUESTED: Skipping MCP initialization")
         mcp_tool_map = {}
     
     # Map LaunchDarkly tool names to actual MCP tool names
@@ -261,6 +271,22 @@ def create_support_agent(config: AgentConfig, config_manager=None):
                 tool_args = tool_call.get('args', {})
                 tool_id = tool_call.get('id', f"{tool_name}_{len(tool_results)}")
                 
+                # Apply LaunchDarkly tool configuration parameters
+                if tool_name in tool_configs:
+                    ld_params = tool_configs[tool_name]
+                    print(f"🔧 APPLYING LD CONFIG: {tool_name} config = {ld_params}")
+                    
+                    # Extract parameters from JSON schema structure
+                    if 'properties' in ld_params:
+                        properties = ld_params['properties']
+                        for param_name, param_config in properties.items():
+                            # Apply LaunchDarkly defaults if not provided in tool call
+                            if param_name not in tool_args and 'default' in param_config:
+                                tool_args[param_name] = param_config['default']
+                                print(f"🔧 APPLIED LD DEFAULT: {param_name} = {param_config['default']}")
+                    else:
+                        print(f"⚠️ LD CONFIG: No 'properties' found in schema for {tool_name}")
+                
                 print(f"🔧 EXECUTING TOOL: {tool_name} with args: {tool_args}")
                 
                 # Find the tool by name
@@ -345,16 +371,20 @@ def create_support_agent(config: AgentConfig, config_manager=None):
     else:
         print(f"⚠️  NO TOOLS AVAILABLE: Agent will work in model-only mode")
         # Create empty tool node that won't be used
-        tool_node = None
+        def empty_tool_node(state: AgentState):
+            """Empty tool node for when no tools are available"""
+            return {"messages": []}
+        tool_node = empty_tool_node
     
     def should_continue(state: AgentState):
         """Decide whether to continue with tools or end"""
         messages = state["messages"]
         last_message = messages[-1]
         
-        # Count tool calls from all messages in the conversation
+        # Count tool calls and track search queries from all messages in the conversation
         total_tool_calls = 0
         recent_tool_calls = []
+        recent_search_queries = []
         
         for message in messages:
             if hasattr(message, 'tool_calls') and message.tool_calls:
@@ -366,6 +396,9 @@ def create_support_agent(config: AgentConfig, config_manager=None):
                     
                     # Extract search query from tool arguments
                     search_query = tool_args.get('query', '') or tool_args.get('search_query', '') or tool_args.get('q', '')
+                    if search_query and tool_name in ['search_v1', 'search_v2', 'search_papers', 'search_semantic_scholar']:
+                        recent_search_queries.append(search_query.lower().strip())
+                    
                     query_display = f"query: '{search_query}'" if search_query else "no query found"
                     
                     # Log tool usage type with search terms
@@ -375,6 +408,22 @@ def create_support_agent(config: AgentConfig, config_manager=None):
                         print(f"📚 INTERNAL TOOL CALLED: {tool_name} ({query_display}) (local processing)")
                     else:
                         print(f"🔧 UNKNOWN TOOL CALLED: {tool_name} ({query_display})")
+        
+        # Check for repeated identical search queries - stop if same query used 3+ times
+        if len(recent_search_queries) >= 3:
+            for query in set(recent_search_queries):
+                query_count = recent_search_queries.count(query)
+                if query_count >= 3:
+                    print(f"🛑 STOPPING REPEATED SEARCH: Query '{query}' used {query_count} times - no useful results found")
+                    # Add instruction to try different terms or stop searching
+                    if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
+                        # Agent is about to make another tool call - inject guidance
+                        state["messages"].append(HumanMessage(content=f"""
+You've searched for "{query}" multiple times without finding useful results. Either:
+1. Try completely different search terms that are more specific or use synonyms
+2. If no relevant information exists in the knowledge base, simply respond that the information is not available
+Do not repeat the same search query again."""))
+                    return "end"
         
         # RELAXED: Allow up to 4 consecutive calls of the same tool before stopping
         if len(recent_tool_calls) >= 4:
@@ -391,21 +440,26 @@ def create_support_agent(config: AgentConfig, config_manager=None):
         
         # Get max tool calls from config, default to 8 if not specified
         max_tool_calls = getattr(config, 'max_tool_calls', 8)
-        print(f"DEBUG: should_continue - total_tool_calls: {total_tool_calls}, max: {max_tool_calls}")
-        print(f"DEBUG: Recent tool calls: {recent_tool_calls[-5:]}")  # Show last 5
+        # print(f"DEBUG: should_continue - total_tool_calls: {total_tool_calls}, max: {max_tool_calls}")
+        # print(f"DEBUG: Recent tool calls: {recent_tool_calls[-5:]}")  # Show last 5
         
         # If we've hit the max tool calls limit, end
         if total_tool_calls >= max_tool_calls:
-            print(f"DEBUG: Hit max tool calls limit ({max_tool_calls}), ending")
+            # print(f"DEBUG: Hit max tool calls limit ({max_tool_calls}), ending")
+            return "end"
+        
+        # If no tools are available, never route to tools
+        if not available_tools:
+            # print("DEBUG: No tools available, ending")
             return "end"
         
         # If the last message has tool calls, continue to tools
         if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
-            print(f"DEBUG: Last message has {len(last_message.tool_calls)} tool calls, continuing to tools")
+            # print(f"DEBUG: Last message has {len(last_message.tool_calls)} tool calls, continuing to tools")
             return "tools"
         
         # Otherwise, we're done
-        print("DEBUG: No more tool calls needed, ending")
+        # print("DEBUG: No more tool calls needed, ending")
         return "end"
     
     def call_model(state: AgentState):
@@ -419,26 +473,43 @@ def create_support_agent(config: AgentConfig, config_manager=None):
                 if hasattr(message, 'tool_calls') and message.tool_calls:
                     total_tool_calls += len(message.tool_calls)
             
-            print(f"DEBUG: call_model - total_tool_calls: {total_tool_calls}, messages: {len(messages)}")
+            # print(f"DEBUG: call_model - total_tool_calls: {total_tool_calls}, messages: {len(messages)}")
             
             # Add system message with instructions if this is the first call
             if len(messages) == 1:  # Only user message
                 # Get max tool calls from config, default to 8 if not specified
                 max_tool_calls = getattr(config, 'max_tool_calls', 8)
                 
-                # Create detailed tool descriptions for the prompt
-                tool_descriptions = []
-                for tool in available_tools:
-                    if hasattr(tool, 'name') and hasattr(tool, 'description'):
-                        tool_descriptions.append(f"- {tool.name}: {tool.description}")
+                if available_tools:
+                    # Create detailed tool descriptions for the prompt
+                    tool_descriptions = []
+                    for tool in available_tools:
+                        if hasattr(tool, 'name') and hasattr(tool, 'description'):
+                            tool_descriptions.append(f"- {tool.name}: {tool.description}")
+                    
+                    tools_text = '\n'.join(tool_descriptions)
+                    system_prompt = f"""
+                    {config_instructions}
+                    
+                    Available tools:
+                    {tools_text}
+                    
+                    IMPORTANT: When you receive search results from these tools, prioritize that information over your general knowledge. Base your responses on the search results whenever possible.
+                    """
+                else:
+                    # No tools available - explain limitations gracefully
+                    system_prompt = f"""
+                    {config_instructions}
+                    
+                    IMPORTANT: You currently have no access to search tools or external documents. 
+                    You can only work with your built-in knowledge. Please inform users that:
+                    - You cannot search the knowledge base or internal documents
+                    - You cannot access external research databases
+                    - You can only provide general information based on your training data
+                    
+                    Be helpful within these limitations and suggest users contact support if they need specific document searches.
+                    """
                 
-                tools_text = '\n'.join(tool_descriptions)
-                system_prompt = f"""
-                {config_instructions}
-                
-                Available tools:
-                {tools_text}
-                """
                 messages = [SystemMessage(content=system_prompt)] + messages
             
             # Simple and effective: Check for tool overuse and REMOVE tools if needed
@@ -472,7 +543,7 @@ def create_support_agent(config: AgentConfig, config_manager=None):
             
             # Track the core model invocation with LaunchDarkly tracker when available
             tracker = getattr(config, 'tracker', None)
-            print(f"🔍 SUPPORT AGENT DEBUG: config_manager={config_manager is not None}, tracker={tracker is not None}")
+            # print(f"🔍 SUPPORT AGENT DEBUG: config_manager={config_manager is not None}, tracker={tracker is not None}")
             if tracker:
                 print(f"🔍 TRACKER TYPE: {type(tracker)}")
                 print(f"🔍 TRACKER METHODS: {[m for m in dir(tracker) if not m.startswith('_')]}")
@@ -486,7 +557,7 @@ def create_support_agent(config: AgentConfig, config_manager=None):
             else:
                 print(f"⚠️  NO TRACKER AVAILABLE - using direct model call")
                 response = model.invoke(messages)
-            print(f"DEBUG: Model response received, has_tool_calls: {hasattr(response, 'tool_calls') and bool(response.tool_calls)}")
+            # print(f"DEBUG: Model response received, has_tool_calls: {hasattr(response, 'tool_calls') and bool(response.tool_calls)}")
             return {"messages": [response]}
         except Exception as e:
             print(f"ERROR in call_model: {e}")

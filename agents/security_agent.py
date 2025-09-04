@@ -1,24 +1,24 @@
 from typing import TypedDict, List, Annotated
 from langgraph.graph import StateGraph, add_messages
-from langgraph.prebuilt import ToolNode
-from langchain_core.messages import HumanMessage, AIMessage, BaseMessage, ToolMessage, SystemMessage
+from langchain_core.messages import HumanMessage, AIMessage, BaseMessage, SystemMessage
 from config_manager import AgentConfig, FixedConfigManager as ConfigManager
-from tools_impl.search_v1 import SearchToolV1
-from tools_impl.search_v2 import SearchToolV2
-from tools_impl.reranking import RerankingTool
 
 class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]
     user_input: str
     response: str
     tool_calls: List[str]
-    tool_details: List[dict]  # Add support for detailed tool information with search queries
+    tool_details: List[dict]
+    # PII detection schema fields
+    detected: bool
+    types: List[str]
+    redacted: str
+    safe_to_proceed: bool
 
 def create_security_agent(agent_config: AgentConfig, config_manager: ConfigManager):
-    """Create security agent using LDAI SDK pattern"""
+    """Create security agent with PII detection tools"""
     
     # Create LangChain model from LDAI agent configuration
-    # Create LangChain model directly from config
     from langchain_anthropic import ChatAnthropic
     from langchain_openai import ChatOpenAI
     
@@ -31,209 +31,60 @@ def create_security_agent(agent_config: AgentConfig, config_manager: ConfigManag
     else:
         # Fallback to Anthropic if provider not specified or unknown
         model = ChatAnthropic(model=agent_config.model, temperature=agent_config.temperature)
+    
     tracker = agent_config.tracker
     
-    print(f"🔐 CREATING SECURITY AGENT: Using LDAI model {agent_config.model}")
+    # Create tools from LaunchDarkly configuration
+    from tools_impl.dynamic_tool_factory import create_tools_from_launchdarkly
+    tools = []
+    if agent_config.tool_configs:
+        # Mock AI config format for tool creation
+        mock_ai_config = {
+            "model": {
+                "parameters": {
+                    "tools": [
+                        {"name": tool_name, "parameters": tool_config}
+                        for tool_name, tool_config in agent_config.tool_configs.items()
+                    ]
+                }
+            }
+        }
+        tools = create_tools_from_launchdarkly(mock_ai_config)
+    
+    print(f"🔐 CREATING SECURITY AGENT: Using LDAI model {agent_config.model} with {len(tools)} tools")
     
     # Store config values for nested functions
     config_instructions = agent_config.instructions
-    config_temperature = agent_config.temperature
     
-    # Initialize available tools (minimal for security - mostly native model capabilities)
-    # Handle both old and new AgentConfig formats for compatibility
-    tools_list = getattr(agent_config, 'allowed_tools', None) or getattr(agent_config, 'tools', [])
-    if not tools_list:
-        tools_list = []
-    print(f"🔐 CREATING SECURITY AGENT: Starting with tools {tools_list}")
-    
-    # Define available tools in a dictionary for dynamic access
-    tool_registry = {
-        "search_v1": SearchToolV1(),
-        "search_v2": SearchToolV2(),
-        "reranking": RerankingTool()
-    }
-    
-    available_tools = []
-    
-    # For security agent, we typically use fewer tools - focus on native model capabilities
-    # But still support basic tools if configured from LaunchDarkly
-    print(f"🔧 PROCESSING SECURITY TOOLS: {tools_list}")
-    
-    for tool_name in tools_list:
-        if tool_name in tool_registry:
-            available_tools.append(tool_registry[tool_name])
-            print(f"✅ SECURITY TOOL ADDED: {tool_name}")
-        else:
-            print(f"❌ UNKNOWN SECURITY TOOL: {tool_name} not found in registry")
-    
-    # Bind tools to model if available
-    if available_tools:
-        model = model.bind_tools(available_tools)
-        
-        def custom_tool_node(state: AgentState):
-            """Custom tool execution with LDAI metrics tracking"""
-            messages = state["messages"]
-            last_message = messages[-1]
-            
-            # Only process if the last message has tool calls
-            if not (hasattr(last_message, 'tool_calls') and last_message.tool_calls):
-                return {"messages": []}
-            
-            tool_results = []
-            
-            for tool_call in last_message.tool_calls:
-                tool_name = tool_call['name']
-                tool_args = tool_call.get('args', {})
-                tool_id = tool_call.get('id', f"{tool_name}_{len(tool_results)}")
-                
-                print(f"🔧 SECURITY EXECUTING TOOL: {tool_name} with args: {tool_args}")
-                
-                # Find the tool by name
-                tool_to_execute = None
-                for tool in available_tools:
-                    if hasattr(tool, 'name') and tool.name == tool_name:
-                        tool_to_execute = tool
-                        break
-                
-                if not tool_to_execute:
-                    result = f"Error: Tool '{tool_name}' not found"
-                else:
-                    try:
-                        # Pass recent search results to reranking tool by looking at message history
-                        if tool_name == 'reranking':
-                            # Find the most recent ToolMessage from search_v2 in conversation history
-                            latest_search_message = None
-                            for msg in reversed(messages):
-                                if isinstance(msg, ToolMessage) and hasattr(msg, 'tool_call_id'):
-                                    # Check if this is a search_v2 tool result
-                                    if ('search_v2' in str(msg.tool_call_id).lower() or 
-                                        (hasattr(msg, 'content') and 'Found' in str(msg.content) and 'relevant document' in str(msg.content))):
-                                        latest_search_message = msg
-                                        break
-                            
-                            if latest_search_message:
-                                # Pass the raw search_v2 output content to reranking tool
-                                tool_args['results'] = latest_search_message.content
-                            else:
-                                # Fallback: no search_v2 results found
-                                tool_args['results'] = ""
-                        
-                        # Execute the tool with LDAI metrics tracking
-                        result = config_manager.track_metrics(
-                            tracker,
-                            lambda: tool_to_execute._run(**tool_args)
-                        )
-                        
-                    except Exception as e:
-                        result = f"Error executing {tool_name}: {str(e)}"
-                        print(f"❌ SECURITY TOOL ERROR: {result}")
-                        
-                        # Track tool execution error with LDAI metrics
-                        try:
-                            config_manager.track_metrics(
-                                tracker,
-                                lambda: (_ for _ in ()).throw(e)  # Trigger error tracking
-                            )
-                        except:
-                            pass
-                
-                # Create tool message
-                tool_message = ToolMessage(content=str(result), tool_call_id=tool_id)
-                tool_results.append(tool_message)
-                
-                print(f"🔧 SECURITY TOOL RESULT: {tool_name} -> {str(result)[:200]}...")
-            
-            return {"messages": tool_results}
-        
-        tool_node = custom_tool_node
-        print(f"🔧 SECURITY TOOLS BOUND: {[tool.name if hasattr(tool, 'name') else str(tool) for tool in available_tools]}")
-    else:
-        print(f"🔐 NO SECURITY TOOLS: Agent will work in model-only mode (preferred for security)")
-        # Create empty tool node that won't be used
-        def empty_tool_node(state: AgentState):
-            return {"messages": []}
-        tool_node = empty_tool_node
-    
-    def should_continue(state: AgentState):
-        """Decide whether to continue with tools or end"""
-        messages = state["messages"]
-        last_message = messages[-1]
-        
-        # Count tool calls from all messages
-        total_tool_calls = 0
-        recent_tool_calls = []
-        
-        for message in messages:
-            if hasattr(message, 'tool_calls') and message.tool_calls:
-                total_tool_calls += len(message.tool_calls)
-                for tool_call in message.tool_calls:
-                    tool_name = tool_call['name']
-                    tool_args = tool_call.get('args', {})
-                    recent_tool_calls.append(tool_name)
-                    
-                    # Extract search query from tool arguments
-                    search_query = tool_args.get('query', '') or tool_args.get('search_query', '') or tool_args.get('q', '')
-                    query_display = f"query: '{search_query}'" if search_query else "no query found"
-                    
-                    print(f"🔐 SECURITY TOOL CALLED: {tool_name} ({query_display})")
-        
-        # AGGRESSIVE: Stop tool loops immediately  
-        if len(recent_tool_calls) >= 2:
-            last_2_tools = recent_tool_calls[-2:]
-            if len(set(last_2_tools)) == 1:  # Same tool used twice in a row
-                print(f"🛑 SECURITY STOPPING TOOL LOOP: '{last_2_tools[0]}' used consecutively - ending")
-                return "end"
-        
-        # Check max tool calls limit (conservative for security)
-        max_tool_calls = 4  # Lower limit for security agent
-        if total_tool_calls >= max_tool_calls:
-            print(f"🛑 SECURITY MAX TOOL CALLS REACHED: {total_tool_calls}/{max_tool_calls}")
-            return "end"
-        
-        # If model wants to use tools, continue
-        if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
-            return "tools"
-        
-        # Otherwise end
-        return "end"
-    
-    def call_model(state: AgentState):
-        """Call the security model with LDAI metrics tracking"""
+    def call_model_with_tools(state: AgentState):
+        """Call the security model with PII detection tools"""
         try:
             messages = state["messages"]
             
+            # Bind tools to model
+            if tools:
+                model_with_tools = model.bind_tools(tools)
+            else:
+                model_with_tools = model
+            
             # Add system message with instructions if this is the first call
             if len(messages) == 1:  # Only user message
-                # Create detailed tool descriptions for the prompt
-                tool_descriptions = []
-                for tool in available_tools:
-                    if hasattr(tool, 'name') and hasattr(tool, 'description'):
-                        tool_descriptions.append(f"- {tool.name}: {tool.description}")
-                
-                tools_text = '\n'.join(tool_descriptions)
-                system_prompt = f"""
-                {config_instructions}
-                
-                Available tools:
-                {tools_text}
-                
-                SECURITY FOCUS:
-                - Use tools sparingly and only when necessary for security analysis
-                - Focus on native model capabilities for PII detection and security tasks
-                - Maximum 4 tool calls allowed for security agent
-                """
+                system_prompt = config_instructions
                 messages = [SystemMessage(content=system_prompt)] + messages
             
             # Track model call with LDAI metrics
             response = config_manager.track_metrics(
                 tracker,
-                lambda: model.invoke(messages)
+                lambda: model_with_tools.invoke(messages)
             )
+            
+            print(f"🔐 SECURITY MODEL RESPONSE: {len(response.content) if response.content else 0} chars")
+            print(f"🔐 SECURITY TOOL CALLS: {len(response.tool_calls) if hasattr(response, 'tool_calls') and response.tool_calls else 0}")
             
             return {"messages": [response]}
             
         except Exception as e:
-            print(f"ERROR in security call_model: {e}")
+            print(f"❌ SECURITY ERROR: {e}")
             
             # Track error with LDAI metrics
             try:
@@ -247,8 +98,69 @@ def create_security_agent(agent_config: AgentConfig, config_manager: ConfigManag
             error_response = AIMessage(content="Security processing encountered an error.")
             return {"messages": [error_response]}
     
+    def execute_tools(state: AgentState):
+        """Execute any tools called by the security model"""
+        try:
+            messages = state["messages"]
+            last_message = messages[-1]
+            
+            # Check if there are tool calls to execute
+            if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
+                from langchain_core.messages import ToolMessage
+                
+                tool_results = []
+                tool_calls_made = []
+                tool_details = []
+                
+                for tool_call in last_message.tool_calls:
+                    tool_name = tool_call["name"]
+                    tool_args = tool_call["args"]
+                    tool_id = tool_call["id"]
+                    
+                    print(f"🔧 SECURITY TOOL CALLED: {tool_name} with args: {tool_args}")
+                    
+                    # Find the tool and execute it
+                    tool_result = None
+                    for tool in tools:
+                        if hasattr(tool, 'name') and tool.name == tool_name:
+                            tool_result = tool._run(**tool_args)
+                            break
+                    
+                    if tool_result is None:
+                        tool_result = f"Tool {tool_name} not found"
+                    
+                    print(f"🔧 SECURITY TOOL RESULT: {tool_name} -> {tool_result[:200]}...")
+                    
+                    # Create tool message
+                    tool_message = ToolMessage(
+                        content=tool_result,
+                        tool_call_id=tool_id
+                    )
+                    tool_results.append(tool_message)
+                    tool_calls_made.append(tool_name)
+                    
+                    # Store tool details for UI
+                    tool_details.append({
+                        "name": tool_name,
+                        "args": tool_args,
+                        "result": tool_result
+                    })
+                
+                return {
+                    "messages": tool_results,
+                    "tool_calls": tool_calls_made,
+                    "tool_details": tool_details
+                }
+            
+            # No tools to execute
+            return {"tool_calls": [], "tool_details": []}
+            
+        except Exception as e:
+            print(f"❌ SECURITY TOOL ERROR: {e}")
+            return {"tool_calls": [], "tool_details": []}
+    
     def format_final_response(state: AgentState):
-        """Format the final security agent response with LDAI patterns"""
+        """Format the final security agent response"""
         messages = state["messages"]
         
         # Get final response from last AI message
@@ -269,66 +181,108 @@ def create_security_agent(agent_config: AgentConfig, config_manager: ConfigManag
         else:
             final_response = "Security processing completed."
         
-        # Extract all tool calls from the conversation with search queries
-        tool_calls = []
-        tool_details = []
+        # Extract PII findings from tool results
+        tool_calls_made = state.get("tool_calls", [])
+        tool_details_from_execution = state.get("tool_details", [])
         
-        for message in messages:
-            if hasattr(message, 'tool_calls') and message.tool_calls:
-                for call in message.tool_calls:
-                    tool_name = call['name']
-                    tool_args = call.get('args', {})
-                    # Extract search query from tool arguments (check multiple possible field names)
-                    search_query = (
-                        tool_args.get('query', '') or 
-                        tool_args.get('search_query', '') or 
-                        tool_args.get('q', '') or
-                        tool_args.get('results', '') or
-                        tool_args.get('text', '')
-                    )
+        # Default PII results (no PII detected)
+        pii_results = {
+            "detected": False,
+            "types": [],
+            "redacted": state.get("user_input", ""),
+            "safe_to_proceed": True
+        }
+        
+        # Look for PII detection tool results
+        ui_tool_details = tool_details_from_execution.copy() if tool_details_from_execution else []
+        
+        for tool_detail in tool_details_from_execution:
+            if tool_detail.get("name") == "pii_detection":
+                try:
+                    import json
+                    result = json.loads(tool_detail.get("result", "{}"))
                     
-                    # Always append tool name as string for API compatibility
-                    tool_calls.append(tool_name)
-                    
-                    # Also store detailed info with search query for UI
-                    tool_detail = {
-                        "name": tool_name,
-                        "search_query": search_query if search_query else None,
-                        "args": tool_args
+                    # Use the exact schema results from the tool
+                    pii_results = {
+                        "detected": result.get("detected", False),
+                        "types": result.get("types", []),
+                        "redacted": result.get("redacted", state.get("user_input", "")),
+                        "safe_to_proceed": result.get("safe_to_proceed", True)
                     }
-                    tool_details.append(tool_detail)
+                    
+                    # Store for UI display
+                    tool_detail["pii_result"] = pii_results
+                        
+                    print(f"🔍 PII TOOL RESULT: detected={pii_results['detected']}, types={pii_results['types']}, safe_to_proceed={pii_results['safe_to_proceed']}")
+                    print(f"🔒 SECURITY CLEARANCE: {'PROCEED' if pii_results['safe_to_proceed'] else 'USE_REDACTED_TEXT'} - Text: '{pii_results['redacted'][:50]}...'")
+                except Exception as e:
+                    print(f"⚠️ PII tool result parsing error: {e}")
         
         return {
             "user_input": state["user_input"],
             "response": final_response,
-            "tool_calls": tool_calls,
-            "tool_details": tool_details,
-            "messages": messages
+            "tool_calls": tool_calls_made,
+            "tool_details": ui_tool_details,
+            "messages": messages,
+            # Return the exact PII schema fields for supervisor and UI
+            "detected": pii_results["detected"],
+            "types": pii_results["types"], 
+            "redacted": pii_results["redacted"],
+            "safe_to_proceed": pii_results["safe_to_proceed"]
         }
     
-    # Build workflow with conditional tool support
-    workflow = StateGraph(AgentState)
-    workflow.add_node("agent", call_model)
-    workflow.add_node("format", format_final_response)
+    def should_continue(state: AgentState):
+        """Determine if we should continue with tool execution or finish"""
+        messages = state["messages"]
+        last_message = messages[-1]
+        
+        # If the last message has tool calls, execute them
+        if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
+            return "tools"
+        else:
+            return "format"
     
-    # Add tool node
-    workflow.add_node("tools", tool_node)
+    def call_model_again(state: AgentState):
+        """Call model again after tool execution"""
+        try:
+            messages = state["messages"]
+            
+            # Track model call with LDAI metrics
+            response = config_manager.track_metrics(
+                tracker,
+                lambda: model.invoke(messages)
+            )
+            
+            print(f"🔐 SECURITY FOLLOW-UP RESPONSE: {len(response.content) if response.content else 0} chars")
+            return {"messages": [response]}
+            
+        except Exception as e:
+            print(f"❌ SECURITY FOLLOW-UP ERROR: {e}")
+            error_response = AIMessage(content="Security follow-up processing encountered an error.")
+            return {"messages": [error_response]}
+    
+    # Build workflow similar to support agent
+    workflow = StateGraph(AgentState)
+    workflow.add_node("agent", call_model_with_tools)
+    workflow.add_node("tools", execute_tools)  
+    workflow.add_node("agent_continue", call_model_again)
+    workflow.add_node("format", format_final_response)
     
     workflow.set_entry_point("agent")
     
-    # Add conditional edges
+    # Conditional routing based on whether tools were called
     workflow.add_conditional_edges(
         "agent",
         should_continue,
         {
             "tools": "tools",
-            "end": "format"
+            "format": "format"
         }
     )
     
-    # After tools, go back to agent (for multi-turn)
-    workflow.add_edge("tools", "agent")
-    
+    # After tools, call model again then format
+    workflow.add_edge("tools", "agent_continue")  
+    workflow.add_edge("agent_continue", "format")
     workflow.set_finish_point("format")
     
     return workflow.compile()

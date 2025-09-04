@@ -80,7 +80,7 @@ class MCPResearchTools:
                         # Load tools from this server
                         server_tools = await load_mcp_tools(None, connection=connection)
                         langchain_tools.extend(server_tools)
-                        print(f"DEBUG: Loaded {len(server_tools)} tools from {server_name} MCP server")
+                        # print(f"DEBUG: Loaded {len(server_tools)} tools from {server_name} MCP server")
                         
                     except Exception as e:
                         print(f"❌ ERROR: Failed to load tools from {server_name}: {e}")
@@ -91,7 +91,7 @@ class MCPResearchTools:
                 # Organize tools by type - map actual MCP tools to our expected names
                 for tool in langchain_tools:
                     tool_name = tool.name.lower()
-                    print(f"DEBUG: Found MCP tool: {tool.name} ({tool.description[:100]}...)")
+                    # print(f"DEBUG: Found MCP tool: {tool.name} ({tool.description[:100]}...)")
                     
                     # Map ArXiv tools - use search_papers as the primary tool for arxiv_search
                     if "search_papers" in tool_name or "arxiv" in tool_name:
@@ -105,7 +105,7 @@ class MCPResearchTools:
                         # Store all Semantic Scholar tools under their original names
                         self.tools[tool.name] = tool
                         
-                print(f"DEBUG: Initialized MCP tools: {list(self.tools.keys())}")
+                # print(f"DEBUG: Initialized MCP tools: {list(self.tools.keys())}")
                 
                 # Store singleton for process lifetime reuse
                 async with _MCP_LOCK:
@@ -114,11 +114,11 @@ class MCPResearchTools:
                         print("✅ MCP: Singleton initialized for process lifetime")
                 
         except Exception as e:
-            print(f"DEBUG: Failed to initialize MCP client: {e}")
+            # print(f"DEBUG: Failed to initialize MCP client: {e}")
             self.client = None
         
         self._initialized = True
-        print("DEBUG: MCPResearchTools.initialize() completed")
+        # print("DEBUG: MCPResearchTools.initialize() completed")
     
     def get_tool(self, tool_name: str) -> Optional[BaseTool]:
         """Get a specific MCP tool"""
@@ -137,25 +137,25 @@ class MCPResearchTools:
 # Simplified for demo - no singleton caching
 async def get_mcp_research_tools() -> MCPResearchTools:
     """Create and initialize MCP research tools instance"""
-    print("DEBUG: Creating new MCPResearchTools instance")
+    # print("DEBUG: Creating new MCPResearchTools instance")
     mcp_research_tools = MCPResearchTools()
-    print("DEBUG: Initializing MCP tools...")
+    # print("DEBUG: Initializing MCP tools...")
     await mcp_research_tools.initialize()
-    print("DEBUG: MCP initialization completed")
+    # print("DEBUG: MCP initialization completed")
     return mcp_research_tools
 
 
 # MCP-only implementation - no fallback tools
 async def get_research_tools() -> List[BaseTool]:
     """Get MCP research tools - requires MCP servers to be installed"""
-    print("DEBUG: get_research_tools called")
+    # print("DEBUG: get_research_tools called")
     tools = []
     
     try:
-        print("DEBUG: Getting MCP research tools instance")
+        # print("DEBUG: Getting MCP research tools instance")
         mcp_tools = await get_mcp_research_tools()
         available_tools = mcp_tools.get_available_tools()
-        print(f"DEBUG: Available MCP tools: {available_tools}")
+        # print(f"DEBUG: Available MCP tools: {available_tools}")
         
         # Only return real MCP tools - no fallbacks
         if "arxiv_search" in available_tools:
@@ -173,5 +173,5 @@ async def get_research_tools() -> List[BaseTool]:
         print(f"❌ MCP tools initialization failed: {e}")
         print("Install MCP servers to enable research tools: npm install -g @michaellatman/mcp-server-arxiv")
     
-    print(f"DEBUG: Returning {len(tools)} MCP tools")
+    # print(f"DEBUG: Returning {len(tools)} MCP tools")
     return tools

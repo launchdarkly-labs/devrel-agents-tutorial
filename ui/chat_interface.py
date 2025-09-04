@@ -1,6 +1,19 @@
 import streamlit as st
 import requests
 import json
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Get API configuration from environment
+API_HOST = os.getenv('API_HOST', 'localhost')
+API_PORT = os.getenv('API_PORT', '8000')
+API_BASE_URL = f"http://{API_HOST}:{API_PORT}"
+
+# Get UI configuration from environment
+UI_PORT = int(os.getenv('UI_PORT', '8501'))
 
 st.set_page_config(
     page_title="Enterprise AI Assistant",
@@ -27,12 +40,18 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🤖 Enterprise AI Assistant")
-st.markdown("*Advanced AI/ML technical support powered by LaunchDarkly AI Configs*")
+st.title("🤖 Enterprise RAG Assistant")
+st.markdown("*Advanced document search and research powered by LaunchDarkly AI Configs*")
 
 def process_tool_display(tools, tool_details):
     """Single function to process tools and tool_details for consistent UI display"""
     tool_list = []
+    
+    # Handle None values
+    if tools is None:
+        tools = []
+    if tool_details is None:
+        tool_details = []
     
     # Define mapping from actual tool names to display names
     mcp_name_mapping = {
@@ -44,14 +63,15 @@ def process_tool_display(tools, tool_details):
         tool_name = tool if isinstance(tool, str) else tool.get("name", str(tool))
         
         # Get search query from matching tool_details with proper name mapping
+        # Use index-based matching for multiple instances of the same tool
         search_query = ""
-        for detail in tool_details:
+        if i < len(tool_details):
+            detail = tool_details[i]
             detail_name = detail.get("name")
             # Check both direct match and mapped match
             mapped_name = mcp_name_mapping.get(detail_name, detail_name)
             if mapped_name == tool_name:
                 search_query = detail.get("search_query", "") or ""
-                break
         
         # Add tool with search query if available
         if search_query:
@@ -64,29 +84,36 @@ def process_tool_display(tools, tool_details):
 # Add example queries from TOOL_TEST_QUERIES.md
 st.markdown("### 💡 Example Queries:")
 st.markdown("*Test different tool combinations with these curated queries*")
-col1, col2, col3 = st.columns(3)
 
+# Row 1: Basic search tools
+col1, col2 = st.columns(2)
 with col1:
-    if st.button("📚 Internal Knowledge", use_container_width=True):
-        st.session_state.example_query = "What information do you have about machine learning in your knowledge base?"
+    if st.button("📚 Basic Search", use_container_width=True):
+        st.session_state.example_query = "What are the key concepts I should understand from your knowledge base?"
 
 with col2:
-    if st.button("🔍 ArXiv Research", use_container_width=True):
-        st.session_state.example_query = "Find recent ArXiv papers on reinforcement learning from the last 6 months"
+    if st.button("📊 RAG + Reranking", use_container_width=True):
+        st.session_state.example_query = "Search for implementation guidance, then rerank the results to show me the most relevant information"
 
-with col3:
-    if st.button("🔬 Academic Search", use_container_width=True):
-        st.session_state.example_query = "Search Semantic Scholar for papers on federated learning"
-
-# Additional example queries
-col4, col5 = st.columns(2)
+# Row 2: Security and research tools
+col4, col5, col6 = st.columns(3)
 with col4:
-    if st.button("🎯 RAG + Reranking", use_container_width=True):
-        st.session_state.example_query = "Find the best matches for 'deep learning algorithms' in your documentation. Rereank them for closest relevance."
+    if st.button("🛡️ Security Check", use_container_width=True):
+        st.session_state.example_query = "My email is john.doe@example.com and I need help with my account"
 
 with col5:
-    if st.button("🚀 Full Stack Search", use_container_width=True):
-        st.session_state.example_query = "Compare what you know about transformers from your knowledge base with recent ArXiv and Semantic Scholar papers"
+    if st.button("🔬 ArXiv Research", use_container_width=True):
+        st.session_state.example_query = "Find recent ArXiv papers on machine learning from the last 6 months"
+
+with col6:
+    if st.button("📖 Semantic Scholar", use_container_width=True):
+        st.session_state.example_query = "Search Semantic Scholar for research papers on artificial intelligence with citations"
+
+# Row 3: Advanced research
+col7 = st.columns(1)[0]
+with col7:
+    if st.button("🚀 Full Research Stack", use_container_width=True):
+        st.session_state.example_query = "Compare what you know from your internal documentation with recent academic research papers"
 
 st.markdown("---")
 
@@ -115,7 +142,7 @@ for message in st.session_state.messages:
                         # Send feedback for historical message
                         try:
                             feedback_response = requests.post(
-                                "http://localhost:8000/feedback",
+                                f"{API_BASE_URL}/feedback",
                                 json={
                                     "user_id": st.session_state.user_id,
                                     "message_id": message_id,
@@ -143,7 +170,7 @@ for message in st.session_state.messages:
                         # Send feedback for historical message
                         try:
                             feedback_response = requests.post(
-                                "http://localhost:8000/feedback",
+                                f"{API_BASE_URL}/feedback",
                                 json={
                                     "user_id": st.session_state.user_id,
                                     "message_id": message_id,
@@ -181,12 +208,42 @@ for message in st.session_state.messages:
                         processed_tools = process_tool_display(tools, tool_details)
                         
                         config_data = {
-                            "variation": agent_config["variation_key"],
                             "model": agent_config["model"]
                         }
                         
                         if processed_tools:
-                            config_data["🛠️ tools_used"] = processed_tools
+                            config_data["tools_used"] = processed_tools
+                        
+                        # Show redacted text for supervisor agent
+                        if agent_config.get("agent_name") == "supervisor-agent":
+                            # Look for redacted text from security agent in metadata
+                            agent_data = metadata.get("agent_configurations", [])
+                            for agent in agent_data:
+                                if agent.get("agent_name") == "security-agent" and agent.get("redacted"):
+                                    config_data["redacted_text"] = agent.get("redacted", "")
+                                    break
+                        
+                        # Show PII findings for security agent
+                        if agent_config.get("agent_name") == "security-agent":
+                            # Show tools used (if any)
+                            if tool_details:
+                                for detail in tool_details:
+                                    if detail.get("name") == "pii_detection" and detail.get("pii_result"):
+                                        # Use the PII result directly from the tool (new schema format)
+                                        config_data["pii_analysis"] = detail["pii_result"]
+                            
+                            # Show security clearance status from agent response
+                            # This will be passed from the API response
+                            agent_data = metadata.get("agent_configurations", [])
+                            for agent in agent_data:
+                                if agent.get("agent_name") == "security_agent":
+                                    if agent.get("detected") is not None:
+                                        config_data["security_clearance"] = {
+                                            "detected": agent.get("detected"),
+                                            "types": agent.get("types", []),
+                                            "safe_to_proceed": agent.get("safe_to_proceed"),
+                                            "redacted": agent.get("redacted", "")
+                                        }
                             
                         st.json(config_data)
                         st.markdown("---")
@@ -203,7 +260,7 @@ else:
 
 # Chat input
 if not prompt:
-    prompt = st.chat_input("💬 Ask about AI/ML concepts, algorithms, or techniques...")
+    prompt = st.chat_input("💬 Ask questions about your documents or request research...")
 
 if prompt:
     # Add user message
@@ -216,7 +273,7 @@ if prompt:
     # Get agent response
     try:
         response = requests.post(
-            "http://localhost:8000/chat",
+            f"{API_BASE_URL}/chat",
             json={
                 "user_id": st.session_state.user_id,
                 "message": prompt
@@ -276,7 +333,7 @@ if prompt:
                                 # Send positive feedback to backend
                                 try:
                                     feedback_response = requests.post(
-                                        "http://localhost:8000/feedback",
+                                        f"{API_BASE_URL}/feedback",
                                         json={
                                             "user_id": st.session_state.user_id,
                                             "message_id": message_id,
@@ -307,7 +364,7 @@ if prompt:
                                 # Send negative feedback to backend
                                 try:
                                     feedback_response = requests.post(
-                                        "http://localhost:8000/feedback",
+                                        f"{API_BASE_URL}/feedback",
                                         json={
                                             "user_id": st.session_state.user_id,
                                             "message_id": message_id,
@@ -345,12 +402,26 @@ if prompt:
                             processed_tools = process_tool_display(tools, tool_details)
                             
                             config_data = {
-                                "variation": agent_config["variation_key"],
                                 "model": agent_config["model"]
                             }
                             
                             if processed_tools:
-                                config_data["🛠️ tools_used"] = processed_tools
+                                config_data["tools_used"] = processed_tools
+                            
+                            # Show redacted text for supervisor agent
+                            if agent_config.get("agent_name") == "supervisor-agent":
+                                # Look for redacted text from security agent in data
+                                for agent in data["agent_configurations"]:
+                                    if agent.get("agent_name") == "security-agent" and agent.get("redacted"):
+                                        config_data["redacted_text"] = agent.get("redacted", "")
+                                        break
+                            
+                            # Show PII findings for security agent
+                            if agent_config.get("agent_name") == "security-agent" and tool_details:
+                                for detail in tool_details:
+                                    if detail.get("name") == "pii_detection" and detail.get("pii_result"):
+                                        # Use the PII result directly from the tool (new schema format)
+                                        config_data["pii_analysis"] = detail["pii_result"]
                                 
                             st.json(config_data)
                             st.markdown("---")
@@ -362,12 +433,11 @@ if prompt:
                         processed_tools = process_tool_display(tools_used, tool_details)
                         
                         config_data = {
-                            "variation": data["variation_key"],
                             "model": data["model"]
                         }
                         
                         if processed_tools:
-                            config_data["🛠️ tools_used"] = processed_tools
+                            config_data["tools_used"] = processed_tools
                             
                         st.json(config_data)
         else:

@@ -55,10 +55,10 @@ def _cached_search(query: str, top_k: int, min_score: float) -> List[Tuple[str, 
 
 # ---------- Tool ----------
 class SearchToolV2(BaseTool):
-    """Advanced vector-based semantic search through enterprise AI/ML documentation."""
+    """Advanced vector-based semantic search through enterprise documentation."""
     name: str = "search_v2"
     description: str = (
-        "Advanced vector semantic search over enterprise AI/ML docs. "
+        "Advanced vector semantic search over enterprise documentation. "
         "Args: query (str), top_k (int, default 3, max 20), min_score (float, default 0.20). "
         "Returns a short human summary and a JSON payload with items=[{text, score, metadata}]."
     )

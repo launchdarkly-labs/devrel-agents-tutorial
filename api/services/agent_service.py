@@ -71,10 +71,19 @@ class AgentService:
             # Get detailed tool information with search queries from support agent
             tool_details = result.get("support_tool_details", [])
             
+            # Get security agent PII detection results and tool details
+            security_detected = result.get("pii_detected", False)
+            security_types = result.get("pii_types", [])
+            security_redacted = result.get("redacted_text", message)
+            security_safe_to_proceed = result.get("security_cleared", True)
+            security_tool_details = result.get("security_tool_details", [])
+            
+            print(f"🔍 API DEBUG: security_tool_details = {security_tool_details}")
             print(f"✅ LDAI WORKFLOW COMPLETED:")
             print(f"   📊 Tools used: {actual_tool_calls}")
             print(f"   📊 Tool details: {len(tool_details)} items")
             print(f"   💬 Response length: {len(result['final_response'])} chars")
+            print(f"   🔒 Security: detected={security_detected}, safe={security_safe_to_proceed}")
             
             # Create agent configuration metadata showing actual usage
             agent_configurations = [
@@ -88,7 +97,13 @@ class AgentService:
                     agent_name="security-agent", 
                     variation_key=security_config.variation_key,  # Use actual LaunchDarkly variation
                     model=security_config.model,
-                    tools=[]  # Security agent uses native capabilities, minimal tools
+                    tools=security_config.allowed_tools,  # Show configured tools
+                    tool_details=security_tool_details,  # Show security tool details with PII results
+                    # Pass PII detection results to UI
+                    detected=security_detected,
+                    types=security_types,
+                    redacted=security_redacted,
+                    safe_to_proceed=security_safe_to_proceed
                 ),
                 APIAgentConfig(
                     agent_name="support-agent",

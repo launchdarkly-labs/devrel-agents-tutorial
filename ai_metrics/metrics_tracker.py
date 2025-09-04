@@ -144,10 +144,12 @@ class AIMetricsTracker:
         
         # Debug: Check what methods are available on the tracker
         if tracker:
-            print(f"🔍 TRACKER DEBUG: Tracker type = {type(tracker)}")
-            print(f"🔍 TRACKER DEBUG: Available methods = {[method for method in dir(tracker) if not method.startswith('_')]}")
+            pass  # Tracker exists - no debug needed
+            # print(f"🔍 TRACKER DEBUG: Tracker type = {type(tracker)}")
+            # print(f"🔍 TRACKER DEBUG: Available methods = {[method for method in dir(tracker) if not method.startswith('_')]}")
         else:
-            print(f"🔍 TRACKER DEBUG: No tracker provided (tracker is None)")
+            pass  # No tracker provided
+            # print(f"🔍 TRACKER DEBUG: No tracker provided (tracker is None)")
         
     def start_workflow(self, user_id: str, query: str):
         """Start tracking a multi-agent workflow"""

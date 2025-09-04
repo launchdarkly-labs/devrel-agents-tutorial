@@ -15,6 +15,10 @@ class SupervisorState(TypedDict):
     support_tool_details: List[dict]
     final_response: str
     workflow_stage: str
+    processed_user_input: str  # Redacted text from security agent
+    pii_detected: bool  # PII schema field from security agent
+    pii_types: List[str]  # PII schema field from security agent
+    redacted_text: str  # PII schema field from security agent
 
 def create_supervisor_agent(supervisor_config: AgentConfig, support_config: AgentConfig, security_config: AgentConfig, config_manager: ConfigManager):
     """Create supervisor agent using LDAI SDK pattern"""
@@ -56,10 +60,7 @@ def create_supervisor_agent(supervisor_config: AgentConfig, support_config: Agen
             elif workflow_stage == "research" and not support_response:
                 next_agent = "support_agent"
                 print(f"🎯 SUPERVISOR: Rule-based routing -> {next_agent}")
-            elif workflow_stage == "final_compliance" and support_response:
-                next_agent = "security_agent"
-                print(f"🎯 SUPERVISOR: Rule-based routing -> {next_agent}")
-            elif support_response and security_cleared:
+            elif support_response:
                 next_agent = "complete"
                 print(f"🎯 SUPERVISOR: Rule-based routing -> {next_agent}")
             else:
@@ -71,13 +72,6 @@ def create_supervisor_agent(supervisor_config: AgentConfig, support_config: Agen
                 Current stage: {workflow_stage}
                 Security cleared: {security_cleared}
                 Has support response: {bool(support_response)}
-                
-                Choose next action:
-                - "security_agent": For PII removal or compliance
-                - "support_agent": For research and information
-                - "complete": When workflow is finished
-                
-                Respond with ONLY the agent name.
                 """
                 
                 prompt = HumanMessage(content=system_prompt + f"\n\nLast message: {messages[-1].content if messages else state['user_input']}")
@@ -146,10 +140,25 @@ def create_supervisor_agent(supervisor_config: AgentConfig, support_config: Agen
             
             print(f"🎯 SUPERVISOR: Security agent completed, transitioning {current_stage} -> {new_stage}")
             
+            # Extract PII schema fields from security agent
+            detected = result.get("detected", False)
+            types = result.get("types", [])
+            redacted_text = result.get("redacted", state["user_input"])
+            safe_to_proceed = result.get("safe_to_proceed", True)
+            
+            print(f"🔒 SUPERVISOR: PII detected={detected}, safe_to_proceed={safe_to_proceed}, types={types}")
+            print(f"🔒 SUPERVISOR DEBUG: Security agent result keys: {list(result.keys())}")
+            print(f"🔒 SUPERVISOR DEBUG: Security tool_details: {result.get('tool_details', [])}")
+            
             return {
                 "messages": [AIMessage(content=result["response"])],
                 "workflow_stage": new_stage,
-                "security_cleared": True
+                "security_cleared": safe_to_proceed,
+                "processed_user_input": redacted_text,  # Use redacted text for support agent
+                "pii_detected": detected,
+                "pii_types": types,
+                "redacted_text": redacted_text,
+                "security_tool_details": result.get("tool_details", [])  # Capture security agent tool details
             }
             
         except Exception as e:
@@ -173,13 +182,24 @@ def create_supervisor_agent(supervisor_config: AgentConfig, support_config: Agen
                 lambda: "supervisor_orchestrating_support_start"
             )
             
+            # Use processed (potentially redacted) text if available
+            processed_input = state.get("processed_user_input", state["user_input"])
+            pii_detected = state.get("pii_detected", False)
+            pii_types = state.get("pii_types", [])
+            safe_to_proceed = state.get("security_cleared", True)
+            
+            print(f"🔒 SUPERVISOR: Passing to support agent - PII detected: {pii_detected}, safe: {safe_to_proceed}")
+            print(f"📝 SUPERVISOR: Input text: '{processed_input[:100]}...'")
+            if pii_types:
+                print(f"🔍 SUPERVISOR: PII types found: {pii_types}")
+            
             # Prepare support agent input
             support_input = {
-                "user_input": state["user_input"],
+                "user_input": processed_input,  # Use redacted text if PII was found
                 "response": "",
                 "tool_calls": [],
                 "tool_details": [],
-                "messages": [HumanMessage(content=state["user_input"])]
+                "messages": [HumanMessage(content=processed_input)]
             }
             
             # Execute support agent
@@ -202,7 +222,7 @@ def create_supervisor_agent(supervisor_config: AgentConfig, support_config: Agen
                 "support_response": result["response"],
                 "support_tool_calls": tool_calls,
                 "support_tool_details": result.get("tool_details", []),
-                "workflow_stage": "final_compliance"
+                "workflow_stage": "complete"
             }
             
         except Exception as e:

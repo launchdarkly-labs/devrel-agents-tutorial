@@ -4,7 +4,7 @@ Fixed ConfigManager that uses the working direct test pattern for LaunchDarkly t
 """
 import os
 import time
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 import ldclient
 from ldclient import Context
@@ -20,6 +20,7 @@ class AgentConfig:
     model: str
     instructions: str
     allowed_tools: List[str]
+    tool_configs: Optional[Dict[str, Any]] = None  # Tool configurations from LaunchDarkly
     max_tool_calls: int = 8
     max_cost: float = 1.0
     temperature: float = 0.0
@@ -33,7 +34,7 @@ class FixedConfigManager:
         if not self.sdk_key:
             raise ValueError("LD_SDK_KEY environment variable is required")
         
-        print(f"✅ SDK Key found: {self.sdk_key[:20]}...")
+        # print(f"✅ SDK Key found: {self.sdk_key[:20]}...")
         
         # Use EXACT initialization pattern from working direct test
         self._initialize_launchdarkly_client()
@@ -54,15 +55,15 @@ class FixedConfigManager:
             wait_time += 0.5
         
         if not self.ld_client.is_initialized():
-            print("❌ LaunchDarkly client failed to initialize")
+            # print("❌ LaunchDarkly client failed to initialize")
             raise RuntimeError("LaunchDarkly client initialization failed")
         
-        print("✅ LaunchDarkly client initialized successfully")
+        # print("✅ LaunchDarkly client initialized successfully")
     
     def _initialize_ai_client(self):
         """Initialize AI client using EXACT pattern from working direct test"""
         self.ai_client = LDAIClient(self.ld_client)
-        print("✅ LaunchDarkly AI client initialized")
+        # print("✅ LaunchDarkly AI client initialized")
     
     async def get_ai_config_with_tracker(self, user_id: str, config_key: str = None, user_context: dict = None):
         """Get AI Config with tracker using EXACT pattern from working direct test"""
@@ -89,25 +90,25 @@ class FixedConfigManager:
             model=ModelConfig(name="claude-3-haiku-20240307")
         )
         
-        print(f"🔍 Getting AI config '{ai_config_key}' for user {user_id}")
+        # print(f"🔍 Getting AI config '{ai_config_key}' for user {user_id}")
         
         try:
             # Use EXACT ai_client.config call from working direct test
             config, tracker = self.ai_client.config(ai_config_key, ld_user_context, fallback)
             
-            print(f"✅ Config type: {type(config)}")
-            print(f"✅ Config enabled: {getattr(config, 'enabled', 'no enabled attr')}")
-            print(f"✅ Tracker type: {type(tracker)}")
+            # print(f"✅ Config type: {type(config)}")
+            # print(f"✅ Config enabled: {getattr(config, 'enabled', 'no enabled attr')}")
+            # print(f"✅ Tracker type: {type(tracker)}")
             
             if not tracker:
-                print("❌ No tracker returned!")
+                # print("❌ No tracker returned!")
                 return config, None
             
-            print(f"✅ Tracker methods: {[m for m in dir(tracker) if not m.startswith('_')]}")
+            # print(f"✅ Tracker methods: {[m for m in dir(tracker) if not m.startswith('_')]}")
             return config, tracker
             
         except Exception as e:
-            print(f"❌ Error getting AI config: {e}")
+            # print(f"❌ Error getting AI config: {e}")
             return fallback, None
     
     async def get_config(self, user_id: str, config_key: str = None, user_context: dict = None) -> AgentConfig:
@@ -133,11 +134,69 @@ class FixedConfigManager:
         else:
             model = "claude-3-haiku-20240307"  # fallback
         
-        # Use reasonable defaults
-        variation_key = "main"
-        instructions = "You are a helpful AI assistant that can search documentation."
-        allowed_tools = ["search_v2", "reranking", "semantic_scholar", "arxiv_search"]
-        max_tool_calls = 8
+        # Extract tools and tool configurations from AI Config using to_dict()
+        allowed_tools = []
+        tool_configs = {}
+        variation_key = "default"  # No variations used, but required by Pydantic
+        config_dict = {}
+        
+        try:
+            config_dict = ai_config.to_dict()
+            # print(f"🔍 CONFIG DEBUG: Full config_dict keys = {list(config_dict.keys())}")
+            # print(f"🔍 CONFIG DEBUG: config_dict = {config_dict}")
+            
+            # Extract tools - check all possible locations
+            if 'tools' in config_dict and config_dict['tools']:
+                allowed_tools = list(config_dict['tools'])
+                # print(f"🔍 CONFIG DEBUG: extracted allowed_tools from 'tools' = {allowed_tools}")
+            elif 'tool_list' in config_dict and config_dict['tool_list']:
+                allowed_tools = list(config_dict['tool_list'])
+                # print(f"🔍 CONFIG DEBUG: extracted allowed_tools from 'tool_list' = {allowed_tools}")
+            elif 'model' in config_dict and 'parameters' in config_dict['model'] and 'tools' in config_dict['model']['parameters']:
+                # Tools are in model.parameters.tools - extract names AND parameters
+                tools_data = config_dict['model']['parameters']['tools']
+                for tool in tools_data:
+                    if 'name' in tool:
+                        tool_name = tool['name']
+                        allowed_tools.append(tool_name)
+                        # Store the full tool configuration
+                        tool_configs[tool_name] = tool.get('parameters', {})
+                # print(f"🔍 CONFIG DEBUG: extracted allowed_tools = {allowed_tools}")
+                # print(f"🔍 CONFIG DEBUG: extracted tool_configs = {tool_configs}")
+            else:
+                allowed_tools = []
+                # print(f"🔍 CONFIG DEBUG: no tools found in config_dict")
+            
+            # Variations not used in this implementation
+            
+        except Exception as e:
+            # print(f"🔍 CONFIG DEBUG: to_dict() failed = {e}")
+            # print(f"🔍 CONFIG DEBUG: falling back to direct attribute access")
+            # Try direct access as fallback
+            if hasattr(ai_config, 'tools') and ai_config.tools:
+                allowed_tools = list(ai_config.tools)
+                # print(f"🔍 CONFIG DEBUG: fallback extracted tools = {allowed_tools}")
+        
+        # Use reasonable defaults for other fields
+        instructions = "You are a helpful assistant that can search documentation. When search results are available, prioritize information from those results over your general knowledge to provide the most accurate and up-to-date responses."
+        # Extract max_tool_calls from customParameters if available
+        max_tool_calls = 8  # default
+        try:
+            if 'customParameters' in config_dict and config_dict['customParameters']:
+                custom_params = config_dict['customParameters']
+                if 'max_tool_calls' in custom_params:
+                    max_tool_calls = custom_params['max_tool_calls']
+                    # print(f"🔍 CONFIG DEBUG: extracted max_tool_calls = {max_tool_calls}")
+            elif 'model' in config_dict and 'custom' in config_dict['model'] and config_dict['model']['custom']:
+                # Check model.custom for max_tool_calls
+                custom_params = config_dict['model']['custom']
+                if 'max_tool_calls' in custom_params:
+                    max_tool_calls = custom_params['max_tool_calls']
+                    # print(f"🔍 CONFIG DEBUG: extracted max_tool_calls from model.custom = {max_tool_calls}")
+        except Exception as e:
+            # print(f"🔍 CONFIG DEBUG: custom parameters extraction failed = {e}")
+            if hasattr(ai_config, 'custom') and hasattr(ai_config.custom, 'max_tool_calls'):
+                max_tool_calls = ai_config.custom.max_tool_calls
         max_cost = 1.0
         temperature = 0.0
         workflow_type = "sequential"
@@ -147,6 +206,7 @@ class FixedConfigManager:
             model=model,
             instructions=instructions,
             allowed_tools=allowed_tools,
+            tool_configs=tool_configs,
             max_tool_calls=max_tool_calls,
             max_cost=max_cost,
             temperature=temperature,

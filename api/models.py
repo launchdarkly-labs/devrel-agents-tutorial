@@ -12,6 +12,11 @@ class AgentConfig(BaseModel):
     model: str
     tools: List[str]
     tool_details: Optional[List[Dict]] = None  # Optional detailed tool info with search queries
+    # PII detection fields for security agent
+    detected: Optional[bool] = None
+    types: Optional[List[str]] = None
+    redacted: Optional[str] = None
+    safe_to_proceed: Optional[bool] = None
 
 class ChatResponse(BaseModel):
     id: str

@@ -4,7 +4,7 @@ from typing import Any
 
 class SearchToolV1(BaseTool):
     name: str = "search_v1"
-    description: str = "Basic keyword-based search through AI/ML technical documentation"
+    description: str = "Basic keyword-based search through enterprise documentation"
     vector_store: Any = None
     
     def __init__(self):
@@ -18,7 +18,7 @@ class SearchToolV1(BaseTool):
         try:
             # Get all chunks from persistent store and do keyword search
             if not self.vector_store.documents:
-                return "No technical documentation available."
+                return "No documentation available."
             
             query_lower = query.lower()
             matching_chunks = []

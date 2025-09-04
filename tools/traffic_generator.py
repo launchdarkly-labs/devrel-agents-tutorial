@@ -12,10 +12,17 @@ import requests
 import time
 import random
 import argparse
+import os
 from pathlib import Path
+from dotenv import load_dotenv
 
-# Dead simple configuration - edit these if you want!
-API_BASE_URL = "http://localhost:8001"
+# Load environment variables
+load_dotenv()
+
+# Configuration from environment variables with defaults
+API_HOST = os.getenv('API_HOST', 'localhost')
+API_PORT = os.getenv('API_PORT', '8000')
+API_BASE_URL = f"http://{API_HOST}:{API_PORT}"
 USERS_FILE = "data/fake_users.json"
 QUERIES_FILE = "data/sample_queries.json"
 
