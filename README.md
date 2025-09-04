@@ -1,4 +1,18 @@
-# Build a LangGraph Multi-Agent System in 20 Minutes with LaunchDarkly AI Configs
+---
+slug: /tutorials/langgraph-multi-agent-tutorial
+title: "Build a LangGraph Multi-Agent System in 20 Minutes with LaunchDarkly AI Configs"
+description: Build a working multi-agent system with dynamic configuration in 20 minutes using LangGraph multi-agent workflows, RAG search, and LaunchDarkly AI Configs.
+keywords: tutorial, langgraph, multi-agent, AI configs, typescript, rag, mcp
+---
+<p class="publishedDate"><em>Published September 8th, 2025</em></p>
+<div class="authorWrapper">
+  <img
+    src="../../../assets/images/authors/launchdarkly-team.png"
+    alt="LaunchDarkly Team"
+    class="authorAvatar"
+  ></img>
+  <p class="authorName">by Scarlett Attensil</p>
+</div>
 
 *Part 1 of 3 of the series **Chaos to Clarity: Defensible AI Systems That Deliver on Your Goals***
 
@@ -50,9 +64,50 @@ uv sync
 cp .env.example .env
 ```
 
-Edit `.env` with your keys:
+First, you need to get your LaunchDarkly SDK key by creating a project:
+
+1. **Sign up for LaunchDarkly** at [app.launchdarkly.com](https://app.launchdarkly.com) (free account)
+2. **Find projects on the side bar:**
+
+<br>
+
+<div align="center">
+
+![Sidebar Projects](screenshots/sidebar_projects_top_half.jpeg)
+
+</div>
+
+3. **Create a new project** called "multi-agent-chatbot"
+
+<br>
+
+<div align="center">
+
+![New Project](screenshots/new_project_small.jpg)
+
+</div>
+
+4. **Get your SDK key**:
+  
+    Go to:
+    
+    ⚙️ (bottom of sidebar) → **Projects** → **multi-agent-chatbot** → ⚙️ (to the right) 
+    
+    → **Environments** → **Production** → **...** → **SDK key** 
+    
+    this is your `LD_SDK_KEY`
+
+<br>
+
+<div align="center">
+
+![SDK Key](screenshots/sdk_key_small.jpg)
+
+</div>
+
+Now edit `.env` with your keys:
 ```bash
-LD_SDK_KEY=your-launchdarkly-sdk-key
+LD_SDK_KEY=your-launchdarkly-sdk-key  # From step above
 OPENAI_API_KEY=your-openai-key        # Required for RAG embeddings
 ANTHROPIC_API_KEY=your-anthropic-key  # Required for Claude models
 ```
@@ -78,6 +133,8 @@ Document types that work well:
 - **SaaS**: API docs, user guides, troubleshooting manuals
 - **E-commerce**: Product catalogs, policies, FAQs
 
+## Step 3: Initialize Your Knowledge Base (2 minutes)
+
 Turn documents into searchable **RAG architecture** knowledge:
 
 ```bash
@@ -85,85 +142,81 @@ Turn documents into searchable **RAG architecture** knowledge:
 uv run python initialize_embeddings.py --force
 ```
 
-This builds your **RAG architecture** (Retrieval-Augmented Generation) foundation using **OpenAI's text-embedding-3-small** model and **FAISS** vector database. The **RAG architecture** converts documents into 1536-dimensional vector embeddings that capture semantic meaning rather than just keywords. **FAISS** enables efficient similarity search across your knowledge base, while the **OpenAI embedding model** ensures your **RAG architecture** understands that "cancel subscription" relates to "terminate account" through semantic similarity.
-
-## Step 3: Create Your LaunchDarkly Project (2 minutes)
-
-Set up your LaunchDarkly project to manage your AI agents and configurations.
-
-1. **Log into LaunchDarkly** at [app.launchdarkly.com](https://app.launchdarkly.com)
-2. **Create a new project** called "AI Agents Demo"
-4. **Get your SDK key**:
-   - Go to **Account Settings** → **Projects** → **AI Agents Demo** → **Production**
-   - Copy the **Server-side ID** (this is your `LD_SDK_KEY`)
-   - Update your `.env` file with this key
-
-Your LaunchDarkly project will control all AI behavior dynamically. Each agent configuration, tool availability, and model selection happens through LaunchDarkly AI Configs without requiring code changes or deployments.
+This builds your **RAG architecture** (Retrieval-Augmented Generation) foundation using **OpenAI's text-embedding-3-small** model and **FAISS** vector database. The **RAG architecture** converts documents into 1536-dimensional vector embeddings that capture semantic meaning rather than just keywords.
 
 ## Step 4: Define Your Tools (3 minutes)
 
-Define the search tools your agents will use. Tools must be created before agent configs.
+Define the search tools your agents will use.
 
-In LaunchDarkly Dashboard → **Tools** → **Create New Tool**:
+In **LaunchDarkly Dashboard Sidebar** → **Library** (under AI) → **Tools** tab → **Create New Tool**
 
-**RAG Vector Search Tool:**
-```json
-{
-  "name": "search_v2",
-  "displayName": "RAG Vector Search",
-  "description": "Semantic search using vector embeddings",
-  "parameters": {
-    "query": {
-      "type": "string",
-      "description": "Search query for semantic matching"
-    },
-    "top_k": {
-      "type": "integer",
-      "description": "Number of results to return",
-      "default": 5
-    }
-  }
-}
-```
+<br>
 
-**Result Reranking Tool:**
-```json
-{
-  "name": "reranking",
-  "displayName": "Search Result Reranker",
-  "description": "Reorders results by relevance",
-  "parameters": {
-    "query": {
-      "type": "string",
-      "description": "Original query for scoring"
-    },
-    "results": {
-      "type": "array",
-      "description": "Results to rerank"
-    }
-  }
-}
-```
+<div align="center">
 
-**PII Detection Tool:**
-```json
-{
-  "name": "pii_detection",
-  "displayName": "PII Detection",
-  "description": "Detects and redacts personally identifiable information with clearance status",
-  "parameters": {
-    "text": {
-      "type": "string",
-      "description": "Text to analyze for PII"
-    }
-  }
-}
-```
+![Library](screenshots/library_small.jpg)
 
+</div>
 
->**🔍 How Your RAG Architecture Works**
+### Create the RAG vector search tool:
+
+> **Key:** `search_v2`
 >
->These tools implement your **RAG architecture** in two stages: the `search_v2` tool performs semantic similarity search using **FAISS** by converting queries into the same 1536-dimensional vector space as your documents (via **OpenAI text-embedding-3-small**), while `reranking` uses cross-encoder models to reorder results for maximum relevance. This **FAISS**-powered **RAG architecture** significantly outperforms basic keyword search by understanding context and semantic relationships through high-dimensional vector similarity.
+> **Description:** `Semantic search using vector embeddings`
+>
+> **Schema:**
+> ```json
+> {
+>   "properties": {
+>     "query": {
+>       "description": "Search query for semantic matching",
+>       "type": "string"
+>     },
+>     "top_k": {
+>       "description": "Number of results to return",
+>       "type": "number"
+>     }
+>   },
+>   "additionalProperties": false,
+>   "required": [
+>     "query"
+>   ]
+> }
+> ```
+
+
+### Create the reranking tool:
+
+> **Key:** `reranking`
+>
+> **Description:** `Reorders results by relevance`
+>
+> **Schema:**
+> ```json
+> {
+>   "properties": {
+>     "query": {
+>       "description": "Original query for scoring",
+>       "type": "string"
+>     },
+>     "results": {
+>       "description": "Results to rerank",
+>       "type": "array"
+>     }
+>   },
+>   "additionalProperties": false,
+>   "required": [
+>     "query",
+>     "results"
+>   ]
+> }
+> ```
+
+<Callout intent="info">
+**🔍 How Your RAG Architecture Works**
+
+These tools implement your **RAG architecture** in two stages: the `search_v2` tool performs semantic similarity search using **FAISS** by converting queries into the same 1536-dimensional vector space as your documents (via **OpenAI text-embedding-3-small**), while `reranking` uses cross-encoder models to reorder results for maximum relevance. This **FAISS**-powered **RAG architecture** significantly outperforms basic keyword search by understanding context and semantic relationships through high-dimensional vector similarity.
+</Callout>
 
 ## Step 5: Create Your AI Agents in LaunchDarkly (5 minutes)
 
@@ -171,33 +224,51 @@ Configure your **LangGraph** multi-agent system dynamically. **LangGraph** is La
 
 ### Create the Supervisor Agent
 
-1. Go to **LaunchDarkly Dashboard** → **AI Configs** → **Create New**
-2. Name it `supervisor-agent`
-3. Add this configuration:
+1. Go to **LaunchDarkly Dashboard Sidebar** → **AI Configs** → **Create New**
+2. Select 🤖 `Agent-based`
 
-```json
-{
-  "model": {"name": "claude-3-7-sonnet-latest"},
-  "instructions": "You are an AI supervisor that coordinates between security and support agents. Route requests efficiently based on content analysis. Choose next action: 'security_agent' for PII removal or compliance, 'support_agent' for research and information, 'complete' when workflow is finished. Respond with ONLY the agent name.",
-  "tools": [],
-  "variationKey": "supervisor-basic"
-}
-```
+<br>
+
+<div align="center">
+
+![Agent Based](screenshots/agent-based_small.jpg)
+
+</div>
+
+3. Name it `supervisor-agent`
+4. Add this configuration:
+
+
+> **variation:** `supervisor-basic`
+>
+> **Model configuration:** `Anthropic` `claude-3-7-sonnet-latest`
+>
+> → **Add parameters**
+> → **Click Custom parameters**
+> ```json
+> {"max_tool_calls":5}
+> ```
+>
+> **Goal or task:** 
+> ```
+> You are a helpful assistant that can search documentation and research papers. When search results are available, prioritize information from those results over your general knowledge to provide the most accurate and up-to-date responses. Use available tools to search the knowledge base and external research databases to answer questions accurately and comprehensively.
+> ```
 
 The supervisor agent demonstrates **LangGraph** orchestration by routing requests based on content analysis rather than rigid rules. **LangGraph** enables this agent to maintain conversation context and make intelligent routing decisions that adapt to user needs and LaunchDarkly AI Config parameters.
 
+
 ### Create the Security Agent
 
-Create another AI Config called `security-agent`:
+Similarly, create another AI Config called `security-agent`:
 
-```json
-{
-  "model": {"name": "claude-3-7-sonnet-latest"},
-  "instructions": "You are a privacy agent that REMOVES PII and formats the input for another process. Analyze the input text and respond with JSON containing: detected (true if PII found), types (array like ['email', 'name']), redacted (text with PII replaced by [REDACTED], keeping it readable). Examples: Input: 'My email is john@company.com and I need help' Output: {\"detected\": true, \"types\": [\"email\"], \"redacted\": \"My email is [REDACTED] and I need help\"}. Input: 'I need help with my account' Output: {\"detected\": false, \"types\": [], \"redacted\": \"I need help with my account\"}. Input: 'My name is Sarah Johnson and my phone is 555-1234' Output: {\"detected\": true, \"types\": [\"name\", \"phone\"], \"redacted\": \"My name is [REDACTED] and my phone is [REDACTED]\"}. Always return valid JSON format.",
-  "tools": [],
-  "variationKey": "pii-detector"
-}
-```
+> **variation:** `pii-detector`
+>
+> **Model configuration:** `Anthropic` `claude-3-7-sonnet-latest`
+>
+> **Goal or task:** 
+> ```
+> You are a privacy agent that REMOVES PII and formats the input for another process. Analyze the input text and respond with JSON containing: detected (true if PII found), types (array like ['email', 'name']), redacted (text with PII replaced by [REDACTED], keeping it readable). Examples: Input: 'My email is john@company.com and I need help' Output: {"detected": true, "types": ["email"], "redacted": "My email is [REDACTED] and I need help"}. Input: 'I need help with my account' Output: {"detected": false, "types": [], "redacted": "I need help with my account"}. Input: 'My name is Sarah Johnson and my phone is 555-1234' Output: {"detected": true, "types": ["name", "phone"], "redacted": "My name is [REDACTED] and my phone is [REDACTED]"}. Always return valid JSON format.
+> ```
 
 This agent detects PII and provides detailed redaction information, showing exactly what sensitive data was found and how it would be handled for compliance and transparency.
 
@@ -205,17 +276,26 @@ This agent detects PII and provides detailed redaction information, showing exac
 
 Finally, create `support-agent`:
 
-```json
-{
-  "model": {"name": "claude-3-7-sonnet-latest"},
-  "instructions": "You are a helpful assistant that can search documentation and research papers. When search results are available, prioritize information from those results over your general knowledge to provide the most accurate and up-to-date responses. Use available tools to search the knowledge base and external research databases to answer questions accurately and comprehensively.",
-  "tools": ["search_v2", "reranking"],
-  "variationKey": "search-enhanced",
-  "customParameters": {
-    "max_tool_calls": 5
-  }
-}
-```
+
+> **variation:** `rag-search-enhanced`
+>
+> **Model configuration:** `Anthropic` `claude-3-7-sonnet-latest`
+>
+> → **Add tools**
+> select **reranking** and **search_v2**
+>
+> **Goal or task:** 
+> ```
+> You are a helpful assistant that can search documentation and research papers. When search results are available, prioritize information from those results over your general knowledge to provide the most accurate and up-to-date responses. Use available tools to search the knowledge base and external research databases to answer questions accurately and comprehensively.
+> ```
+
+<br>
+
+<div align="center">
+
+![Agents](screenshots/agents_small.jpg)
+
+</div>
 
 This agent combines **LangGraph** workflow management with your **RAG architecture** tools. **LangGraph** enables the agent to chain multiple tool calls together: first using the **RAG architecture** for document retrieval, then semantic reranking, all while maintaining conversation state and handling error recovery gracefully.
 
@@ -244,11 +324,18 @@ Or ask about your specific domain: "What's our refund policy?"
 **PII Detection Test:**
 "My email is john.doe@example.com and I need help"
 
-The sidebar shows:
+**Workflow Details** show:
 - Which agents are activated
-- What tools are being used
-- Performance metrics
-- Cost per query
+- What models and tools are being used
+- Text after redaction
+
+<br>
+
+<div align="center">
+
+![UI](screenshots/ui_small.jpg)
+
+</div>
 
 Watch **LangGraph** in action: the supervisor routes to security first (detecting PII), then to support which uses your **RAG architecture** for document search. **LangGraph** maintains state throughout this multi-agent workflow, ensuring context flows seamlessly between agents.
 
