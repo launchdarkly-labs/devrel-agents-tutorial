@@ -1,8 +1,10 @@
 # Build a LangGraph Multi-Agent System in 20 Minutes with LaunchDarkly AI Configs
 
+## Overview
+
 Build a working multi-agent system with dynamic configuration in 20 minutes using LangGraph multi-agent workflows, RAG search, and LaunchDarkly AI Configs.
 
-*Part 1 of 3 of the series **Chaos to Clarity: Defensible AI Systems That Deliver on Your Goals***
+*Part 1 of 3 of the series: **Chaos to Clarity: Defensible AI Systems That Deliver on Your Goals***
 
 You've been there: your AI chatbot works great in testing, then production hits and GPT-4 costs spiral out of control. You switch to Claude, but now European users need different privacy rules. Every change means another deploy, more testing, and crossed fingers that nothing breaks.
 
@@ -57,7 +59,7 @@ First, you need to get your LaunchDarkly SDK key by creating a project:
 1. **Sign up for LaunchDarkly** at [app.launchdarkly.com](https://app.launchdarkly.com) (free account)
 2. **Find projects on the side bar:**
 
-<br>
+<br />
 
 <div align="center">
 
@@ -67,7 +69,6 @@ First, you need to get your LaunchDarkly SDK key by creating a project:
 
 3. **Create a new project** called "multi-agent-chatbot"
 
-<br>
 
 <div align="center">
 
@@ -83,7 +84,7 @@ First, you need to get your LaunchDarkly SDK key by creating a project:
     
     this is your `LD_SDK_KEY`
 
-<br>
+<br />
 
 <div align="center">
 
@@ -98,7 +99,7 @@ OPENAI_API_KEY=your-openai-key        # Required for RAG embeddings
 ANTHROPIC_API_KEY=your-anthropic-key  # Required for Claude models
 ```
 
-This sets up a **LangGraph** application that uses LaunchDarkly to control AI behavior. Think of it like swapping actors mid-performance without stopping the show.
+This sets up a **LangGraph** application that uses LaunchDarkly to control AI behavior. Think of it like swapping actors, directors, even props mid-performance without stopping the show.
 
 ## Step 2: Add Your Business Knowledge (2 minutes)
 
@@ -106,7 +107,7 @@ The system includes a sample reinforcement learning textbook. Replace it with yo
 
 ```bash
 # Option A: Use the sample (AI/ML knowledge)
-# Already included: kb/SuttonBartoIPRLBook2ndEd.pdf
+# Already included: kb/SuttonBarto-IPRL-Book2ndEd.pdf
 
 # Option B: Add your documents
 rm kb/*.pdf  # Clear sample
@@ -136,7 +137,7 @@ Define the search tools your agents will use.
 
 In **LaunchDarkly Dashboard Sidebar** → **Library** (under AI) → **Tools** tab → **Create New Tool**
 
-<br>
+<br />
 
 <div align="center">
 
@@ -213,12 +214,9 @@ In **LaunchDarkly Dashboard Sidebar** → **Library** (under AI) → **Tools** t
 > ```
 
 
-<Callout intent="info">
-
-**🔍 How Your RAG Architecture Works**
-
-Your **RAG** system works in two stages: `search_v2` performs semantic similarity search using FAISS by converting queries into the same vector space as your documents (via **OpenAI** embeddings), while `reranking` reorders results for maximum relevance. This **RAG** approach significantly outperforms keyword search by understanding context, so asking "How do I cancel?" finds your cancellation policy even without the word "cancel."
-</Callout>
+> **🔍 How Your RAG Architecture Works**
+>
+> Your **RAG** system works in two stages: `search_v2` performs semantic similarity search using FAISS by converting queries into the same vector space as your documents (via **OpenAI** embeddings), while `reranking` reorders results for maximum relevance. This **RAG** approach significantly outperforms keyword search by understanding context, so asking "How do I cancel?" finds your cancellation policy even without the word "cancel."
 
 ## Step 5: Create Your AI Agents in LaunchDarkly (5 minutes)
 
@@ -229,7 +227,7 @@ Configure your **LangGraph** multi-agent system dynamically. **LangGraph** is La
 1. Go to **LaunchDarkly Dashboard Sidebar** → **AI Configs** → **Create New**
 2. Select `🤖 Agent-based`
 
-<br>
+<br />
 
 <div align="center">
 
@@ -237,10 +235,7 @@ Configure your **LangGraph** multi-agent system dynamically. **LangGraph** is La
 
 </div>
 
-3. Name it `
-```
-supervisor-agent
-```
+3. Name it `supervisor-agent`
 4. Add this configuration:
 
 > 
@@ -268,15 +263,24 @@ supervisor-agent
 > You are a helpful assistant that can search documentation and research papers. When search results are available, prioritize information from those results over your general knowledge to provide the most accurate and up-to-date responses. Use available tools to search the knowledge base and external research databases to answer questions accurately and comprehensively.
 > ```
 
+Now enable your AI Config by switching to the **Targeting** tab and editing the default rule to serve the variation you just created:
+
+<br />
+
+<div align="center">
+
+![Targeting Configuration](screenshots/targeting.jpg)
+
+</div>
+
+Click **Edit** on the Default rule, change it to serve your `supervisor-basic` variation, and save with a note like "Enabling new agent config".
+
 The supervisor **agent** demonstrates **LangGraph** orchestration by routing requests based on content analysis rather than rigid rules. **LangGraph** enables this **agent** to maintain conversation context and make intelligent routing decisions that adapt to user needs and LaunchDarkly AI Config parameters.
 
 
 ### Create the Security Agent
 
-Similarly, create another AI Config called 
-```
- security-agent
-```
+Similarly, create another AI Config called `security-agent`
 
 > 
 > **variation:** 
@@ -299,12 +303,11 @@ Similarly, create another AI Config called
 
 This agent detects PII and provides detailed redaction information, showing exactly what sensitive data was found and how it would be handled for compliance and transparency.
 
+**Remember to switch to the Targeting tab and enable this agent the same way we did for the supervisor - edit the default rule to serve your `pii-detector` variation and save it.**
+
 ### Create the Support Agent
 
-Finally, create 
-```
-support-agent
-```
+Finally, create `support-agent`
 
 
 > 
@@ -330,7 +333,7 @@ support-agent
 > You are a helpful assistant that can search documentation and research papers. When search results are available, prioritize information from those results over your general knowledge to provide the most accurate and up-to-date responses. Use available tools to search the knowledge base and external research databases to answer questions accurately and comprehensively.
 > ```
 
-<br>
+<br />
 
 <div align="center">
 
@@ -339,6 +342,8 @@ support-agent
 </div>
 
 This **agent** combines **LangGraph** workflow management with your **RAG** tools. **LangGraph** enables the **agent** to chain multiple tool calls together: first using **RAG** for document retrieval, then semantic reranking, all while maintaining conversation state and handling error recovery gracefully.
+
+**Remember to switch to the Targeting tab and enable this agent the same way - edit the default rule to serve your `rag-search-enhanced` variation and save it.**
 
 ## Step 6: Launch Your System (2 minutes)
 
@@ -372,7 +377,7 @@ Or ask about your specific domain: "What's our refund policy?"
 - What models and tools are being used
 - Text after redaction
 
-<br>
+<br />
 
 <div align="center">
 
@@ -435,20 +440,12 @@ The support **agent** combines **LangGraph** tool chaining with your **RAG** sys
 **4. Runtime Control**
 LaunchDarkly controls both **LangGraph** behavior and **RAG** parameters without code changes.
 
-## Real-World Use Cases
-
-Teams are using this pattern for:
-
-- **Customer Support**: Route billing to one agent, technical to another, with different cost tolerances
-- **Legal Research**: Expensive models for contract analysis, cheap ones for basic queries
-- **Healthcare**: Strict PII handling for patient data, different models for research vs. clinical queries
-- **E-commerce**: Premium support for enterprise customers, basic for free tier
-
 ## What's Next?
 
 Your multi-agent system is running with dynamic control and ready for optimization.
 
-**In Part 2**, we'll add:
+ **In Part 2**, we'll add:
+
 - Geographic-based privacy rules (strict for EU, standard for US)
 - MCP tools for external data (GitHub, Slack, databases)
 - Business tier configurations (free, pro, enterprise)
@@ -458,7 +455,7 @@ Your multi-agent system is running with dynamic control and ready for optimizati
 
 ## Try This Now
 
-Before moving to Part 2, experiment with:
+{/* Before moving to Part 2, */} Experiment with:
 
 1. **Different Instructions**: Make agents more helpful, more cautious, or more thorough
 2. **Tool Combinations**: Add/remove tools to see impact on quality
@@ -473,8 +470,6 @@ Every change is instant, measurable, and reversible.
 - Dynamic configuration handles changing requirements better than hardcoding
 - LaunchDarkly AI Configs control and change AI behavior without requiring deployments
 - Start simple and add complexity as you learn what works
-
-Ready for more? [Continue to Part 2: Advanced AI Agent Features →](./part-2-advanced-features)
 
 ---
 
