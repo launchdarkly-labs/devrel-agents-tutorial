@@ -6,6 +6,8 @@ from dotenv import load_dotenv
 
 from .models import ChatRequest, ChatResponse, FeedbackRequest, FeedbackResponse
 from .services.agent_service import AgentService
+from .utils.console_capture import capture_console_output
+from utils.logger import log_student, log_debug
 
 load_dotenv()
 
@@ -15,18 +17,25 @@ agent_service = AgentService()
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
-    print(f"🌐 API: Received chat request from user {request.user_id}: {request.message[:50]}...")
-    try:
-        result = await agent_service.process_message(
-            user_id=request.user_id,
-            message=request.message,
-            user_context=request.user_context
-        )
-        print(f"🌐 API: Returning response: {len(result.response) if result.response else 0} chars")
-        return result
-    except Exception as e:
-        print(f"🌐 API ERROR: {e}")
-        raise
+    # Capture all console output during request processing
+    with capture_console_output() as console_logs:
+        log_student(f"🌐 API: Received request from {request.user_id}")
+        log_debug(f"🌐 API: Received chat request from user {request.user_id}: {request.message[:50]}...")
+        try:
+            result = await agent_service.process_message(
+                user_id=request.user_id,
+                message=request.message,
+                user_context=request.user_context
+            )
+            log_debug(f"🌐 API: Returning response: {len(result.response) if result.response else 0} chars")
+            
+            # Add captured console logs to the response
+            result.console_logs = console_logs
+            return result
+        except Exception as e:
+            print(f"🌐 API ERROR: {e}")
+            # Even on error, return the logs we captured
+            raise
 
 
 @app.post("/admin/flush")

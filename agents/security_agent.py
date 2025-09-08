@@ -3,6 +3,7 @@ from langgraph.graph import StateGraph, add_messages
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage, SystemMessage
 from config_manager import FixedConfigManager as ConfigManager
 from pydantic import BaseModel
+from utils.logger import log_student, log_debug, log_verbose
 
 class PIIDetectionResponse(BaseModel):
     """Structured response for PII detection results"""
@@ -55,8 +56,7 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
     
     tracker = agent_config.tracker
     
-    print(f"🔐 CREATING SECURITY AGENT: Using LDAI model {agent_config.model.name} (no tools - direct JSON responses)")
-    print(f"🔐 SECURITY INSTRUCTIONS: {agent_config.instructions[:200]}...")
+    log_debug(f"🔐 CREATING SECURITY AGENT: Using LDAI model {agent_config.model.name} (no tools - direct JSON responses)")
     
     # Store config values for nested functions
     config_instructions = agent_config.instructions
@@ -132,8 +132,14 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
         pii_types = state.get("types", [])
         redacted_text = state.get("redacted", state.get("user_input", ""))
         
-        print(f"🔍 FINAL PII RESULTS: detected={pii_detected}, types={pii_types}")
-        print(f"🔒 SECURITY CLEARANCE: Redacted text: '{redacted_text[:50]}...'")
+        if pii_detected:
+            pii_summary = f"Found {', '.join(pii_types)}" if pii_types else "Sensitive data detected"
+            log_student(f"🔒 PII PROTECTION: {pii_summary} → Text sanitized for downstream agents")
+        else:
+            log_student(f"🔒 PII PROTECTION: No sensitive data detected → Original text preserved")
+        
+        log_debug(f"🔍 SECURITY AGENT: detected={pii_detected}, types={pii_types}")
+        log_verbose(f"🔒 REDACTED TEXT: '{redacted_text[:50]}...'")
         
         return {
             "user_input": state["user_input"],

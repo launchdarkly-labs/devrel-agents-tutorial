@@ -9,6 +9,7 @@ from tools_impl.search_v1 import SearchToolV1
 from tools_impl.search_v2 import SearchToolV2
 from tools_impl.reranking import RerankingTool
 from tools_impl.mcp_research_tools import get_research_tools
+from utils.logger import log_student, log_debug, log_verbose
 import asyncio
 
 # Simplified approach - no caching for demo clarity
@@ -76,15 +77,15 @@ def create_support_agent(config, config_manager=None):
         pass  # Fallback to just the tools list and defaults
     if not tools_list:
         tools_list = []
-    print(f"🏗️  CREATING SUPPORT AGENT: Starting with tools {tools_list}")
+    log_debug(f"🏗️  CREATING SUPPORT AGENT: Starting with tools {tools_list}")
     if tool_configs:
-        print(f"🔧 TOOL CONFIGS FROM LAUNCHDARKLY: {tool_configs}")
+        log_verbose(f"🔧 TOOL CONFIGS FROM LAUNCHDARKLY: {tool_configs}")
     
     # Create tools based on LaunchDarkly configuration
     available_tools = []
     
     # Load MCP tools using improved initialization
-    print("🔄 LOADING MCP TOOLS: Connecting to MCP servers...")
+    log_debug("🔄 LOADING MCP TOOLS: Connecting to MCP servers...")
     mcp_tool_map = {}
     
     # Only load MCP tools if they're requested in allowed_tools
@@ -155,7 +156,7 @@ def create_support_agent(config, config_manager=None):
                         # print("DEBUG: Returning {} MCP tools".format(len(mcp_tools)))
                         print(f"✅ MCP TOOLS LOADED: {list(mcp_tool_map.keys())}")
                     else:
-                        print("📚 NO MCP TOOLS: Using internal tools only")
+                        log_debug("📚 NO MCP TOOLS: Using internal tools only")
                         
                 except concurrent.futures.TimeoutError:
                     print("⏰ MCP TIMEOUT: MCP servers not responding - using internal tools only")
@@ -165,7 +166,7 @@ def create_support_agent(config, config_manager=None):
             print(f"❌ MCP ERROR: {e} - Using internal tools only")
             mcp_tool_map = {}
     else:
-        print("📚 NO MCP TOOLS REQUESTED: Skipping MCP initialization")
+        log_debug("📚 NO MCP TOOLS REQUESTED: Skipping MCP initialization")
         mcp_tool_map = {}
     
     # Map LaunchDarkly tool names to actual MCP tool names
@@ -174,21 +175,21 @@ def create_support_agent(config, config_manager=None):
         "semantic_scholar": "search_semantic_scholar"
     }
     
-    print(f"🔧 PROCESSING TOOLS: {tools_list}")
-    print(f"🗺️  MCP TOOL MAP KEYS: {list(mcp_tool_map.keys())}")
+    log_debug(f"🔧 PROCESSING TOOLS: {tools_list}")
+    log_debug(f"🗺️  MCP TOOL MAP KEYS: {list(mcp_tool_map.keys())}")
     
     for tool_name in tools_list:
-        print(f"⚙️  Processing tool: {tool_name}")
+        log_debug(f"⚙️  Processing tool: {tool_name}")
         
         if tool_name == "search_v1":
             available_tools.append(SearchToolV1())
-            print(f"📚 INTERNAL TOOL ADDED: Basic vector search (search_v1)")
+            log_debug(f"📚 INTERNAL TOOL ADDED: Basic vector search (search_v1)")
         elif tool_name == "search_v2":
             available_tools.append(SearchToolV2())
-            print(f"📚 INTERNAL TOOL ADDED: Advanced vector search with embeddings (search_v2)")
+            log_debug(f"📚 INTERNAL TOOL ADDED: Advanced vector search with embeddings (search_v2)")
         elif tool_name == "reranking":
             available_tools.append(RerankingTool())
-            print(f"📊 INTERNAL TOOL ADDED: BM25 reranking algorithm (reranking)")
+            log_debug(f"📊 INTERNAL TOOL ADDED: BM25 reranking algorithm (reranking)")
         elif tool_name in ["arxiv_search", "semantic_scholar"]:
             # Use mapping to find the actual MCP tool
             mcp_tool_name = ld_to_mcp_mapping.get(tool_name)
@@ -282,7 +283,7 @@ def create_support_agent(config, config_manager=None):
     model = get_model_instance(model_name_attr, 0.0, provider_name)
     
     # Debug: Show final available tools
-    print(f"🔧 FINAL AVAILABLE TOOLS: {[tool.name if hasattr(tool, 'name') else str(tool) for tool in available_tools]}")
+    log_debug(f"🔧 FINAL AVAILABLE TOOLS: {[tool.name if hasattr(tool, 'name') else str(tool) for tool in available_tools]}")
     
     # Store config values for nested functions
     config_instructions = config.instructions
@@ -311,7 +312,7 @@ def create_support_agent(config, config_manager=None):
                 # Apply LaunchDarkly tool configuration parameters
                 if tool_name in tool_configs:
                     ld_params = tool_configs[tool_name]
-                    print(f"🔧 APPLYING LD CONFIG: {tool_name} config = {ld_params}")
+                    log_verbose(f"🔧 APPLYING LD CONFIG: {tool_name} config = {ld_params}")
                     
                     # Extract parameters from JSON schema structure
                     if 'properties' in ld_params:
@@ -324,7 +325,7 @@ def create_support_agent(config, config_manager=None):
                     else:
                         print(f"⚠️ LD CONFIG: No 'properties' found in schema for {tool_name}")
                 
-                print(f"🔧 EXECUTING TOOL: {tool_name} with args: {tool_args}")
+                log_verbose(f"🔧 EXECUTING TOOL: {tool_name} with args: {tool_args}")
                 
                 # Find the tool by name
                 tool_to_execute = None
@@ -400,7 +401,7 @@ def create_support_agent(config, config_manager=None):
                 tool_message = ToolMessage(content=str(result), tool_call_id=tool_id)
                 tool_results.append(tool_message)
                 
-                print(f"🔧 TOOL RESULT: {tool_name} -> {str(result)[:200]}...")
+                log_verbose(f"🔧 TOOL RESULT: {tool_name} -> {str(result)[:200]}...")
             
             return {"messages": tool_results}
         
@@ -440,9 +441,26 @@ def create_support_agent(config, config_manager=None):
                     
                     # Log tool usage type with search terms
                     if tool_name in ['search_papers', 'search_semantic_scholar']:
-                        print(f"🔬 MCP TOOL CALLED: {tool_name} ({query_display}) (external research server)")
+                        log_student(f"🔧 EXECUTING: {tool_name} → external research")
+                        log_debug(f"🔬 MCP TOOL CALLED: {tool_name} ({query_display}) (external research server)")
                     elif tool_name in ['search_v1', 'search_v2', 'reranking']:
-                        print(f"📚 INTERNAL TOOL CALLED: {tool_name} ({query_display}) (local processing)")
+                        # Create educational tool execution log
+                        if tool_name == "search_v2":
+                            max_relevance = ""
+                            # Try to extract max relevance from result
+                            if "MAX RELEVANCE:" in result:
+                                try:
+                                    relevance_part = result.split("MAX RELEVANCE:")[1].split("\n")[0].strip()
+                                    max_relevance = f" (relevance: {relevance_part})"
+                                except:
+                                    pass
+                            log_student(f"🔧 EXECUTING: {tool_name} → {query_display.split(':')[1].strip() if ':' in query_display else query_display}{max_relevance}")
+                        elif tool_name == "reranking":
+                            log_student(f"🔧 EXECUTING: {tool_name} → BM25 reordered results")
+                        else:
+                            log_student(f"🔧 EXECUTING: {tool_name} → {query_display}")
+                        
+                        log_debug(f"📚 INTERNAL TOOL CALLED: {tool_name} ({query_display}) (local processing)")
                     else:
                         print(f"🔧 UNKNOWN TOOL CALLED: {tool_name} ({query_display})")
         
@@ -582,11 +600,11 @@ Do not repeat the same search query again."""))
             tracker = getattr(config, 'tracker', None)
             # print(f"🔍 SUPPORT AGENT DEBUG: config_manager={config_manager is not None}, tracker={tracker is not None}")
             if tracker:
-                print(f"🔍 TRACKER TYPE: {type(tracker)}")
-                print(f"🔍 TRACKER METHODS: {[m for m in dir(tracker) if not m.startswith('_')]}")
+                log_verbose(f"🔍 TRACKER TYPE: {type(tracker)}")
+                log_verbose(f"🔍 TRACKER METHODS: {[m for m in dir(tracker) if not m.startswith('_')]}")
             
             if config_manager and tracker:
-                print(f"🚀 USING LAUNCHDARKLY TRACKER for model call")
+                log_debug(f"🚀 USING LAUNCHDARKLY TRACKER for model call")
                 response = config_manager.track_metrics(
                     config.tracker,
                     lambda: model.invoke(messages)
@@ -677,9 +695,8 @@ Do not repeat the same search query again."""))
         else:
             final_response = "I apologize, but I couldn't generate a proper response."
         
-        print(f"🔧 SUPPORT AGENT RETURNING:")
-        print(f"   📊 tool_calls: {tool_calls}")
-        print(f"   📊 tool_details: {tool_details}")
+        print(f"🔧 SUPPORT AGENT RETURNING: 📊 tool_calls: {tool_calls}")
+        log_debug(f"   📊 tool_details: {tool_details}")
         
         return {
             "user_input": state["user_input"],
@@ -716,5 +733,5 @@ Do not repeat the same search query again."""))
     # Format is the final step
     workflow.set_finish_point("format")
     
-    print("✅ SUPPORT AGENT COMPILED: Ready for execution")
+    log_debug("✅ SUPPORT AGENT COMPILED: Ready for execution")
     return workflow.compile()

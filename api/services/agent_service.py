@@ -7,6 +7,7 @@ from agents.supervisor_agent import create_supervisor_agent
 from agents.support_agent import create_support_agent
 from agents.security_agent import create_security_agent
 from config_manager import FixedConfigManager as ConfigManager
+from utils.logger import log_student, log_debug, log_info
 
 # Ensure .env is loaded before ConfigManager initialization
 load_dotenv()
@@ -35,10 +36,11 @@ class AgentService:
             support_config = await self.config_manager.get_config(user_id, "support-agent", user_context)
             security_config = await self.config_manager.get_config(user_id, "security-agent", user_context)
         
-            print(f"🔍 LDAI CONFIGS LOADED:")
-            print(f"   🎯 Supervisor: {supervisor_config.model.name} (enabled: True)")
-            print(f"   🔧 Support: {support_config.model.name} (enabled: True)")
-            print(f"   🔐 Security: {security_config.model.name} (enabled: True)")
+            log_student(f"🔍 LDAI: 3 agents configured (supervisor, security, support)")
+            log_debug(f"🔍 LDAI CONFIGS LOADED:")
+            log_debug(f"   🎯 Supervisor: {supervisor_config.model.name} (enabled: True)")
+            log_debug(f"   🔧 Support: {support_config.model.name} (enabled: True)")
+            log_debug(f"   🔐 Security: {security_config.model.name} (enabled: True)")
             
             # Create supervisor agent with all child agents using LDAI SDK pattern
             supervisor_agent = create_supervisor_agent(
@@ -66,8 +68,9 @@ class AgentService:
                 "support_tool_details": []
             }
             
-            print(f"🚀 STARTING LDAI WORKFLOW: {message[:100]}...")
-            print(f"🔒 PII PROTECTION: Original message will be processed by security agent first")
+            log_student(f"🎯 WORKFLOW: Starting security check")
+            log_debug(f"🚀 STARTING LDAI WORKFLOW: {message[:100]}...")
+            log_debug(f"🔒 PII PROTECTION: Original message will be processed by security agent first")
             result = await supervisor_agent.ainvoke(initial_state)
             
             # Get actual tool calls used during the workflow
@@ -85,12 +88,19 @@ class AgentService:
             security_redacted = result.get("redacted_text", message)
             security_tool_details = result.get("security_tool_details", [])
             
-            print(f"🔍 API DEBUG: security_tool_details = {security_tool_details}")
-            print(f"✅ LDAI WORKFLOW COMPLETED:")
-            print(f"   📊 Tools used: {actual_tool_calls}")
-            print(f"   📊 Tool details: {len(tool_details)} items")
-            print(f"   💬 Response length: {len(result['final_response'])} chars")
-            print(f"   🔒 Security: detected={security_detected}")
+            # Create consolidated workflow summary for students
+            tools_summary = f"{len(actual_tool_calls)} tools used" if actual_tool_calls else "No tools used"
+            pii_status = f"PII detected: {security_detected}"
+            response_length = len(result['final_response'])
+            
+            log_student(f"✅ WORKFLOW COMPLETE: {tools_summary}, {pii_status}, Response: {response_length} chars")
+            
+            log_debug(f"🔍 API DEBUG: security_tool_details = {security_tool_details}")
+            log_debug(f"✅ LDAI WORKFLOW COMPLETED:")
+            log_debug(f"   📊 Tools used: {actual_tool_calls}")
+            log_debug(f"   📊 Tool details: {len(tool_details)} items")
+            log_debug(f"   💬 Response length: {len(result['final_response'])} chars")
+            log_debug(f"   🔒 Security: detected={security_detected}")
             
             # Create agent configuration metadata showing actual usage
             # Extract variation keys from AI config (may be available via to_dict)

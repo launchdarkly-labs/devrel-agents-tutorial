@@ -24,6 +24,7 @@ class ChatResponse(BaseModel):
     variation_key: str
     model: str
     agent_configurations: Optional[List[AgentConfig]] = None
+    console_logs: Optional[List[str]] = None
 
 class FeedbackRequest(BaseModel):
     user_id: str
