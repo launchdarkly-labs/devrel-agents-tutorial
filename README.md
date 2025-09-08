@@ -10,7 +10,7 @@ You've been there: your AI chatbot works great in testing, then production hits 
 
 The teams shipping faster? They control AI behavior dynamically instead of hardcoding everything.
 
-This series shows you how to build **LangGraph multi-agent workflows** that get their intelligence from **RAG** search through your business documents, enhanced with **MCP tools** for live external data, all controlled through **LaunchDarkly AI Configs** without touching code.
+This series shows you how to build **LangGraph multi-agent workflows** that get their intelligence from **RAG** search through your business documents, enhanced with **MCP tools** for live external data, all controlled through **LaunchDarkly AI Configs** without needing to deploy code changes.
 
 ## What This Series Covers
 
@@ -44,7 +44,7 @@ First, let's get everything running locally. We'll explain what each piece does 
 
 ```bash
 # Get the code
-git clone https://github.com/launchdarkly/agents-demo.git
+git clone https://github.com/launchdarkly/agents-demo.git ## I assume this link will be updated or we plan to move the repository?
 cd agents-demo
 
 # Install dependencies (LangGraph, LaunchDarkly SDK, etc.)
@@ -56,13 +56,16 @@ cp .env.example .env
 
 First, you need to get your LaunchDarkly SDK key by creating a project:
 
+This section might need some review if they are creating a free account. If you are on a developer plan, you can only have one project and the setup process of creating an account might have you use it.
+I don't recall if you can do multiple projects during the 14 day free trial before it makes you pick a plan.
+
 1. **Sign up for LaunchDarkly** at [app.launchdarkly.com](https://app.launchdarkly.com) (free account)
 2. **Find projects on the side bar:**
 
 <br />
 
 <div align="center">
-
+For example, in my personal developer account, I cannot see this menu.
 ![Sidebar Projects](screenshots/sidebar_projects_top_half.jpeg)
 
 </div>
@@ -77,6 +80,8 @@ First, you need to get your LaunchDarkly SDK key by creating a project:
 </div>
 
 4. **Get your SDK key**:
+If you are already on your project, you can click the project dropdown and select Project Setting instead of going to the projects page first. I'm not sure but assume creating a project would take you
+to the project so this would elimate going back to the projects page again.
     
     ⚙️ (bottom of sidebar) → **Projects** → **multi-agent-chatbot** → ⚙️ (to the right) 
     
@@ -140,14 +145,14 @@ In **LaunchDarkly Dashboard Sidebar** → **Library** (under AI) → **Tools** t
 <br />
 
 <div align="center">
-
+Consider having the screenshot be on the tools tab
 ![Library](screenshots/library_small.jpg)
 
 </div>
 
 ### Create the RAG vector search tool:
 
-> 
+> I see the codebase has a search_v1 but it isn't referenced anywhere. For the purpose of a turorial having a v2 might be confusing if there isn't also a v1 they can toggle between. Maybe this will be used later?
 > **Key:** 
 > ```
 > search_v2
@@ -220,7 +225,7 @@ In **LaunchDarkly Dashboard Sidebar** → **Library** (under AI) → **Tools** t
 
 ## Step 5: Create Your AI Agents in LaunchDarkly (5 minutes)
 
-Configure your **LangGraph** multi-agent system dynamically. **LangGraph** is LangChain's framework for building stateful, multi-**agent** applications that maintain conversation state across **agent** interactions. Your **LangGraph** architecture enables sophisticated workflows where **agents** collaborate and pass context between each other.
+Create LaunchDarkly AI Configs to control your **LangGraph** multi-agent system dynamically. **LangGraph** is LangChain's framework for building stateful, multi-**agent** applications that maintain conversation state across **agent** interactions. Your **LangGraph** architecture enables sophisticated workflows where **agents** collaborate and pass context between each other.
 
 ### Create the Supervisor Agent
 
@@ -333,17 +338,17 @@ Finally, create `support-agent`
 > You are a helpful assistant that can search documentation and research papers. When search results are available, prioritize information from those results over your general knowledge to provide the most accurate and up-to-date responses. Use available tools to search the knowledge base and external research databases to answer questions accurately and comprehensively.
 > ```
 
-<br />
+This **agent** combines **LangGraph** workflow management with your **RAG** tools. **LangGraph** enables the **agent** to chain multiple tool calls together: first using **RAG** for document retrieval, then semantic reranking, all while maintaining conversation state and handling error recovery gracefully.
+
+**Remember to switch to the Targeting tab and enable this agent the same way - edit the default rule to serve your `rag-search-enhanced` variation and save it.**
+
+When you are done, you should have tree enabled AI Config Agents as shown below.
 
 <div align="center">
 
 ![Agents](screenshots/agents_small.jpg)
 
 </div>
-
-This **agent** combines **LangGraph** workflow management with your **RAG** tools. **LangGraph** enables the **agent** to chain multiple tool calls together: first using **RAG** for document retrieval, then semantic reranking, all while maintaining conversation state and handling error recovery gracefully.
-
-**Remember to switch to the Targeting tab and enable this agent the same way - edit the default rule to serve your `rag-search-enhanced` variation and save it.**
 
 ## Step 6: Launch Your System (2 minutes)
 
@@ -392,7 +397,7 @@ Watch **LangGraph** in action: the supervisor **agent** routes to the security *
 Try these experiments in LaunchDarkly:
 
 ### Switch Models Instantly
-
+(consider having them duplicate the variation and modify it, this way they can compare results between the two)
 Edit your `support-agent` config:
 ```json
 {
@@ -432,6 +437,7 @@ Your **LangGraph** multi-**agent** system with **RAG** includes:
 The supervisor **agent** uses **LangGraph** state management to route requests intelligently based on content analysis.
 
 **2. Privacy Protection**
+I'm not sure I follow this. The PII information is still being sent to an agent to be processed and the agent is telling you if there is or isn't PII.
 The security **agent** integrates with **LangGraph** workflows to detect PII before processing, supporting compliance.
 
 **3. RAG Knowledge System**

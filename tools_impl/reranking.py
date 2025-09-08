@@ -9,6 +9,8 @@ class RerankingInput(BaseModel):
     query: str = Field(..., description="The search query to rerank results for")
     results: Optional[List[Dict[str, Any]]] = Field(None, description="Optional: search results. If not provided, will look for recent search_v2 output")
 
+# There seems to be really tight coupling between the search_v2 and reranking tools.
+# You might consider a different name for this tool. We are not reranking results or this tool doesn't care if it has been ranked. If we wanted to try different ranking methods it could be confusing. Consider bm25_ranking as an alternative.
 class RerankingTool(BaseTool):
     name: str = "reranking"
     description: str = "Rerank search results using BM25 algorithm. Pass 'query' (str) and 'results' (the JSON items array from search_v2, not the human summary)."
@@ -57,7 +59,6 @@ class RerankingTool(BaseTool):
         """Extract JSON items array from fenced JSON string if needed."""
         try:
             # Try to find fenced JSON block
-            import re
             json_match = re.search(r'```json\s*(\{.*?\})\s*```', results_str, re.DOTALL)
             if json_match:
                 json_str = json_match.group(1)

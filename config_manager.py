@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# A lot of this seems unnecessary. This is just a wrapper around the AI Config object. We could just use the AI Config object directly.
 @dataclass
 class AgentConfig:
     variation_key: str
