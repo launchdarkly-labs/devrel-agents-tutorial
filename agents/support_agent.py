@@ -10,17 +10,28 @@ from tools_impl.search_v2 import SearchToolV2
 from tools_impl.reranking import RerankingTool
 from tools_impl.mcp_research_tools import get_research_tools
 import asyncio
-from config_manager import AgentConfig
 
 # Simplified approach - no caching for demo clarity
 
-def get_model_instance(model_name: str, temperature: float):
-    """Get a model instance without tools bound"""
-    if "gpt" in model_name.lower():
-        return ChatOpenAI(model=model_name, temperature=temperature)
+def get_model_instance(model_name: str, temperature: float, provider_name: str = None):
+    """Get a model instance using LDAI SDK pattern"""
+    from langchain.chat_models import init_chat_model
+    from config_manager import map_provider_to_langchain
+    
+    if provider_name:
+        langchain_provider = map_provider_to_langchain(provider_name)
     else:
-        # Default to Anthropic for unknown models
-        return ChatAnthropic(model=model_name, temperature=temperature)
+        # Fallback: infer provider from model name  
+        if "gpt" in model_name.lower():
+            langchain_provider = "openai"
+        else:
+            langchain_provider = "anthropic"
+    
+    return init_chat_model(
+        model=model_name,
+        model_provider=langchain_provider,
+        temperature=temperature
+    )
 
 class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]
@@ -29,11 +40,40 @@ class AgentState(TypedDict):
     tool_calls: List[str]
     tool_details: List[dict]  # Add support for detailed tool information with search queries
 
-def create_support_agent(config: AgentConfig, config_manager=None):
+def create_support_agent(config, config_manager=None):
     """Create a universal agent that works with any model provider"""
-    # Handle both old and new AgentConfig formats for compatibility
-    tools_list = getattr(config, 'allowed_tools', None) or getattr(config, 'tools', [])
-    tool_configs = getattr(config, 'tool_configs', {}) or {}
+    # Extract tools from LaunchDarkly AI Config
+    tools_list = []
+    tool_configs = {}
+    max_tool_calls = 8  # default
+    
+    # Try to get tools from AI config
+    if hasattr(config, 'tools') and config.tools:
+        tools_list = list(config.tools)
+    
+    # Try to get tool configurations and custom parameters
+    try:
+        config_dict = config.to_dict()
+        if 'model' in config_dict and 'parameters' in config_dict['model'] and 'tools' in config_dict['model']['parameters']:
+            tools_data = config_dict['model']['parameters']['tools']
+            for tool in tools_data:
+                if 'name' in tool:
+                    tool_name = tool['name']
+                    if tool_name not in tools_list:
+                        tools_list.append(tool_name)
+                    tool_configs[tool_name] = tool.get('parameters', {})
+        
+        # Extract max_tool_calls from customParameters
+        if 'customParameters' in config_dict and config_dict['customParameters']:
+            custom_params = config_dict['customParameters']
+            if 'max_tool_calls' in custom_params:
+                max_tool_calls = custom_params['max_tool_calls']
+        elif 'model' in config_dict and 'custom' in config_dict['model'] and config_dict['model']['custom']:
+            custom_params = config_dict['model']['custom']
+            if 'max_tool_calls' in custom_params:
+                max_tool_calls = custom_params['max_tool_calls']
+    except Exception:
+        pass  # Fallback to just the tools list and defaults
     if not tools_list:
         tools_list = []
     print(f"🏗️  CREATING SUPPORT AGENT: Starting with tools {tools_list}")
@@ -231,17 +271,15 @@ def create_support_agent(config: AgentConfig, config_manager=None):
         else:
             print(f"❓ UNKNOWN TOOL REQUESTED: {tool_name} - SKIPPING")
     
-    # Initialize model based on LaunchDarkly config - support multiple providers
-    # Handle both old and new AgentConfig formats
-    model_name_attr = getattr(config, 'model', None) or getattr(config, 'model_name', 'claude-3-haiku-20240307')
-    model_name = model_name_attr.lower()
-    if "gpt" in model_name or "openai" in model_name:
-        model = ChatOpenAI(model=model_name_attr, temperature=0.0)
-    elif "claude" in model_name or "anthropic" in model_name:
-        model = ChatAnthropic(model=model_name_attr, temperature=0.0)
-    else:
-        # Default to Anthropic for unknown models
-        model = ChatAnthropic(model=model_name_attr, temperature=0.0)
+    # Initialize model based on LaunchDarkly config using LDAI SDK pattern
+    model_name_attr = config.model.name if hasattr(config.model, 'name') else 'claude-3-haiku-20240307'
+    
+    # Get provider name from config
+    provider_name = None
+    if config.provider and hasattr(config.provider, 'name'):
+        provider_name = config.provider.name
+    
+    model = get_model_instance(model_name_attr, 0.0, provider_name)
     
     # Debug: Show final available tools
     print(f"🔧 FINAL AVAILABLE TOOLS: {[tool.name if hasattr(tool, 'name') else str(tool) for tool in available_tools]}")
@@ -437,8 +475,7 @@ Do not repeat the same search query again."""))
                 print(f"🛑 STOPPING TOOL LOOP: '{tool_name}' used {recent_tool_calls.count(tool_name)} times total - ending workflow")
                 return "end"
         
-        # Get max tool calls from config, default to 8 if not specified
-        max_tool_calls = getattr(config, 'max_tool_calls', 8)
+        # Use max_tool_calls extracted from config
         # print(f"DEBUG: should_continue - total_tool_calls: {total_tool_calls}, max: {max_tool_calls}")
         # print(f"DEBUG: Recent tool calls: {recent_tool_calls[-5:]}")  # Show last 5
         
@@ -476,8 +513,7 @@ Do not repeat the same search query again."""))
             
             # Add system message with instructions if this is the first call
             if len(messages) == 1:  # Only user message
-                # Get max tool calls from config, default to 8 if not specified
-                max_tool_calls = getattr(config, 'max_tool_calls', 8)
+                # Use max_tool_calls extracted from config
                 
                 if available_tools:
                     # Create detailed tool descriptions for the prompt
@@ -519,7 +555,6 @@ Do not repeat the same search query again."""))
                         recent_tool_calls.append(tool_call['name'])
             
             # If at max tool calls, disable tools for final completion
-            max_tool_calls = getattr(config, 'max_tool_calls', 8)
             if total_tool_calls >= max_tool_calls:
                 print(f"🛑 DISABLING TOOLS: Reached maximum tool calls ({total_tool_calls}/{max_tool_calls})")
                 
@@ -533,9 +568,12 @@ Do not repeat the same search query again."""))
                 """)
                 messages.append(synthesis_prompt)
                 
-                # Use the base model without any tools bound for final completion
-                model_name_for_completion = getattr(config, 'model', None) or getattr(config, 'model_name', 'claude-3-haiku-20240307')
-                completion_model = get_model_instance(model_name_for_completion, 0.0)
+                # Use the base model without any tools bound for final completion  
+                model_name_for_completion = config.model.name if hasattr(config.model, 'name') else 'claude-3-haiku-20240307'
+                completion_provider = None
+                if config.provider and hasattr(config.provider, 'name'):
+                    completion_provider = config.provider.name
+                completion_model = get_model_instance(model_name_for_completion, 0.0, completion_provider)
                 response = completion_model.invoke(messages)
                 print(f"🎯 FORCED SYNTHESIS: Model completing with synthesis instructions")
                 return {"messages": [response]}

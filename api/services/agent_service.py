@@ -36,9 +36,9 @@ class AgentService:
             security_config = await self.config_manager.get_config(user_id, "security-agent", user_context)
         
             print(f"🔍 LDAI CONFIGS LOADED:")
-            print(f"   🎯 Supervisor: {supervisor_config.model} (enabled: True)")
-            print(f"   🔧 Support: {support_config.model} (enabled: True)")
-            print(f"   🔐 Security: {security_config.model} (enabled: True)")
+            print(f"   🎯 Supervisor: {supervisor_config.model.name} (enabled: True)")
+            print(f"   🔧 Support: {support_config.model.name} (enabled: True)")
+            print(f"   🔐 Security: {security_config.model.name} (enabled: True)")
             
             # Create supervisor agent with all child agents using LDAI SDK pattern
             supervisor_agent = create_supervisor_agent(
@@ -56,10 +56,18 @@ class AgentService:
                 "support_response": "",
                 "final_response": "",
                 "workflow_stage": "initial_security",
-                "messages": [HumanMessage(content=message)]
+                "messages": [HumanMessage(content=message)],
+                "sanitized_messages": [],  # Initialize empty sanitized message history
+                "processed_user_input": "",
+                "pii_detected": False,
+                "pii_types": [],
+                "redacted_text": message,
+                "support_tool_calls": [],
+                "support_tool_details": []
             }
             
             print(f"🚀 STARTING LDAI WORKFLOW: {message[:100]}...")
+            print(f"🔒 PII PROTECTION: Original message will be processed by security agent first")
             result = await supervisor_agent.ainvoke(initial_state)
             
             # Get actual tool calls used during the workflow
@@ -85,18 +93,31 @@ class AgentService:
             print(f"   🔒 Security: detected={security_detected}")
             
             # Create agent configuration metadata showing actual usage
+            # Extract variation keys from AI config (may be available via to_dict)
+            def get_variation_key(ai_config):
+                try:
+                    config_dict = ai_config.to_dict()
+                    return config_dict.get('variation', {}).get('key', 'default')
+                except:
+                    return 'default'
+            
+            # Extract tools list from security config
+            security_tools = []
+            if hasattr(security_config, 'tools') and security_config.tools:
+                security_tools = list(security_config.tools)
+            
             agent_configurations = [
                 APIAgentConfig(
                     agent_name="supervisor-agent",
-                    variation_key=supervisor_config.variation_key,  # Use actual LaunchDarkly variation
-                    model=supervisor_config.model,
+                    variation_key=get_variation_key(supervisor_config),
+                    model=supervisor_config.model.name,
                     tools=[]  # Supervisor doesn't use tools directly
                 ),
                 APIAgentConfig(
                     agent_name="security-agent", 
-                    variation_key=security_config.variation_key,  # Use actual LaunchDarkly variation
-                    model=security_config.model,
-                    tools=security_config.allowed_tools,  # Show configured tools
+                    variation_key=get_variation_key(security_config),
+                    model=security_config.model.name,
+                    tools=security_tools,  # Show configured tools
                     tool_details=security_tool_details,  # Show security tool details with PII results
                     # Pass PII detection results to UI
                     detected=security_detected,
@@ -105,8 +126,8 @@ class AgentService:
                 ),
                 APIAgentConfig(
                     agent_name="support-agent",
-                    variation_key=support_config.variation_key,  # Use actual LaunchDarkly variation
-                    model=support_config.model, 
+                    variation_key=get_variation_key(support_config),
+                    model=support_config.model.name, 
                     tools=actual_tool_calls,  # Show actual tools used as strings
                     tool_details=tool_details  # Show detailed tool info with search queries
                 )
@@ -116,8 +137,8 @@ class AgentService:
                 id=str(uuid.uuid4()),
                 response=result["final_response"],
                 tool_calls=actual_tool_calls,  # Show actual tools used
-                variation_key=supervisor_config.variation_key,  # Use actual LaunchDarkly variation
-                model=supervisor_config.model,  # Primary model
+                variation_key=get_variation_key(supervisor_config),  # Use actual LaunchDarkly variation
+                model=supervisor_config.model.name,  # Primary model
                 agent_configurations=agent_configurations
             )
             

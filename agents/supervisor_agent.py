@@ -3,7 +3,7 @@ from langgraph.graph import StateGraph, add_messages
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 from .support_agent import create_support_agent
 from .security_agent import create_security_agent
-from config_manager import AgentConfig, FixedConfigManager as ConfigManager
+from config_manager import FixedConfigManager as ConfigManager
 
 class SupervisorState(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]
@@ -19,19 +19,33 @@ class SupervisorState(TypedDict):
     pii_detected: bool  # PII schema field from security agent
     pii_types: List[str]  # PII schema field from security agent
     redacted_text: str  # PII schema field from security agent
+    sanitized_messages: List[BaseMessage]  # Clean message history without PII
 
-def create_supervisor_agent(supervisor_config: AgentConfig, support_config: AgentConfig, security_config: AgentConfig, config_manager: ConfigManager):
+def create_supervisor_agent(supervisor_config, support_config, security_config, config_manager: ConfigManager):
     """Create supervisor agent using LDAI SDK pattern"""
     
-    # Create LangChain model directly from config
-    from langchain_anthropic import ChatAnthropic
-    from langchain_openai import ChatOpenAI
+    # Create LangChain model using official LDAI SDK pattern
+    from langchain.chat_models import init_chat_model
+    from config_manager import map_provider_to_langchain
     
-    model_name = supervisor_config.model.lower()
-    if "gpt" in model_name or "openai" in model_name:
-        supervisor_model = ChatOpenAI(model=supervisor_config.model, temperature=0.0)
+    # Use provider information from LaunchDarkly config
+    if supervisor_config.provider and hasattr(supervisor_config.provider, 'name'):
+        langchain_provider = map_provider_to_langchain(supervisor_config.provider.name)
     else:
-        supervisor_model = ChatAnthropic(model=supervisor_config.model, temperature=0.0)
+        # Fallback: infer provider from model name
+        model_name = supervisor_config.model.name.lower()
+        if "gpt" in model_name or "openai" in model_name:
+            langchain_provider = "openai"
+        elif "claude" in model_name or "anthropic" in model_name:
+            langchain_provider = "anthropic"
+        else:
+            langchain_provider = "anthropic"  # default
+    
+    supervisor_model = init_chat_model(
+        model=supervisor_config.model.name,
+        model_provider=langchain_provider,
+        temperature=0.0
+    )
     
     # Create child agents with config manager
     support_agent = create_support_agent(support_config, config_manager)
@@ -149,14 +163,36 @@ def create_supervisor_agent(supervisor_config: AgentConfig, support_config: Agen
             print(f"🔒 SUPERVISOR DEBUG: Security agent result keys: {list(result.keys())}")
             print(f"🔒 SUPERVISOR DEBUG: Security tool_details: {result.get('tool_details', [])}")
             
+            # Create sanitized message history - replace original user input with redacted version
+            sanitized_messages = []
+            original_messages = state.get("messages", [])
+            
+            print(f"🔒 PII PROTECTION: Sanitizing {len(original_messages)} messages")
+            for msg in original_messages:
+                if isinstance(msg, HumanMessage):
+                    # Replace human message content with redacted text
+                    sanitized_msg = HumanMessage(content=redacted_text)
+                    sanitized_messages.append(sanitized_msg)
+                    print(f"🔒 PII SANITIZED: Original '{msg.content[:50]}...' -> Redacted '{redacted_text[:50]}...'")
+                else:
+                    # Keep other message types as-is
+                    sanitized_messages.append(msg)
+            
+            # Add the security agent's response
+            security_response = AIMessage(content=result["response"])
+            sanitized_messages.append(security_response)
+            
+            print(f"🔒 PII PROTECTION: Created {len(sanitized_messages)} sanitized messages for downstream agents")
+            
             return {
-                "messages": [AIMessage(content=result["response"])],
+                "messages": [security_response],  # Only add security response to main message flow
                 "workflow_stage": new_stage,
                 "security_cleared": True,  # Always proceed after security agent
                 "processed_user_input": redacted_text,  # Use redacted text for support agent
                 "pii_detected": detected,
                 "pii_types": types,
                 "redacted_text": redacted_text,
+                "sanitized_messages": sanitized_messages,  # Store clean message history
                 "security_tool_details": result.get("tool_details", [])  # Capture security agent tool details
             }
             
@@ -185,19 +221,33 @@ def create_supervisor_agent(supervisor_config: AgentConfig, support_config: Agen
             processed_input = state.get("processed_user_input", state["user_input"])
             pii_detected = state.get("pii_detected", False)
             pii_types = state.get("pii_types", [])
+            sanitized_messages = state.get("sanitized_messages", [])
             
             print(f"🔒 SUPERVISOR: Passing to support agent - PII detected: {pii_detected}")
             print(f"📝 SUPERVISOR: Input text: '{processed_input[:100]}...'")
             if pii_types:
                 print(f"🔍 SUPERVISOR: PII types found: {pii_types}")
             
-            # Prepare support agent input
+            # SECURITY: Use sanitized message history to prevent PII leakage
+            if sanitized_messages:
+                support_messages = sanitized_messages
+                print(f"🔒 SECURITY ENFORCED: Using {len(sanitized_messages)} sanitized messages for support agent")
+                # Log what the support agent will actually see
+                for i, msg in enumerate(sanitized_messages):
+                    msg_preview = msg.content[:50] if hasattr(msg, 'content') else str(msg)[:50]
+                    print(f"🔒 SUPPORT MSG {i}: {type(msg).__name__} - '{msg_preview}...'")
+            else:
+                # Fallback: create clean message with only redacted text
+                support_messages = [HumanMessage(content=processed_input)]
+                print(f"⚠️ FALLBACK: No sanitized messages, using redacted text only")
+            
+            # Prepare support agent input with ONLY sanitized messages
             support_input = {
                 "user_input": processed_input,  # Use redacted text if PII was found
                 "response": "",
                 "tool_calls": [],
                 "tool_details": [],
-                "messages": [HumanMessage(content=processed_input)]
+                "messages": support_messages  # CRITICAL: Only sanitized messages passed to support agent
             }
             
             # Execute support agent
