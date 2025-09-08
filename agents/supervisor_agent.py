@@ -5,7 +5,7 @@ from .support_agent import create_support_agent
 from .security_agent import create_security_agent
 from config_manager import FixedConfigManager as ConfigManager
 from utils.logger import log_student, log_debug, log_verbose
-from utils.metrics import track_supervisor_decision, track_workflow_completion, track_agent_orchestration
+from utils.metrics import track_supervisor_decision, track_workflow_completion, track_agent_orchestration, track_agent_success
 from utils.pii_sanitizer import sanitize_messages, prepare_safe_agent_input, log_pii_status
 
 class SupervisorState(TypedDict):
@@ -111,13 +111,13 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             log_student(f"🔐 SECURITY INSTRUCTIONS: {security_config.instructions}")
             log_debug(f"🎯 SUPERVISOR: Orchestrating security agent execution")
             
-            track_success = track_agent_orchestration(config_manager, supervisor_config, "security")
+            track_agent_orchestration(config_manager, supervisor_config, "security")
             
             # Prepare and execute security agent
             security_input = prepare_safe_agent_input(state, "security")
             result = security_agent.invoke(security_input)
             
-            track_success()
+            track_agent_success(config_manager, supervisor_config, "security")
             
             # Update workflow stage
             current_stage = state.get("workflow_stage", "initial_security")
@@ -167,16 +167,17 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             log_student(f"🔧 SUPPORT INSTRUCTIONS: {support_config.instructions}")
             log_debug(f"🎯 SUPERVISOR: Orchestrating support agent execution")
             
-            # Log PII status and prepare safe input
+            # Track orchestration start and prepare safe input
+            track_agent_orchestration(config_manager, supervisor_config, "support")
             log_pii_status(state)
             support_input = prepare_safe_agent_input(state, "support")
             
-            # Execute support agent with metrics tracking
+            # Execute support agent
             result = support_agent.invoke(support_input)
             tool_calls = result.get("tool_calls", [])
             
-            track_success = track_agent_orchestration(config_manager, supervisor_config, "support", tool_calls)
-            track_success()
+            # Track successful completion with actual tool count
+            track_agent_success(config_manager, supervisor_config, "support", tool_calls)
             
             # Show support agent response to students
             support_response = result["response"]

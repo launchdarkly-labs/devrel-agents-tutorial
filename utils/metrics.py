@@ -57,25 +57,24 @@ def track_workflow_completion(config_manager: Any, supervisor_config: Any, tool_
     )
 
 
-def track_agent_orchestration(config_manager: Any, supervisor_config: Any, agent_name: str, tool_calls: Optional[list] = None):
-    """Helper to track agent orchestration metrics"""
+def track_agent_orchestration(config_manager: Any, supervisor_config: Any, agent_name: str):
+    """Helper to track agent orchestration start"""
     # Track orchestration start
     config_manager.track_metrics(
         supervisor_config.tracker,
         lambda: f"supervisor_orchestrating_{agent_name}_start"
     )
-    
-    # Return success tracking function for after agent execution
-    def track_success():
-        if tool_calls is not None:
-            config_manager.track_metrics(
-                supervisor_config.tracker,
-                lambda: f"supervisor_orchestrating_{agent_name}_success_tools_{len(tool_calls)}"
-            )
-        else:
-            config_manager.track_metrics(
-                supervisor_config.tracker,
-                lambda: f"supervisor_orchestrating_{agent_name}_success"
-            )
-    
-    return track_success
+
+
+def track_agent_success(config_manager: Any, supervisor_config: Any, agent_name: str, tool_calls: Optional[list] = None):
+    """Helper to track agent orchestration success"""
+    if tool_calls is not None:
+        config_manager.track_metrics(
+            supervisor_config.tracker,
+            lambda: f"supervisor_orchestrating_{agent_name}_success_tools_{len(tool_calls)}"
+        )
+    else:
+        config_manager.track_metrics(
+            supervisor_config.tracker,
+            lambda: f"supervisor_orchestrating_{agent_name}_success"
+        )

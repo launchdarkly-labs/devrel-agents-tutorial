@@ -446,15 +446,8 @@ def create_support_agent(config, config_manager=None):
                     elif tool_name in ['search_v1', 'search_v2', 'reranking']:
                         # Create educational tool execution log
                         if tool_name == "search_v2":
-                            max_relevance = ""
-                            # Try to extract max relevance from result
-                            if "MAX RELEVANCE:" in result:
-                                try:
-                                    relevance_part = result.split("MAX RELEVANCE:")[1].split("\n")[0].strip()
-                                    max_relevance = f" (relevance: {relevance_part})"
-                                except:
-                                    pass
-                            log_student(f"🔧 EXECUTING: {tool_name} → {query_display.split(':')[1].strip() if ':' in query_display else query_display}{max_relevance}")
+                            # Note: result is not available in this scope, so we can't extract relevance here
+                            log_student(f"🔧 EXECUTING: {tool_name} → {query_display.split(':')[1].strip() if ':' in query_display else query_display}")
                         elif tool_name == "reranking":
                             log_student(f"🔧 EXECUTING: {tool_name} → BM25 reordered results")
                         else:
