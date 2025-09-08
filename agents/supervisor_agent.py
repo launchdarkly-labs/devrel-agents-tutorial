@@ -5,6 +5,8 @@ from .support_agent import create_support_agent
 from .security_agent import create_security_agent
 from config_manager import FixedConfigManager as ConfigManager
 from utils.logger import log_student, log_debug, log_verbose
+from utils.metrics import track_supervisor_decision, track_workflow_completion, track_agent_orchestration
+from utils.pii_sanitizer import sanitize_messages, prepare_safe_agent_input, log_pii_status
 
 class SupervisorState(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]
@@ -64,23 +66,14 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             
             log_debug(f"🎯 SUPERVISOR: Stage={workflow_stage}, Security={security_cleared}, Support={bool(support_response)}")
             
-            # Track supervisor decision-making process
-            decision_start = config_manager.track_metrics(
-                supervisor_config.tracker,
-                lambda: "supervisor_decision_start"  # Track decision start
-            )
-            
             # Simplified routing logic
             if workflow_stage == "initial_security" and not security_cleared:
                 next_agent = "security_agent"
-                log_debug(f"🎯 SUPERVISOR: Rule-based routing -> {next_agent}")
             elif workflow_stage == "research" and not support_response:
                 next_agent = "support_agent"
                 log_student(f"🎯 ROUTING: Proceeding to support agent")
-                log_debug(f"🎯 SUPERVISOR: Rule-based routing -> {next_agent}")
             elif support_response:
                 next_agent = "complete"
-                log_debug(f"🎯 SUPERVISOR: Rule-based routing -> {next_agent}")
             else:
                 # Use model for complex routing decisions
                 log_debug(f"🎯 SUPERVISOR: Using model for complex routing decision")
@@ -93,35 +86,23 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
                 """
                 
                 prompt = HumanMessage(content=system_prompt + f"\n\nLast message: {messages[-1].content if messages else state['user_input']}")
-                
-                # Track model call with LDAI metrics
                 response = config_manager.track_metrics(
                     supervisor_config.tracker,
                     lambda: supervisor_model.invoke([prompt])
                 )
-                
                 next_agent = response.content.strip().lower()
-                log_debug(f"🎯 SUPERVISOR: Model-based routing -> {next_agent}")
             
             # Track successful supervisor decision
-            config_manager.track_metrics(
-                supervisor_config.tracker,
-                lambda: f"supervisor_decision_success_{next_agent}"
-            )
-            
+            track_supervisor_decision(config_manager, supervisor_config, next_agent)
             log_debug(f"🎯 SUPERVISOR: Final routing decision -> {next_agent}")
             return {"current_agent": next_agent}
             
         except Exception as e:
             log_debug(f"❌ SUPERVISOR ERROR: {e}")
-            
-            # Track supervisor error with LDAI metrics
             config_manager.track_metrics(
                 supervisor_config.tracker,
-                lambda: (_ for _ in ()).throw(e)  # Trigger error tracking
+                lambda: (_ for _ in ()).throw(e)
             )
-            
-            # Fallback to security agent
             return {"current_agent": "security_agent"}
     
     def security_node(state: SupervisorState):
@@ -130,33 +111,17 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             log_student(f"🔐 SECURITY INSTRUCTIONS: {security_config.instructions}")
             log_debug(f"🎯 SUPERVISOR: Orchestrating security agent execution")
             
-            # Track supervisor orchestration start for security agent
-            config_manager.track_metrics(
-                supervisor_config.tracker,
-                lambda: "supervisor_orchestrating_security_start"
-            )
+            track_success = track_agent_orchestration(config_manager, supervisor_config, "security")
             
-            # Prepare security agent input
-            security_input = {
-                "user_input": state["user_input"],
-                "response": "",
-                "tool_calls": [],
-                "messages": [HumanMessage(content=state["messages"][-2].content if len(state["messages"]) >= 2 else state["user_input"])]
-            }
-            
-            # Execute security agent
+            # Prepare and execute security agent
+            security_input = prepare_safe_agent_input(state, "security")
             result = security_agent.invoke(security_input)
             
-            # Track successful supervisor orchestration for security agent
-            config_manager.track_metrics(
-                supervisor_config.tracker,
-                lambda: "supervisor_orchestrating_security_success"
-            )
+            track_success()
             
             # Update workflow stage
             current_stage = state.get("workflow_stage", "initial_security")
             new_stage = "research" if current_stage == "initial_security" else "complete"
-            
             log_debug(f"🎯 SUPERVISOR: Security agent completed, transitioning {current_stage} -> {new_stage}")
             
             # Extract PII schema fields from security agent
@@ -168,46 +133,31 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             log_verbose(f"🔒 SUPERVISOR DEBUG: Security agent result keys: {list(result.keys())}")
             log_verbose(f"🔒 SUPERVISOR DEBUG: Security tool_details: {result.get('tool_details', [])}")
             
-            # Create sanitized message history - replace original user input with redacted version
-            sanitized_messages = []
+            # Create sanitized message history
             original_messages = state.get("messages", [])
-            
-            log_debug(f"🔒 PII PROTECTION: Sanitizing {len(original_messages)} messages")
-            for msg in original_messages:
-                if isinstance(msg, HumanMessage):
-                    # Replace human message content with redacted text
-                    sanitized_msg = HumanMessage(content=redacted_text)
-                    sanitized_messages.append(sanitized_msg)
-                    log_verbose(f"🔒 PII SANITIZED: Original '{msg.content[:50]}...' -> Redacted '{redacted_text[:50]}...'")
-                else:
-                    # Keep other message types as-is
-                    sanitized_messages.append(msg)
+            sanitized_messages = sanitize_messages(original_messages, redacted_text)
             
             # Add the security agent's response
             security_response = AIMessage(content=result["response"])
             sanitized_messages.append(security_response)
             
-            log_verbose(f"🔒 PII PROTECTION: Created {len(sanitized_messages)} sanitized messages for downstream agents")
-            
             return {
-                "messages": [security_response],  # Only add security response to main message flow
+                "messages": [security_response],
                 "workflow_stage": new_stage,
-                "security_cleared": True,  # Always proceed after security agent
-                "processed_user_input": redacted_text,  # Use redacted text for support agent
+                "security_cleared": True,
+                "processed_user_input": redacted_text,
                 "pii_detected": detected,
                 "pii_types": types,
                 "redacted_text": redacted_text,
-                "sanitized_messages": sanitized_messages,  # Store clean message history
-                "security_tool_details": result.get("tool_details", [])  # Capture security agent tool details
+                "sanitized_messages": sanitized_messages,
+                "security_tool_details": result.get("tool_details", [])
             }
             
         except Exception as e:
             log_debug(f"❌ SUPERVISOR: Security agent orchestration error: {e}")
-            
-            # Track error with LDAI metrics
             config_manager.track_metrics(
                 supervisor_config.tracker,
-                lambda: (_ for _ in ()).throw(e)  # Trigger error tracking
+                lambda: (_ for _ in ()).throw(e)
             )
             raise
     
@@ -217,54 +167,16 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             log_student(f"🔧 SUPPORT INSTRUCTIONS: {support_config.instructions}")
             log_debug(f"🎯 SUPERVISOR: Orchestrating support agent execution")
             
-            # Track supervisor orchestration start for support agent
-            config_manager.track_metrics(
-                supervisor_config.tracker,
-                lambda: "supervisor_orchestrating_support_start"
-            )
+            # Log PII status and prepare safe input
+            log_pii_status(state)
+            support_input = prepare_safe_agent_input(state, "support")
             
-            # Use processed (potentially redacted) text if available
-            processed_input = state.get("processed_user_input", state["user_input"])
-            pii_detected = state.get("pii_detected", False)
-            pii_types = state.get("pii_types", [])
-            sanitized_messages = state.get("sanitized_messages", [])
-            
-            log_debug(f"🔒 SUPERVISOR: Passing to support agent - PII detected: {pii_detected}")
-            log_debug(f"📝 SUPERVISOR: Input text: '{processed_input[:100]}...'")
-            if pii_types:
-                log_debug(f"🔍 SUPERVISOR: PII types found: {pii_types}")
-            
-            # SECURITY: Use sanitized message history to prevent PII leakage
-            if sanitized_messages:
-                support_messages = sanitized_messages
-                log_debug(f"🔒 SECURITY ENFORCED: Using {len(sanitized_messages)} sanitized messages for support agent")
-                # Log what the support agent will actually see
-                for i, msg in enumerate(sanitized_messages):
-                    msg_preview = msg.content[:50] if hasattr(msg, 'content') else str(msg)[:50]
-                    log_debug(f"🔒 SUPPORT MSG {i}: {type(msg).__name__} - '{msg_preview}...'")
-            else:
-                # Fallback: create clean message with only redacted text
-                support_messages = [HumanMessage(content=processed_input)]
-                log_debug(f"⚠️ FALLBACK: No sanitized messages, using redacted text only")
-            
-            # Prepare support agent input with ONLY sanitized messages
-            support_input = {
-                "user_input": processed_input,  # Use redacted text if PII was found
-                "response": "",
-                "tool_calls": [],
-                "tool_details": [],
-                "messages": support_messages  # CRITICAL: Only sanitized messages passed to support agent
-            }
-            
-            # Execute support agent
+            # Execute support agent with metrics tracking
             result = support_agent.invoke(support_input)
-            
-            # Track successful supervisor orchestration for support agent
             tool_calls = result.get("tool_calls", [])
-            config_manager.track_metrics(
-                supervisor_config.tracker,
-                lambda: f"supervisor_orchestrating_support_success_tools_{len(tool_calls)}"
-            )
+            
+            track_success = track_agent_orchestration(config_manager, supervisor_config, "support", tool_calls)
+            track_success()
             
             # Show support agent response to students
             support_response = result["response"]
@@ -287,11 +199,9 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             
         except Exception as e:
             log_debug(f"❌ SUPERVISOR: Support agent orchestration error: {e}")
-            
-            # Track error with LDAI metrics
             config_manager.track_metrics(
                 supervisor_config.tracker,
-                lambda: (_ for _ in ()).throw(e)  # Trigger error tracking
+                lambda: (_ for _ in ()).throw(e)
             )
             raise
     
@@ -340,18 +250,10 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             
             # Track supervisor workflow completion
             support_tool_calls = state.get("support_tool_calls", [])
-            config_manager.track_metrics(
-                supervisor_config.tracker,
-                lambda: f"supervisor_workflow_complete_tools_{len(support_tool_calls)}"
-            )
+            track_workflow_completion(config_manager, supervisor_config, support_tool_calls)
             
             support_response = state.get("support_response", "")
-            
-            if support_response:
-                final_content = support_response
-            else:
-                final_message = state["messages"][-1]
-                final_content = final_message.content
+            final_content = support_response if support_response else state["messages"][-1].content
             
             log_debug(f"🎯 SUPERVISOR: Workflow completed successfully")
             log_debug(f"   📊 Final response length: {len(final_content)} chars")
@@ -367,14 +269,10 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             
         except Exception as e:
             log_debug(f"❌ SUPERVISOR: Final formatting error: {e}")
-            
-            # Track supervisor final formatting error
             config_manager.track_metrics(
                 supervisor_config.tracker,
-                lambda: (_ for _ in ()).throw(e)  # Trigger error tracking
+                lambda: (_ for _ in ()).throw(e)
             )
-            
-            # Return error response
             return {
                 "final_response": f"I apologize, but I encountered an error finalizing the response: {e}",
                 "actual_tool_calls": [],
