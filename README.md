@@ -63,8 +63,7 @@ First, you need to get your LaunchDarkly SDK key by creating a project:
 <div align="center">
 
 <Frame caption="Projects sidebar in the LaunchDarkly app UI.">
-<!-- ![Sidebar Projects](https://raw.githubusercontent.com/launchdarkly-labs/devrel-agents-tutorial/main/assets/images/tutorials/agents-langgraph/sidebar_projects_top_half.jpeg) -->
-*Image: LaunchDarkly Projects sidebar*
+![Sidebar Projects](https://raw.githubusercontent.com/launchdarkly-labs/devrel-agents-tutorial/main/screenshots/sidebar_projects_top_half.jpeg)
 </Frame>
 
 </div>
@@ -74,8 +73,7 @@ First, you need to get your LaunchDarkly SDK key by creating a project:
 
 <div align="center">
 
-<!-- ![New Project](https://raw.githubusercontent.com/launchdarkly-labs/devrel-agents-tutorial/main/assets/images/tutorials/agents-langgraph/new_project_small.jpg) -->
-*Image: Create new project dialog*
+![New Project](https://raw.githubusercontent.com/launchdarkly-labs/devrel-agents-tutorial/main/screenshots/new_project_small.jpg)
 
 </div>
 
@@ -91,8 +89,7 @@ First, you need to get your LaunchDarkly SDK key by creating a project:
 
 <div align="center">
 
-<!-- ![SDK Key](https://raw.githubusercontent.com/launchdarkly-labs/devrel-agents-tutorial/main/assets/images/tutorials/agents-langgraph/sdk_key_small.jpg) -->
-*Image: SDK Key location*
+![SDK Key](https://raw.githubusercontent.com/launchdarkly-labs/devrel-agents-tutorial/main/screenshots/sdk_key_small.jpg)
 
 </div>
 
@@ -146,8 +143,7 @@ In the LaunchDarkly app sidebar, click **Library** in the AI section. On the fol
 
 <div align="center">
 
-<!-- ![Library](https://raw.githubusercontent.com/launchdarkly-labs/devrel-agents-tutorial/main/assets/images/tutorials/agents-langgraph/library_small.jpg) -->
-*Image: LaunchDarkly Library section*
+![Library](https://raw.githubusercontent.com/launchdarkly-labs/devrel-agents-tutorial/main/screenshots/library_small.jpg)
 
 </div>
 
@@ -239,8 +235,7 @@ Create LaunchDarkly AI Configs to control your **LangGraph** multi-agent system 
 
 <div align="center">
 
-<!-- ![Agent Based](https://raw.githubusercontent.com/launchdarkly-labs/devrel-agents-tutorial/main/assets/images/tutorials/agents-langgraph/agent-based_small.jpg) -->
-*Image: Agent-based configuration option*
+![Agent Based](https://raw.githubusercontent.com/launchdarkly-labs/devrel-agents-tutorial/main/screenshots/agent-based_small.jpg)
 
 </div>
 
@@ -277,8 +272,7 @@ Click **Review and save**. Now enable your AI Config by switching to the **Targe
 
 <div align="center">
 
-<!-- ![Targeting Configuration](https://raw.githubusercontent.com/launchdarkly-labs/devrel-agents-tutorial/main/assets/images/tutorials/agents-langgraph/targeting.jpg) -->
-*Image: Targeting configuration screen*
+![Targeting Configuration](https://raw.githubusercontent.com/launchdarkly-labs/devrel-agents-tutorial/main/screenshots/targeting.jpg)
 
 </div>
 
@@ -350,8 +344,7 @@ When you are done, you should have three enabled AI Config Agents as shown below
 
 <div align="center">
 
-<!-- ![Agents](https://raw.githubusercontent.com/launchdarkly-labs/devrel-agents-tutorial/main/assets/images/tutorials/agents-langgraph/agents_small.jpg) -->
-*Image: Three configured AI agents*
+![Agents](https://raw.githubusercontent.com/launchdarkly-labs/devrel-agents-tutorial/main/screenshots/agents_small.jpg)
 
 </div>
 
@@ -391,8 +384,7 @@ Or ask about your specific domain: "What's our refund policy?"
 
 <div align="center">
 
-<!-- ![UI](https://raw.githubusercontent.com/launchdarkly-labs/devrel-agents-tutorial/main/assets/images/tutorials/agents-langgraph/ui_small.jpg) -->
-*Image: Chat interface showing multi-agent workflow*
+![UI](https://raw.githubusercontent.com/launchdarkly-labs/devrel-agents-tutorial/main/screenshots/ui_small.jpg)
 
 </div>
 
