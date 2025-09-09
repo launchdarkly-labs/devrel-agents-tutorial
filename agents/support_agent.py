@@ -9,18 +9,30 @@ from tools_impl.search_v1 import SearchToolV1
 from tools_impl.search_v2 import SearchToolV2
 from tools_impl.reranking import RerankingTool
 from tools_impl.mcp_research_tools import get_research_tools
+from utils.logger import log_student, log_debug, log_verbose
 import asyncio
-from config_manager import AgentConfig
 
 # Simplified approach - no caching for demo clarity
 
-def get_model_instance(model_name: str, temperature: float):
-    """Get a model instance without tools bound"""
-    if "gpt" in model_name.lower():
-        return ChatOpenAI(model=model_name, temperature=temperature)
+def get_model_instance(model_name: str, temperature: float, provider_name: str = None):
+    """Get a model instance using LDAI SDK pattern"""
+    from langchain.chat_models import init_chat_model
+    from config_manager import map_provider_to_langchain
+    
+    if provider_name:
+        langchain_provider = map_provider_to_langchain(provider_name)
     else:
-        # Default to Anthropic for unknown models
-        return ChatAnthropic(model=model_name, temperature=temperature)
+        # Fallback: infer provider from model name  
+        if "gpt" in model_name.lower():
+            langchain_provider = "openai"
+        else:
+            langchain_provider = "anthropic"
+    
+    return init_chat_model(
+        model=model_name,
+        model_provider=langchain_provider,
+        temperature=temperature
+    )
 
 class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]
@@ -29,22 +41,51 @@ class AgentState(TypedDict):
     tool_calls: List[str]
     tool_details: List[dict]  # Add support for detailed tool information with search queries
 
-def create_support_agent(config: AgentConfig, config_manager=None):
+def create_support_agent(config, config_manager=None):
     """Create a universal agent that works with any model provider"""
-    # Handle both old and new AgentConfig formats for compatibility
-    tools_list = getattr(config, 'allowed_tools', None) or getattr(config, 'tools', [])
-    tool_configs = getattr(config, 'tool_configs', {}) or {}
+    # Extract tools from LaunchDarkly AI Config
+    tools_list = []
+    tool_configs = {}
+    max_tool_calls = 8  # default
+    
+    # Try to get tools from AI config
+    if hasattr(config, 'tools') and config.tools:
+        tools_list = list(config.tools)
+    
+    # Try to get tool configurations and custom parameters
+    try:
+        config_dict = config.to_dict()
+        if 'model' in config_dict and 'parameters' in config_dict['model'] and 'tools' in config_dict['model']['parameters']:
+            tools_data = config_dict['model']['parameters']['tools']
+            for tool in tools_data:
+                if 'name' in tool:
+                    tool_name = tool['name']
+                    if tool_name not in tools_list:
+                        tools_list.append(tool_name)
+                    tool_configs[tool_name] = tool.get('parameters', {})
+        
+        # Extract max_tool_calls from customParameters
+        if 'customParameters' in config_dict and config_dict['customParameters']:
+            custom_params = config_dict['customParameters']
+            if 'max_tool_calls' in custom_params:
+                max_tool_calls = custom_params['max_tool_calls']
+        elif 'model' in config_dict and 'custom' in config_dict['model'] and config_dict['model']['custom']:
+            custom_params = config_dict['model']['custom']
+            if 'max_tool_calls' in custom_params:
+                max_tool_calls = custom_params['max_tool_calls']
+    except Exception:
+        pass  # Fallback to just the tools list and defaults
     if not tools_list:
         tools_list = []
-    print(f"🏗️  CREATING SUPPORT AGENT: Starting with tools {tools_list}")
+    log_debug(f"🏗️  CREATING SUPPORT AGENT: Starting with tools {tools_list}")
     if tool_configs:
-        print(f"🔧 TOOL CONFIGS FROM LAUNCHDARKLY: {tool_configs}")
+        log_verbose(f"🔧 TOOL CONFIGS FROM LAUNCHDARKLY: {tool_configs}")
     
     # Create tools based on LaunchDarkly configuration
     available_tools = []
     
     # Load MCP tools using improved initialization
-    print("🔄 LOADING MCP TOOLS: Connecting to MCP servers...")
+    log_debug("🔄 LOADING MCP TOOLS: Connecting to MCP servers...")
     mcp_tool_map = {}
     
     # Only load MCP tools if they're requested in allowed_tools
@@ -115,7 +156,7 @@ def create_support_agent(config: AgentConfig, config_manager=None):
                         # print("DEBUG: Returning {} MCP tools".format(len(mcp_tools)))
                         print(f"✅ MCP TOOLS LOADED: {list(mcp_tool_map.keys())}")
                     else:
-                        print("📚 NO MCP TOOLS: Using internal tools only")
+                        log_debug("📚 NO MCP TOOLS: Using internal tools only")
                         
                 except concurrent.futures.TimeoutError:
                     print("⏰ MCP TIMEOUT: MCP servers not responding - using internal tools only")
@@ -125,7 +166,7 @@ def create_support_agent(config: AgentConfig, config_manager=None):
             print(f"❌ MCP ERROR: {e} - Using internal tools only")
             mcp_tool_map = {}
     else:
-        print("📚 NO MCP TOOLS REQUESTED: Skipping MCP initialization")
+        log_debug("📚 NO MCP TOOLS REQUESTED: Skipping MCP initialization")
         mcp_tool_map = {}
     
     # Map LaunchDarkly tool names to actual MCP tool names
@@ -134,21 +175,21 @@ def create_support_agent(config: AgentConfig, config_manager=None):
         "semantic_scholar": "search_semantic_scholar"
     }
     
-    print(f"🔧 PROCESSING TOOLS: {tools_list}")
-    print(f"🗺️  MCP TOOL MAP KEYS: {list(mcp_tool_map.keys())}")
+    log_debug(f"🔧 PROCESSING TOOLS: {tools_list}")
+    log_debug(f"🗺️  MCP TOOL MAP KEYS: {list(mcp_tool_map.keys())}")
     
     for tool_name in tools_list:
-        print(f"⚙️  Processing tool: {tool_name}")
+        log_debug(f"⚙️  Processing tool: {tool_name}")
         
         if tool_name == "search_v1":
             available_tools.append(SearchToolV1())
-            print(f"📚 INTERNAL TOOL ADDED: Basic vector search (search_v1)")
+            log_debug(f"📚 INTERNAL TOOL ADDED: Basic vector search (search_v1)")
         elif tool_name == "search_v2":
             available_tools.append(SearchToolV2())
-            print(f"📚 INTERNAL TOOL ADDED: Advanced vector search with embeddings (search_v2)")
+            log_debug(f"📚 INTERNAL TOOL ADDED: Advanced vector search with embeddings (search_v2)")
         elif tool_name == "reranking":
             available_tools.append(RerankingTool())
-            print(f"📊 INTERNAL TOOL ADDED: BM25 reranking algorithm (reranking)")
+            log_debug(f"📊 INTERNAL TOOL ADDED: BM25 reranking algorithm (reranking)")
         elif tool_name in ["arxiv_search", "semantic_scholar"]:
             # Use mapping to find the actual MCP tool
             mcp_tool_name = ld_to_mcp_mapping.get(tool_name)
@@ -231,20 +272,18 @@ def create_support_agent(config: AgentConfig, config_manager=None):
         else:
             print(f"❓ UNKNOWN TOOL REQUESTED: {tool_name} - SKIPPING")
     
-    # Initialize model based on LaunchDarkly config - support multiple providers
-    # Handle both old and new AgentConfig formats
-    model_name_attr = getattr(config, 'model', None) or getattr(config, 'model_name', 'claude-3-haiku-20240307')
-    model_name = model_name_attr.lower()
-    if "gpt" in model_name or "openai" in model_name:
-        model = ChatOpenAI(model=model_name_attr, temperature=0.0)
-    elif "claude" in model_name or "anthropic" in model_name:
-        model = ChatAnthropic(model=model_name_attr, temperature=0.0)
-    else:
-        # Default to Anthropic for unknown models
-        model = ChatAnthropic(model=model_name_attr, temperature=0.0)
+    # Initialize model based on LaunchDarkly config using LDAI SDK pattern
+    model_name_attr = config.model.name if hasattr(config.model, 'name') else 'claude-3-haiku-20240307'
+    
+    # Get provider name from config
+    provider_name = None
+    if config.provider and hasattr(config.provider, 'name'):
+        provider_name = config.provider.name
+    
+    model = get_model_instance(model_name_attr, 0.0, provider_name)
     
     # Debug: Show final available tools
-    print(f"🔧 FINAL AVAILABLE TOOLS: {[tool.name if hasattr(tool, 'name') else str(tool) for tool in available_tools]}")
+    log_debug(f"🔧 FINAL AVAILABLE TOOLS: {[tool.name if hasattr(tool, 'name') else str(tool) for tool in available_tools]}")
     
     # Store config values for nested functions
     config_instructions = config.instructions
@@ -273,7 +312,7 @@ def create_support_agent(config: AgentConfig, config_manager=None):
                 # Apply LaunchDarkly tool configuration parameters
                 if tool_name in tool_configs:
                     ld_params = tool_configs[tool_name]
-                    print(f"🔧 APPLYING LD CONFIG: {tool_name} config = {ld_params}")
+                    log_verbose(f"🔧 APPLYING LD CONFIG: {tool_name} config = {ld_params}")
                     
                     # Extract parameters from JSON schema structure
                     if 'properties' in ld_params:
@@ -286,7 +325,7 @@ def create_support_agent(config: AgentConfig, config_manager=None):
                     else:
                         print(f"⚠️ LD CONFIG: No 'properties' found in schema for {tool_name}")
                 
-                print(f"🔧 EXECUTING TOOL: {tool_name} with args: {tool_args}")
+                log_verbose(f"🔧 EXECUTING TOOL: {tool_name} with args: {tool_args}")
                 
                 # Find the tool by name
                 tool_to_execute = None
@@ -362,7 +401,7 @@ def create_support_agent(config: AgentConfig, config_manager=None):
                 tool_message = ToolMessage(content=str(result), tool_call_id=tool_id)
                 tool_results.append(tool_message)
                 
-                print(f"🔧 TOOL RESULT: {tool_name} -> {str(result)[:200]}...")
+                log_verbose(f"🔧 TOOL RESULT: {tool_name} -> {str(result)[:200]}...")
             
             return {"messages": tool_results}
         
@@ -402,9 +441,19 @@ def create_support_agent(config: AgentConfig, config_manager=None):
                     
                     # Log tool usage type with search terms
                     if tool_name in ['search_papers', 'search_semantic_scholar']:
-                        print(f"🔬 MCP TOOL CALLED: {tool_name} ({query_display}) (external research server)")
+                        log_student(f"🔧 EXECUTING: {tool_name} → external research")
+                        log_debug(f"🔬 MCP TOOL CALLED: {tool_name} ({query_display}) (external research server)")
                     elif tool_name in ['search_v1', 'search_v2', 'reranking']:
-                        print(f"📚 INTERNAL TOOL CALLED: {tool_name} ({query_display}) (local processing)")
+                        # Create educational tool execution log
+                        if tool_name == "search_v2":
+                            # Note: result is not available in this scope, so we can't extract relevance here
+                            log_student(f"🔧 EXECUTING: {tool_name} → {query_display.split(':')[1].strip() if ':' in query_display else query_display}")
+                        elif tool_name == "reranking":
+                            log_student(f"🔧 EXECUTING: {tool_name} → BM25 reordered results")
+                        else:
+                            log_student(f"🔧 EXECUTING: {tool_name} → {query_display}")
+                        
+                        log_debug(f"📚 INTERNAL TOOL CALLED: {tool_name} ({query_display}) (local processing)")
                     else:
                         print(f"🔧 UNKNOWN TOOL CALLED: {tool_name} ({query_display})")
         
@@ -437,8 +486,7 @@ Do not repeat the same search query again."""))
                 print(f"🛑 STOPPING TOOL LOOP: '{tool_name}' used {recent_tool_calls.count(tool_name)} times total - ending workflow")
                 return "end"
         
-        # Get max tool calls from config, default to 8 if not specified
-        max_tool_calls = getattr(config, 'max_tool_calls', 8)
+        # Use max_tool_calls extracted from config
         # print(f"DEBUG: should_continue - total_tool_calls: {total_tool_calls}, max: {max_tool_calls}")
         # print(f"DEBUG: Recent tool calls: {recent_tool_calls[-5:]}")  # Show last 5
         
@@ -476,8 +524,7 @@ Do not repeat the same search query again."""))
             
             # Add system message with instructions if this is the first call
             if len(messages) == 1:  # Only user message
-                # Get max tool calls from config, default to 8 if not specified
-                max_tool_calls = getattr(config, 'max_tool_calls', 8)
+                # Use max_tool_calls extracted from config
                 
                 if available_tools:
                     # Create detailed tool descriptions for the prompt
@@ -519,7 +566,6 @@ Do not repeat the same search query again."""))
                         recent_tool_calls.append(tool_call['name'])
             
             # If at max tool calls, disable tools for final completion
-            max_tool_calls = getattr(config, 'max_tool_calls', 8)
             if total_tool_calls >= max_tool_calls:
                 print(f"🛑 DISABLING TOOLS: Reached maximum tool calls ({total_tool_calls}/{max_tool_calls})")
                 
@@ -533,9 +579,12 @@ Do not repeat the same search query again."""))
                 """)
                 messages.append(synthesis_prompt)
                 
-                # Use the base model without any tools bound for final completion
-                model_name_for_completion = getattr(config, 'model', None) or getattr(config, 'model_name', 'claude-3-haiku-20240307')
-                completion_model = get_model_instance(model_name_for_completion, 0.0)
+                # Use the base model without any tools bound for final completion  
+                model_name_for_completion = config.model.name if hasattr(config.model, 'name') else 'claude-3-haiku-20240307'
+                completion_provider = None
+                if config.provider and hasattr(config.provider, 'name'):
+                    completion_provider = config.provider.name
+                completion_model = get_model_instance(model_name_for_completion, 0.0, completion_provider)
                 response = completion_model.invoke(messages)
                 print(f"🎯 FORCED SYNTHESIS: Model completing with synthesis instructions")
                 return {"messages": [response]}
@@ -544,11 +593,11 @@ Do not repeat the same search query again."""))
             tracker = getattr(config, 'tracker', None)
             # print(f"🔍 SUPPORT AGENT DEBUG: config_manager={config_manager is not None}, tracker={tracker is not None}")
             if tracker:
-                print(f"🔍 TRACKER TYPE: {type(tracker)}")
-                print(f"🔍 TRACKER METHODS: {[m for m in dir(tracker) if not m.startswith('_')]}")
+                log_verbose(f"🔍 TRACKER TYPE: {type(tracker)}")
+                log_verbose(f"🔍 TRACKER METHODS: {[m for m in dir(tracker) if not m.startswith('_')]}")
             
             if config_manager and tracker:
-                print(f"🚀 USING LAUNCHDARKLY TRACKER for model call")
+                log_debug(f"🚀 USING LAUNCHDARKLY TRACKER for model call")
                 response = config_manager.track_metrics(
                     config.tracker,
                     lambda: model.invoke(messages)
@@ -639,9 +688,8 @@ Do not repeat the same search query again."""))
         else:
             final_response = "I apologize, but I couldn't generate a proper response."
         
-        print(f"🔧 SUPPORT AGENT RETURNING:")
-        print(f"   📊 tool_calls: {tool_calls}")
-        print(f"   📊 tool_details: {tool_details}")
+        print(f"🔧 SUPPORT AGENT RETURNING: 📊 tool_calls: {tool_calls}")
+        log_debug(f"   📊 tool_details: {tool_details}")
         
         return {
             "user_input": state["user_input"],
@@ -678,5 +726,5 @@ Do not repeat the same search query again."""))
     # Format is the final step
     workflow.set_finish_point("format")
     
-    print("✅ SUPPORT AGENT COMPILED: Ready for execution")
+    log_debug("✅ SUPPORT AGENT COMPILED: Ready for execution")
     return workflow.compile()

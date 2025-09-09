@@ -11,6 +11,49 @@ from dataclasses import dataclass
 import json
 from ldai.tracker import TokenUsage, FeedbackKind
 
+def track_langgraph_metrics(tracker, func):
+    """
+    Track LangGraph agent operations with LaunchDarkly metrics.
+    
+    This function follows the LaunchDarkly LDAI SDK pattern for tracking
+    LangGraph agents, which store token usage in message.usage_metadata.
+    
+    :param tracker: The LaunchDarkly tracker instance.
+    :param func: Function to track.
+    :return: Result of the tracked function.
+    """
+    try:
+        result = tracker.track_duration_of(func)
+        tracker.track_success()
+        
+        # For LangGraph agents, usage_metadata is included on all messages that used AI
+        total_input_tokens = 0
+        total_output_tokens = 0
+        total_tokens = 0
+
+        if "messages" in result:
+            for message in result['messages']:
+                # Check for usage_metadata directly on the message
+                if hasattr(message, "usage_metadata") and message.usage_metadata:
+                    usage_data = message.usage_metadata
+                    total_input_tokens += usage_data.get("input_tokens", 0)
+                    total_output_tokens += usage_data.get("output_tokens", 0)
+                    total_tokens += usage_data.get("total_tokens", 0)
+
+        if total_tokens > 0:
+            from ldai.tracker import TokenUsage
+            token_usage = TokenUsage(
+                input=total_input_tokens,
+                output=total_output_tokens,
+                total=total_tokens
+            )
+            tracker.track_tokens(token_usage)
+    except Exception:
+        tracker.track_error()
+        raise
+    return result
+
+
 def track_langchain_metrics(tracker, func):
     """
     Track LangChain-specific operations using the official LaunchDarkly AI SDK pattern.

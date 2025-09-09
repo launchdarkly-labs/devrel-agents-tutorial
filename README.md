@@ -473,4 +473,4 @@ Every change is instant, measurable, and reversible.
 
 ---
 
-*Questions? Issues? Reach out at `aiproduct@launchdarkly.com` or open an issue in the [GitHub repo](https://github.com/launchdarkly/agents-demo).*
+*Questions? Issues? Reach out at `aiproduct@launchdarkly.com` or open an issue in the [GitHub repo](https://github.com/launchdarkly/agents-demo).**
