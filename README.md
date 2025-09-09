@@ -62,9 +62,7 @@ First, you need to get your LaunchDarkly SDK key by creating a project:
 
 <div align="center">
 
-<Frame caption="Projects sidebar in the LaunchDarkly app UI.">
 ![Sidebar Projects](./screenshots/sidebar_projects_top_half.jpeg)
-</Frame>
 
 </div>
 
