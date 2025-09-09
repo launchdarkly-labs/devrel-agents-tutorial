@@ -218,7 +218,7 @@ The `reranking` tool takes search results from `search_v2` and reorders them usi
 
 > **🔍 How Your RAG Architecture Works**
 >
-> Your **RAG** system works in two stages: `search_v2` performs semantic similarity search using FAISS by converting queries into the same vector space as your documents (via **OpenAI** embeddings), while `reranking` reorders results for maximum relevance. This **RAG** approach significantly outperforms keyword search by understanding context, so asking "How do I cancel?" finds your cancellation policy even without the word "cancel."
+> Your **RAG** system works in two stages: `search_v2` performs semantic similarity search using FAISS by converting queries into the same vector space as your documents (via **OpenAI** embeddings), while `reranking` reorders results for maximum relevance. This **RAG** approach significantly outperforms keyword search by understanding context, so asking "My app is broken" can find troubleshooting guides that mention "application errors" or "system failures."
 
 ## Step 5: Create Your AI Agents in LaunchDarkly (5 minutes)
 
