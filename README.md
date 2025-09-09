@@ -226,7 +226,7 @@ Create LaunchDarkly AI Configs to control your **LangGraph** multi-agent system 
 
 ### Create the Supervisor Agent
 
-1. Go to **LaunchDarkly Dashboard Sidebar** → **AI Configs** → **Create New**
+1. In the LaunchDarkly dashboard sidebar, navigate to **AI Configs** and click **Create New**
 2. Select `🤖 Agent-based`
 
 <br />
