@@ -62,7 +62,7 @@ First, you need to get your LaunchDarkly SDK key by creating a project:
 
 <div align="center">
 
-![Sidebar Projects](./screenshots/sidebar_projects_top_half.jpeg)
+<img src="./screenshots/sidebar_projects_top_half.jpeg" alt="Sidebar Projects" width="400">
 
 </div>
 
@@ -71,7 +71,7 @@ First, you need to get your LaunchDarkly SDK key by creating a project:
 
 <div align="center">
 
-![New Project](./screenshots/new_project_small.jpg)
+<img src="./screenshots/new_project_small.jpg" alt="New Project" width="400">
 
 </div>
 
@@ -87,7 +87,7 @@ First, you need to get your LaunchDarkly SDK key by creating a project:
 
 <div align="center">
 
-![SDK Key](./screenshots/sdk_key_small.jpg)
+<img src="./screenshots/sdk_key_small.jpg" alt="SDK Key" width="400">
 
 </div>
 
@@ -135,13 +135,13 @@ This builds your **RAG** (Retrieval-Augmented Generation) foundation using **Ope
 
 Define the search tools your agents will use.
 
-In the LaunchDarkly app sidebar, click **Library** in the AI section. On the following screen, click the **Tools tab, then **Create tool**.
+In the LaunchDarkly app sidebar, click **Library** in the AI section. On the following screen, click the **Tools** tab, then **Create tool**.
 
 <br />
 
 <div align="center">
 
-![Library](./screenshots/library_small.jpg)
+<img src="./screenshots/library_small.jpg" alt="Library" width="400">
 
 </div>
 
@@ -233,7 +233,7 @@ Create LaunchDarkly AI Configs to control your **LangGraph** multi-agent system 
 
 <div align="center">
 
-![Agent Based](./screenshots/agent-based_small.jpg)
+<img src="./screenshots/agent-based_small.jpg" alt="Agent Based" width="400">
 
 </div>
 
@@ -270,7 +270,7 @@ Click **Review and save**. Now enable your AI Config by switching to the **Targe
 
 <div align="center">
 
-![Targeting Configuration](./screenshots/targeting.jpg)
+<img src="./screenshots/targeting.jpg" alt="Targeting Configuration" width="400">
 
 </div>
 
@@ -342,7 +342,7 @@ When you are done, you should have three enabled AI Config Agents as shown below
 
 <div align="center">
 
-![Agents](./screenshots/agents_small.jpg)
+<img src="./screenshots/agents_small.jpg" alt="Agents" width="400">
 
 </div>
 
@@ -382,7 +382,7 @@ Or ask about your specific domain: "What's our refund policy?"
 
 <div align="center">
 
-![UI](./screenshots/ui_small.jpg)
+<img src="./screenshots/ui_small.jpg" alt="UI" width="400">
 
 </div>
 
@@ -456,7 +456,7 @@ Your multi-agent system is running with dynamic control and ready for optimizati
 
 ## Try This Now
 
-{/* Before moving to Part 2, */} Experiment with:
+<!-- Before moving to Part 2, --> Experiment with:
 
 1. **Different Instructions**: Make agents more helpful, more cautious, or more thorough
 2. **Tool Combinations**: Add/remove tools to see impact on quality
@@ -472,7 +472,7 @@ Every change is instant, measurable, and reversible.
 - LaunchDarkly AI Configs control and change AI behavior without requiring deployments
 - Start simple and add complexity as you learn what works
 
-{/* Ready for more? [Continue to Part 2: Advanced AI Agent Features →](./part-2-advanced-features) */}
+<!-- Ready for more? [Continue to Part 2: Advanced AI Agent Features →](./part-2-advanced-features) -->
 
 ---
 
