@@ -62,9 +62,8 @@ First, you need to get your LaunchDarkly SDK key by creating a project:
 
 <div align="center">
 
-<Frame caption="Projects sidebar in the LaunchDarkly app UI.">
 ![Sidebar Projects](screenshots/sidebar_projects_top_half.png)
-</Frame>
+*Projects sidebar in the LaunchDarkly app UI.*
 
 </div>
 
@@ -73,9 +72,8 @@ First, you need to get your LaunchDarkly SDK key by creating a project:
 
 <div align="center">
 
-<Frame caption="Creating a new project in LaunchDarkly.">
 ![New Project](screenshots/new_project_small.png)
-</Frame>
+*Creating a new project in LaunchDarkly.*
 
 </div>
 
@@ -91,9 +89,8 @@ First, you need to get your LaunchDarkly SDK key by creating a project:
 
 <div align="center">
 
-<Frame caption="Location of the SDK key in LaunchDarkly project settings.">
 ![SDK Key](screenshots/sdk_key_small.png)
-</Frame>
+*Location of the SDK key in LaunchDarkly project settings.*
 
 </div>
 
@@ -147,9 +144,8 @@ In the LaunchDarkly app sidebar, click **Library** in the AI section. On the fol
 
 <div align="center">
 
-<Frame caption="AI Library section in the LaunchDarkly dashboard sidebar.">
 ![Library](screenshots/library_small.png)
-</Frame>
+*AI Library section in the LaunchDarkly dashboard sidebar.*
 
 </div>
 
@@ -242,9 +238,8 @@ Create LaunchDarkly AI Configs to control your **LangGraph** multi-agent system 
 
 <div align="center">
 
-<Frame caption="Selecting the Agent-based configuration type.">
 ![Agent Based](screenshots/agent-based_small.png)
-</Frame>
+*Selecting the Agent-based configuration type.*
 
 </div>
 
@@ -281,9 +276,8 @@ Click **Review and save**. Now enable your AI Config by switching to the **Targe
 
 <div align="center">
 
-<Frame caption="Targeting tab showing the default rule configuration for AI agents.">
 ![Targeting Configuration](screenshots/targeting.png)
-</Frame>
+*Targeting tab showing the default rule configuration for AI agents.*
 
 </div>
 
@@ -355,9 +349,8 @@ When you are done, you should have three enabled AI Config Agents as shown below
 
 <div align="center">
 
-<Frame caption="Overview of all three configured AI agents in LaunchDarkly.">
 ![Agents](screenshots/agents_small.png)
-</Frame>
+*Overview of all three configured AI agents in LaunchDarkly.*
 
 </div>
 
@@ -397,9 +390,8 @@ Or ask about your specific domain: "What's our refund policy?"
 
 <div align="center">
 
-<Frame caption="Chat interface showing the multi-agent workflow in action.">
 ![UI](screenshots/ui_small.png)
-</Frame>
+*Chat interface showing the multi-agent workflow in action.*
 
 </div>
 
