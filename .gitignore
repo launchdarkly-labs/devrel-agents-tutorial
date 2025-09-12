@@ -27,6 +27,8 @@ demo_pii_protection.py
 requirements.txt
 policy/
 project_overview.md
+test_vector_search.py
+data/mythical_pets_kb.py
 
 # Project files
 .claude
