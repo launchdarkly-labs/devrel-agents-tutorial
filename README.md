@@ -55,16 +55,15 @@ cp .env.example .env
 First, you need to get your LaunchDarkly SDK key by creating a project:
 
 1. **Sign up for LaunchDarkly** at [app.launchdarkly.com](https://app.launchdarkly.com) (free account).
-<Note>If you're a brand new user, after signing up for an account, you'll need to verify your email address. You can skip through the new user onboarding flow after that. </Note>
+**Note:** If you're a brand new user, after signing up for an account, you'll need to verify your email address. You can skip through the new user onboarding flow after that.
 2. **Find projects on the side bar:**
 
 <br />
 
 <div align="center">
 
-<Frame caption="Projects sidebar in the LaunchDarkly app UI.">
 ![Sidebar Projects](screenshots/sidebar_projects_top_half.jpeg)
-</Frame>
+*Projects sidebar in the LaunchDarkly app UI.*
 
 </div>
 
@@ -73,9 +72,8 @@ First, you need to get your LaunchDarkly SDK key by creating a project:
 
 <div align="center">
 
-<Frame caption="Creating a new project in LaunchDarkly.">
 ![New Project](screenshots/new_project_small.jpg)
-</Frame>
+*Creating a new project in LaunchDarkly.*
 
 </div>
 
@@ -91,9 +89,8 @@ First, you need to get your LaunchDarkly SDK key by creating a project:
 
 <div align="center">
 
-<Frame caption="Location of the SDK key in LaunchDarkly project settings.">
 ![SDK Key](screenshots/sdk_key_small.jpg)
-</Frame>
+*Location of the SDK key in LaunchDarkly project settings.*
 
 </div>
 
@@ -147,9 +144,8 @@ In the LaunchDarkly app sidebar, click **Library** in the AI section. On the fol
 
 <div align="center">
 
-<Frame caption="AI Library section in the LaunchDarkly dashboard sidebar.">
 ![Library](screenshots/library_small.jpg)
-</Frame>
+*AI Library section in the LaunchDarkly dashboard sidebar.*
 
 </div>
 
@@ -242,9 +238,8 @@ Create LaunchDarkly AI Configs to control your **LangGraph** multi-agent system 
 
 <div align="center">
 
-<Frame caption="Selecting the Agent-based configuration type.">
 ![Agent Based](screenshots/agent-based_small.jpg)
-</Frame>
+*Selecting the Agent-based configuration type.*
 
 </div>
 
@@ -281,9 +276,8 @@ Click **Review and save**. Now enable your AI Config by switching to the **Targe
 
 <div align="center">
 
-<Frame caption="Targeting tab showing the default rule configuration for AI agents.">
 ![Targeting Configuration](screenshots/targeting.jpg)
-</Frame>
+*Targeting tab showing the default rule configuration for AI agents.*
 
 </div>
 
@@ -355,9 +349,8 @@ When you are done, you should have three enabled AI Config Agents as shown below
 
 <div align="center">
 
-<Frame caption="Overview of all three configured AI agents in LaunchDarkly.">
 ![Agents](screenshots/agents_small.jpg)
-</Frame>
+*Overview of all three configured AI agents in LaunchDarkly.*
 
 </div>
 
@@ -397,9 +390,8 @@ Or ask about your specific domain: "What's our refund policy?"
 
 <div align="center">
 
-<Frame caption="Chat interface showing the multi-agent workflow in action.">
 ![UI](screenshots/ui_small.jpg)
-</Frame>
+*Chat interface showing the multi-agent workflow in action.*
 
 </div>
 
