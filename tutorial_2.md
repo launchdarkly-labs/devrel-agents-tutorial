@@ -103,9 +103,12 @@ uv run python create_configs.py
 ```
 
 This creates:
+- **3 essential tools**: `search_v1` (basic search), `arxiv_search` (MCP), `semantic_scholar` (MCP)
 - **4 combined user segments** with geographic and tier targeting rules  
 - **3 AI configs** (supervisor, security, support) with multiple variations
 - **Complete targeting rules** that route users to appropriate variations
+
+**Tool Creation**: The CLI programmatically creates only the tools needed for Tutorial 2 (search_v1 and MCP research tools), while reusing `search_v2` and `reranking` tools from Part 1. This approach lets you incrementally add capabilities without recreating existing infrastructure.
 
 <div align="center">
 
@@ -160,8 +163,8 @@ Now let's see your segmentation in action through the actual user interface that
 
 ```bash
 # Start your system (2 terminals)
-uv run uvicorn api.main:app --reload --port 8000
-uv run streamlit run ui/chat_interface.py --server.port 8501
+uv run uvicorn api.main:app --reload --port 8001
+API_PORT=8001 uv run streamlit run ui/chat_interface.py --server.port 8501
 ```
 
 Open http://localhost:8501 and test different user types:
