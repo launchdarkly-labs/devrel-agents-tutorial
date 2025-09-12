@@ -16,10 +16,18 @@ Thumbs.db
 # Tests
 tests/
 
+# Documentation
+docs/
+
 # Environment files
 .env
 
-# Project documentation files
+# Unused/cleanup files
+demo_pii_protection.py
+requirements.txt
+policy/
 project_overview.md
+
+# Project files
 .claude
 CLAUDE.md
