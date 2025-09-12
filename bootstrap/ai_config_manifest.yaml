@@ -1,0 +1,194 @@
+project:
+  key: "multi-agent-chatbot"  # Your LaunchDarkly project key
+  environment:
+    - key: production
+  
+  # Geographic segments for privacy protection
+  segment:
+    - key: eu-users
+      rules:
+      - attribute: "country"
+        op: "in"
+        values: ["DE", "FR", "ES", "IT", "NL", "BE", "AT", "PL", "PT", "GR", "CZ", "HU", "SE", "DK", "FI"]
+        contextKind: "user"
+        negate: false
+    
+    - key: us-users
+      rules:
+      - attribute: "country" 
+        op: "in"
+        values: ["US", "CA"]
+        contextKind: "user"
+        negate: false
+        
+    # Business tier segments
+    - key: enterprise-users
+      rules:
+      - attribute: "plan"
+        op: "in"
+        values: ["enterprise", "business", "corporate"]
+        contextKind: "user"
+        negate: false
+    
+    - key: pro-users
+      rules:
+      - attribute: "plan"
+        op: "in"
+        values: ["pro", "professional", "premium"]
+        contextKind: "user"
+        negate: false
+        
+    - key: free-users
+      rules:
+      - attribute: "plan"
+        op: "in"
+        values: ["free", "trial", "basic", "starter"]
+        contextKind: "user"
+        negate: false
+        
+    # Combined segments for precise targeting
+    - key: eu-enterprise
+      rules:
+      - attribute: "country"
+        op: "in"
+        values: ["DE", "FR", "ES", "IT", "NL", "BE", "AT", "PL", "PT", "GR"]
+        contextKind: "user"
+        negate: false
+      - attribute: "plan"
+        op: "in"
+        values: ["enterprise", "business", "corporate"]
+        contextKind: "user"
+        negate: false
+        
+    - key: us-enterprise
+      rules:
+      - attribute: "country"
+        op: "in"
+        values: ["US", "CA"]
+        contextKind: "user"
+        negate: false
+      - attribute: "plan"
+        op: "in"
+        values: ["enterprise", "business", "corporate"]
+        contextKind: "user"
+        negate: false
+
+  # Business tier AI configuration
+  ai_config:
+    - key: "support-agent-business-tiers"
+      name: "Support Agent - Complete Business Matrix"
+      variations:
+        # EU Tiers
+        - key: "eu-enterprise"
+          modelConfig:
+            provider: "anthropic"
+            modelId: "claude-3-5-sonnet-20241022"
+          tools: ["search_v2", "reranking", "arxiv_search", "semantic_scholar"]
+          instructions: "You are a premium research specialist with full database access. EU privacy laws require strict data handling. Always cite sources and explain confidence levels. Use multiple external sources for complex queries."
+          customParameters:
+            max_tool_calls: 20
+            temperature: 0.1
+            max_cost_per_session: 10.00
+            privacy_mode: "strict"
+            
+        - key: "eu-pro"
+          modelConfig:
+            provider: "anthropic"
+            modelId: "claude-3-5-haiku-20241022"
+          tools: ["search_v2", "reranking", "arxiv_search"]
+          instructions: "You are a helpful research assistant with academic database access. Follow EU privacy guidelines. Prioritize internal knowledge base but use ArXiv for academic questions."
+          customParameters:
+            max_tool_calls: 8
+            temperature: 0.3
+            max_cost_per_session: 1.00
+            privacy_mode: "strict"
+            
+        - key: "eu-free"
+          modelConfig:
+            provider: "anthropic"
+            modelId: "claude-3-5-haiku-20241022"
+          tools: ["search_v2"]
+          instructions: "You are a helpful assistant using internal knowledge only. Provide accurate information while following EU privacy requirements. No external data access."
+          customParameters:
+            max_tool_calls: 3
+            temperature: 0.4
+            max_cost_per_session: 0.10
+            privacy_mode: "strict"
+            
+        # US Tiers  
+        - key: "us-enterprise"
+          modelConfig:
+            provider: "openai"
+            modelId: "gpt-4o"
+          tools: ["search_v2", "reranking", "arxiv_search", "semantic_scholar"]
+          instructions: "You are a premium research specialist with full access to external databases and academic sources. Provide comprehensive, well-researched responses with source attribution."
+          customParameters:
+            max_tool_calls: 20
+            temperature: 0.2
+            max_cost_per_session: 10.00
+            privacy_mode: "standard"
+            
+        - key: "us-pro"
+          modelConfig:
+            provider: "openai"
+            modelId: "gpt-4o"
+          tools: ["search_v2", "reranking", "arxiv_search"]
+          instructions: "You are a research assistant with academic database access. Use internal knowledge base and ArXiv for technical questions. Provide thorough but cost-conscious responses."
+          customParameters:
+            max_tool_calls: 8
+            temperature: 0.3
+            max_cost_per_session: 1.00
+            privacy_mode: "standard"
+            
+        - key: "us-free"
+          modelConfig:
+            provider: "openai"
+            modelId: "gpt-4o-mini"
+          tools: ["search_v2"]
+          instructions: "You are a helpful assistant using internal knowledge base. Provide accurate, concise responses efficiently."
+          customParameters:
+            max_tool_calls: 3
+            temperature: 0.5
+            max_cost_per_session: 0.10
+            privacy_mode: "standard"
+            
+        # International fallback
+        - key: "international-standard"
+          modelConfig:
+            provider: "anthropic"  # Default to privacy-friendly
+            modelId: "claude-3-5-haiku-20241022"
+          tools: ["search_v2", "reranking"]
+          instructions: "You are a helpful assistant with balanced capabilities for international users. Use internal knowledge base with some research tools."
+          customParameters:
+            max_tool_calls: 5
+            temperature: 0.4
+            max_cost_per_session: 0.50
+
+      # Complete targeting matrix
+      targeting:
+        rules:
+          # EU targeting
+          - segments: ["eu-enterprise"]
+            variation: "eu-enterprise"
+          - segments: ["eu-users", "pro-users"]
+            variation: "eu-pro"
+          - segments: ["eu-users", "free-users"]
+            variation: "eu-free"
+          - segments: ["eu-users"]  # Catch-all for EU
+            variation: "eu-free"
+            
+          # US targeting  
+          - segments: ["us-enterprise"]
+            variation: "us-enterprise"
+          - segments: ["us-users", "pro-users"]
+            variation: "us-pro"
+          - segments: ["us-users", "free-users"]
+            variation: "us-free"
+          - segments: ["us-users"]  # Catch-all for US
+            variation: "us-free"
+            
+          # Enterprise override (highest priority)
+          - segments: ["enterprise-users"]
+            variation: "us-enterprise"  # Default enterprise to US config
+            
+        defaultVariation: "international-standard"
