@@ -105,6 +105,34 @@ class MultiAgentBootstrap:
             print(f"  ❌ Failed to create variation: {response.status_code} - {response.text}")
             return None
     
+    def create_tool(self, project_key, tool_data):
+        """Create tool for AI Configs"""
+        url = f"{self.base_url}/api/v2/projects/{project_key}/tools"
+        
+        payload = {
+            "key": tool_data["key"],
+            "name": tool_data["name"],
+            "description": tool_data["description"],
+            "type": tool_data.get("type", "function")
+        }
+        
+        # Add MCP-specific configuration if applicable
+        if tool_data.get("type") == "mcp":
+            payload["mcpServer"] = tool_data.get("server", "")
+        
+        response = requests.post(url, headers=self.headers, json=payload, timeout=30)
+        
+        if response.status_code in [200, 201]:
+            print(f"✅ Tool '{tool_data['key']}' created")
+            time.sleep(0.5)
+            return response.json()
+        elif response.status_code == 409:
+            print(f"⚠️  Tool '{tool_data['key']}' already exists")
+            return None
+        else:
+            print(f"❌ Failed to create tool: {response.status_code} - {response.text}")
+            return None
+
     def update_targeting(self, project_key, config_key, targeting_data):
         """Update AI Config targeting rules"""
         url = f"{self.base_url}/api/v2/projects/{project_key}/ai-configs/{config_key}/environments/production/targeting"
@@ -172,6 +200,13 @@ def main():
     for segment in manifest["project"]["segment"]:
         bootstrap.create_segment(project_key, segment)
     print()
+    
+    # Create tools
+    if "tool" in manifest["project"]:
+        print("🔧 Creating tools...")
+        for tool in manifest["project"]["tool"]:
+            bootstrap.create_tool(project_key, tool)
+        print()
     
     # Create AI configs
     print("🤖 Creating AI configs...")
