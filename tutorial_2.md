@@ -130,9 +130,9 @@ This creates:
 - **Complete targeting rules** that route users to appropriate variations
 
 **Smart Resource Management**: The bootstrap script intelligently handles existing resources from Part 1:
-- **Reuses**: `supervisor-agent` (identical), `search_v2` and `reranking` tools
+- **Reuses**: `supervisor-agent` (identical), `support-agent` with `search_v2` and `reranking` tools 
 - **Updates**: `security-agent` with geographic compliance variations
-- **Creates New**: `support-agent-business-tiers` for business tier targeting, MCP research tools
+- **Creates New**: `support-agent-business-tiers` for business tier targeting, MCP research tools (`search_v1`, `arxiv_search`, `semantic_scholar`)
 - **Skips Duplicates**: Won't recreate segments or configs that already exist
 
 This approach lets you incrementally add capabilities without recreating existing infrastructure.
