@@ -1,4 +1,4 @@
-# Level Up Your Multi-Agent System: Geographic + Business Tier Targeting with LaunchDarkly CLI and MCP Tools
+# Level Up Your Multi-Agent System: Geographic + Business Tier Targeting with LaunchDarkly API Automation and MCP Tools
 
 ## Overview
 
@@ -6,7 +6,7 @@ Your multi-agent system works perfectly in testing, but what happens when enterp
 
 *Part 2 of 3 of the series: **Chaos to Clarity: Defensible AI Systems That Deliver on Your Goals***
 
-The solution? **LangGraph multi-agent workflows** controlled by **LaunchDarkly AI Config** targeting rules that intelligently route users: paid customers get premium tools and models, free users get cost-efficient alternatives, and EU users get Claude for enhanced privacy. Deploy this complex matrix through **LaunchDarkly CLI** automation in seconds instead of hours.
+The solution? **LangGraph multi-agent workflows** controlled by **LaunchDarkly AI Config** targeting rules that intelligently route users: paid customers get premium tools and models, free users get cost-efficient alternatives, and EU users get Claude for enhanced privacy. Deploy this complex matrix through **LaunchDarkly API** automation in seconds instead of hours.
 
 ## What You'll Build Today
 
@@ -14,20 +14,20 @@ In the next 20 minutes, you'll transform your basic multi-agent system with:
 
 - **Business Tiers & MCP Integration**: Free users get internal RAG search, Paid users get premium models with external research tools and expanded tool call limits, all controlled by LaunchDarkly AI Configs
 - **Geographic Targeting**: EU users automatically get Claude models (enhanced privacy), other users get cost-optimized alternatives
-- **CLI Automation**: Deploy complex targeting matrices with a single command instead of UI configuration
+- **API Automation**: Deploy complex targeting matrices with a single Python script instead of manual UI configuration
 
 ## Prerequisites
 
 You'll need:
 - **Completed [Part 1](README.md)**: Working multi-agent system with basic AI Configs
-- **LaunchDarkly API key**: Add `LD_API_KEY=your-api-key` to your `.env` file ([get API key](https://app.launchdarkly.com/settings/authorization))
 - **Same environment**: Python 3.9+, uv, API keys from [Part 1](README.md)
+- **LaunchDarkly API key**: Add `LD_API_KEY=your-api-key` to your `.env` file ([get API key](https://app.launchdarkly.com/settings/authorization))
 
 ## Step 1: Install MCP Servers (4 minutes)
 
 **What is MCP?** [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) provides standardized connections between AI assistants and external data sources. Think of it as APIs specifically designed for AI tools - your agents can search academic papers, citation databases, or connect to various databases and services. MCP tools run as separate servers that your agents call when needed.
 
-**Finding MCP Servers:** The [MCP Registry](https://github.com/modelcontextprotocol/registry) serves as a community-driven directory for discovering available MCP servers - like an "app store" for MCP tools. Browse available servers at [registry.modelcontextprotocol.io](https://registry.modelcontextprotocol.io/docs#/operations/list-servers) to see what's currently available. Registry servers install through standard package managers:
+The [MCP Registry](https://github.com/modelcontextprotocol/registry) serves as a community-driven directory for discovering available MCP servers - like an "app store" for MCP tools. Browse available servers at [registry.modelcontextprotocol.io](https://registry.modelcontextprotocol.io/docs#/operations/list-servers) to see what's currently available. Registry servers install through standard package managers:
 
 ```bash
 # Example registry installations (not used in this tutorial)
@@ -53,7 +53,7 @@ git clone https://github.com/JackKuo666/semanticscholar-MCP-Server.git
 
 These tools integrate with your agents via LangGraph - LaunchDarkly controls which users get access to which tools.
 
-## Step 2: Setup Dependencies (2 minutes)
+## Step 2: Setup LaunchDarkly API Dependencies (2 minutes)
 
 Install the bootstrap system dependencies:
 
@@ -62,13 +62,31 @@ cd bootstrap
 uv pip install -r requirements.txt
 ```
 
-The bootstrap system reads your `.env` file for the LaunchDarkly API key and creates everything programmatically using the LaunchDarkly CLI under the hood.
+**Note:** If you've already run `uv sync` from the main project directory (from Part 1), you already have `requests` and `python-dotenv`. This step only adds `pyyaml` for parsing the configuration manifest.
+
+**How the Bootstrap Works:**
+The system uses the LaunchDarkly REST API to programmatically create:
+- **4 user segments** (eu-free, eu-paid, other-free, other-paid) with combined geographic + business tier targeting rules
+- **3 AI configs** with multiple variations each:
+  - **Supervisor Agent**: 1 variation (reused from Part 1 if it exists)
+  - **Security Agent**: 2 new variations replacing Part 1's single variation
+    - `basic-security`: Non-EU users (allows names, job titles)
+    - `strict-security`: EU users (GDPR compliant, redacts all PII)
+  - **Support Agent Business Tiers**: New config with 5 variations (replaces Part 1's simple support-agent)
+    - `eu-free`: Claude Haiku + basic search
+    - `eu-paid`: Claude Sonnet + full RAG + MCP tools
+    - `other-free`: GPT-4o Mini + basic search
+    - `other-paid`: GPT-4 + full RAG + MCP tools
+    - `international-standard`: Fallback variation
+- **Targeting rules** that automatically route users to appropriate configurations based on location and plan type
+
+All configurations are defined in `ai_config_manifest.yaml` and deployed via `create_configs.py` using direct API calls. This programmatic approach provides version-controlled infrastructure as code that can handle complex multi-dimensional targeting matrices that would be tedious to configure manually in the UI.
 
 ## Step 3: Understand the Segmentation Strategy (3 minutes)
 
 Now that you have MCP tools installed, let's understand how they'll be distributed across different user segments.
 
-Your CLI will create 4 combined user segments for precise targeting:
+Your automation script will create 4 combined user segments for precise targeting:
 
 ### Combined Segments (Geography + Business Tier)
 - **EU Free**: European users on free plans - get Claude Haiku with basic search only
@@ -92,9 +110,9 @@ Other Users     │  GPT-4o Mini    │  GPT-4
 - **Simplified Management**: 4 segments instead of complex geographic × tier combinations
 - **Enhanced Privacy**: EU users get Anthropic Claude models with privacy-by-design approach
 
-## Step 4: Deploy with CLI Bootstrap (2 minutes)
+## Step 4: Deploy with API Automation (2 minutes)
 
-In [Part 1](README.md) you saw how easy it was to set up AI Configs through the [LaunchDarkly UI](https://app.launchdarkly.com), for this step we will use the Command Line Interface (CLI). [LaunchDarkly's CLI](https://docs.launchdarkly.com/home/getting-started/ldcli) lets you manage tools and AI Configs programmatically. Instead of manually creating dozens of variations, you'll deploy complex targeting matrices with a single command. This is essential when you need to handle multiple geographic regions × business tiers.
+In [Part 1](README.md) you saw how easy it was to set up AI Configs through the [LaunchDarkly UI](https://app.launchdarkly.com). For complex multi-dimensional targeting, we'll use programmatic API automation. The LaunchDarkly REST API lets you manage segments, tools, and AI Configs programmatically. Instead of manually creating dozens of variations in the UI, you'll deploy complex targeting matrices with a single Python script. This approach is essential when you need to handle multiple geographic regions × business tiers with conditional tool assignments.
 
 Deploy your complete targeting matrix with one command:
 
@@ -105,15 +123,24 @@ uv run python create_configs.py
 This creates:
 - **3 essential tools**: `search_v1` (basic search), `arxiv_search` (MCP), `semantic_scholar` (MCP)
 - **4 combined user segments** with geographic and tier targeting rules  
-- **3 AI configs** (supervisor, security, support) with multiple variations
+- **3 AI configs** with intelligent handling:
+  - **supervisor-agent**: Skipped if already exists from Part 1 (identical configuration)
+  - **security-agent**: Updated with 2 new geographic variations (basic vs strict GDPR)
+  - **support-agent-business-tiers**: New config with 5 variations (geographic × tier matrix)
 - **Complete targeting rules** that route users to appropriate variations
 
-**Tool Creation**: The CLI programmatically creates only the tools needed for Tutorial 2 (search_v1 and MCP research tools), while reusing `search_v2` and `reranking` tools from Part 1. This approach lets you incrementally add capabilities without recreating existing infrastructure.
+**Smart Resource Management**: The bootstrap script intelligently handles existing resources from Part 1:
+- **Reuses**: `supervisor-agent` (identical), `search_v2` and `reranking` tools
+- **Updates**: `security-agent` with geographic compliance variations
+- **Creates New**: `support-agent-business-tiers` for business tier targeting, MCP research tools
+- **Skips Duplicates**: Won't recreate segments or configs that already exist
+
+This approach lets you incrementally add capabilities without recreating existing infrastructure.
 
 <div align="center">
 
-![CLI Deployment Workflow](screenshots/cli_deployment_workflow.png)
-*LaunchDarkly CLI deploys complex configurations in seconds*
+![API Deployment Workflow](screenshots/api_deployment_workflow.png)
+*LaunchDarkly API automation deploys complex configurations in seconds*
 
 </div>
 
@@ -186,7 +213,7 @@ Open http://localhost:8501 and test different user types:
 Your multi-agent system now has:
 - **Smart Geographic Routing**: Enhanced privacy protection for EU users
 - **Business Tier Management**: Feature scaling that grows with customer value
-- **CLI Automation**: Complex configurations deployed instantly
+- **API Automation**: Complex configurations deployed programmatically
 - **External Tool Integration**: Research capabilities for premium users
 
 ## What's Next: Part 3 Preview

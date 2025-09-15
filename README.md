@@ -461,6 +461,8 @@ Your multi-agent system is running with dynamic control and ready for optimizati
 - Business tier configurations (free, pro, enterprise)
 - Cost optimization strategies
 
+> **Note on Part 2**: Tutorial 2 builds upon the configurations from Part 1. The `supervisor-agent` remains unchanged and will be reused. The `security-agent` gets enhanced with geographic variations (basic vs strict GDPR). A new `support-agent-business-tiers` config replaces the simple `support-agent` with 5 variations based on geography and business tier.
+
 **In Part 3**, we'll run A/B experiments to prove which configurations actually work best with real data.
 
 ## Try This Now
