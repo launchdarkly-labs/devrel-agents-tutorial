@@ -28,6 +28,8 @@ requirements.txt
 policy/
 project_overview.md
 test_vector_search.py
+test_tutorial_2.py
+test_tools_loading.py
 data/mythical_pets_kb.py
 
 # Project files
