@@ -46,64 +46,51 @@ class MultiAgentBootstrap:
             return None
     
     def create_ai_config(self, project_key, config_data):
-        """Create AI Config with variations"""
-        url = f"{self.base_url}/api/v2/projects/{project_key}/ai-configs"
+        """Add variations to existing AI Config or create if not exists"""
+        # Check if config already exists
+        check_url = f"{self.base_url}/api/v2/projects/{project_key}/ai-configs/{config_data['key']}"
+        check_response = requests.get(check_url, headers=self.headers, timeout=30)
         
-        payload = {
-            "key": config_data["key"],
-            "name": config_data["name"],
-            "configType": "agent"
-        }
-        
-        response = requests.post(url, headers=self.headers, json=payload, timeout=30)
-        
-        if response.status_code in [200, 201]:
-            print(f"✅ AI Config '{config_data['key']}' created")
-            time.sleep(0.5)
-            
-            # Create variations first
-            variation_results = {}
-            for variation in config_data["variations"]:
-                result = self.create_variation(project_key, config_data["key"], variation)
-                if result:
-                    variation_results[variation["key"]] = result
-            
-            # Set up targeting after all variations exist
-            if variation_results:
-                self.update_targeting(project_key, config_data["key"], config_data["targeting"], variation_results)
-            
-            return response.json()
-        elif response.status_code == 409:
-            print(f"⚠️  AI Config '{config_data['key']}' already exists")
-            # Still try to create variations if config exists
-            variation_results = {}
-            for variation in config_data["variations"]:
-                result = self.create_variation(project_key, config_data["key"], variation)
-                if result:
-                    variation_results[variation["key"]] = result
-            return None
+        if check_response.status_code == 200:
+            print(f"✅ AI Config '{config_data['key']}' exists, adding variations")
+            config_exists = True
         else:
-            print(f"❌ Failed to create AI Config: {response.status_code} - {response.text}")
+            print(f"⚠️  AI Config '{config_data['key']}' not found, skipping creation")
             return None
+        
+        # Add variations to existing config
+        for variation in config_data["variations"]:
+            self.create_variation(project_key, config_data["key"], variation)
+        
+        # Set up targeting
+        if "targeting" in config_data:
+            self.update_targeting(project_key, config_data["key"], config_data["targeting"])
+        
+        return {"key": config_data["key"], "status": "updated"}
     
     def create_variation(self, project_key, config_key, variation_data):
         """Create AI Config variation"""
         url = f"{self.base_url}/api/v2/projects/{project_key}/ai-configs/{config_key}/variations"
         
+        # Build model structure to match existing format
+        model_config = variation_data["modelConfig"]
+        model = {
+            "modelName": model_config["modelId"],
+            "custom": variation_data.get("customParameters", {}),
+            "parameters": {}
+        }
+        
         payload = {
             "key": variation_data["key"],
             "name": variation_data.get("name", variation_data["key"].replace("-", " ").title()),
-            "modelConfig": variation_data["modelConfig"],
-            "messages": [
-                {
-                    "role": "system",
-                    "content": variation_data["instructions"]
-                }
-            ],
-            "tools": [{"key": tool, "version": 1} for tool in variation_data.get("tools", [])],
-            "customParameters": variation_data.get("customParameters", {})
+            "messages": [],  # Empty array required for agent mode validation
+            "instructions": variation_data["instructions"],
+            "modelName": model_config["modelId"],
+            "provider": {"name": model_config["provider"].title()},
+            "tools": [{"key": tool, "version": 1} for tool in variation_data.get("tools", [])]
         }
         
+        print(f"DEBUG: Sending payload: {json.dumps(payload, indent=2)}")
         response = requests.post(url, headers=self.headers, json=payload, timeout=30)
         
         if response.status_code in [200, 201]:
@@ -112,46 +99,25 @@ class MultiAgentBootstrap:
             return response.json()
         elif response.status_code == 409:
             print(f"  ⚠️  Variation '{variation_data['key']}' already exists")
-            # Return a mock result so targeting can still work
-            return {"key": variation_data["key"], "_id": variation_data["key"]}
+            return None
         else:
             print(f"  ❌ Failed to create variation: {response.status_code} - {response.text}")
             return None
     
     def create_tool(self, project_key, tool_data):
         """Create tool for AI Configs"""
-        # Try the correct tools endpoint path
-        url = f"{self.base_url}/api/v2/projects/{project_key}/ai-config-tools"
+        url = f"{self.base_url}/api/v2/projects/{project_key}/tools"
         
         payload = {
             "key": tool_data["key"],
             "name": tool_data["name"],
             "description": tool_data["description"],
-            "version": 1,
-            "toolType": tool_data.get("type", "function")
+            "type": tool_data.get("type", "function")
         }
         
-        # Add function definition for regular tools
-        if tool_data.get("type") == "function":
-            payload["definition"] = {
-                "type": "function",
-                "function": {
-                    "name": tool_data["key"],
-                    "description": tool_data["description"],
-                    "parameters": {
-                        "type": "object",
-                        "properties": {},
-                        "required": []
-                    }
-                }
-            }
-        
-        # Add MCP-specific configuration if applicable  
-        elif tool_data.get("type") == "mcp":
-            payload["definition"] = {
-                "type": "mcp_tool",
-                "server": tool_data.get("server", "")
-            }
+        # Add MCP-specific configuration if applicable
+        if tool_data.get("type") == "mcp":
+            payload["mcpServer"] = tool_data.get("server", "")
         
         response = requests.post(url, headers=self.headers, json=payload, timeout=30)
         
@@ -164,68 +130,101 @@ class MultiAgentBootstrap:
             return None
         else:
             print(f"❌ Failed to create tool: {response.status_code} - {response.text}")
-            # Try alternative endpoint
-            return self.create_tool_alternative(project_key, tool_data)
-    
-    def create_tool_alternative(self, project_key, tool_data):
-        """Try alternative tool creation endpoint"""
-        url = f"{self.base_url}/api/v2/ai-config-tools"
-        
-        payload = {
-            "projectKey": project_key,
-            "key": tool_data["key"],
-            "name": tool_data["name"],
-            "description": tool_data["description"],
-            "version": 1,
-            "toolType": tool_data.get("type", "function")
-        }
-        
-        response = requests.post(url, headers=self.headers, json=payload, timeout=30)
-        
-        if response.status_code in [200, 201]:
-            print(f"✅ Tool '{tool_data['key']}' created (alt endpoint)")
-            time.sleep(0.5)
-            return response.json()
-        else:
-            print(f"❌ Failed to create tool (both endpoints): {response.status_code} - {response.text}")
             return None
 
-    def update_targeting(self, project_key, config_key, targeting_data, variation_results=None):
-        """Update AI Config targeting rules"""
-        url = f"{self.base_url}/api/v2/projects/{project_key}/ai-configs/{config_key}/environments/production/targeting"
+    def get_targeting_variation_map(self, project_key, config_key):
+        """Get targeting variation IDs (different from AI config variation IDs)"""
+        url = f"{self.base_url}/api/v2/projects/{project_key}/ai-configs/{config_key}/targeting"
+        response = requests.get(url, headers=self.headers, timeout=30)
         
-        rules = []
+        if response.status_code == 200:
+            targeting_data = response.json()
+            targeting_variations = targeting_data.get("variations", [])
+            
+            variation_map = {}
+            for variation in targeting_variations:
+                # Skip the "disabled" variation
+                if variation.get("name") == "disabled":
+                    continue
+                    
+                # Extract variation key from the value._ldMeta.variationKey field
+                variation_value = variation.get("value", {})
+                ld_meta = variation_value.get("_ldMeta", {})
+                variation_key = ld_meta.get("variationKey")
+                
+                if variation_key:
+                    variation_map[variation_key] = variation["_id"]
+                    
+            return variation_map
+        else:
+            print(f"❌ Failed to fetch targeting data: {response.status_code} - {response.text}")
+            return {}
+
+    def update_targeting(self, project_key, config_key, targeting_data):
+        """Update AI Config targeting rules using correct agent mode format"""
+        # First get the targeting variation IDs
+        targeting_variation_map = self.get_targeting_variation_map(project_key, config_key)
+        if not targeting_variation_map:
+            print(f"❌ Could not get targeting variation map for '{config_key}'")
+            return None
+            
+        print(f"📊 Available targeting variations for '{config_key}': {list(targeting_variation_map.keys())}")
+        
+        url = f"{self.base_url}/api/v2/projects/{project_key}/ai-configs/{config_key}/targeting"
+        
+        instructions = []
+        
+        # Add segment-based rules
         for rule in targeting_data["rules"]:
-            # Use variation key directly - LaunchDarkly should resolve it
-            rule_config = {
-                "clauses": [
-                    {
-                        "attribute": "segmentMatch",
-                        "op": "segmentMatch",
-                        "values": rule["segments"],
-                        "contextKind": "user"
-                    }
-                ],
-                "variationId": rule["variation"]
-            }
-            rules.append(rule_config)
+            variation_key = rule["variation"]
+            targeting_variation_id = targeting_variation_map.get(variation_key)
+            
+            if not targeting_variation_id:
+                print(f"⚠️  Variation '{variation_key}' not found in targeting variations")
+                continue
+                
+            # Create add rule instruction for each segment
+            for segment in rule["segments"]:
+                instruction = {
+                    "kind": "addRule",
+                    "clauses": [
+                        {
+                            "attribute": "segmentMatch", 
+                            "op": "segmentMatch",
+                            "values": [segment],
+                            "contextKind": "user"
+                        }
+                    ],
+                    "variationId": targeting_variation_id
+                }
+                instructions.append(instruction)
+                print(f"  ✅ Added rule: segment '{segment}' -> variation '{variation_key}'")
+        
+        # Set fallthrough variation
+        fallthrough_variation_key = targeting_data["defaultVariation"]
+        fallthrough_variation_id = targeting_variation_map.get(fallthrough_variation_key)
+        
+        if fallthrough_variation_id:
+            instructions.append({
+                "kind": "updateFallthroughVariationOrRollout",
+                "variationId": fallthrough_variation_id
+            })
+            print(f"  ✅ Set fallthrough to variation '{fallthrough_variation_key}'")
+        else:
+            print(f"⚠️  Fallthrough variation '{fallthrough_variation_key}' not found")
         
         payload = {
-            "rules": rules,
-            "fallthrough": {
-                "variationId": targeting_data["defaultVariation"]
-            },
-            "on": True
+            "environmentKey": "production",
+            "instructions": instructions
         }
         
         response = requests.patch(url, headers=self.headers, json=payload, timeout=30)
         
         if response.status_code == 200:
-            print(f"  ✅ Targeting rules updated for '{config_key}'")
+            print(f"✅ Targeting rules updated for '{config_key}'")
             return response.json()
         else:
-            print(f"  ⚠️  Targeting update skipped for '{config_key}': {response.status_code}")
-            # Don't treat targeting errors as fatal since configs still work
+            print(f"❌ Failed to update targeting: {response.status_code} - {response.text}")
             return None
 
 def main():
@@ -259,13 +258,6 @@ def main():
     for segment in manifest["project"]["segment"]:
         bootstrap.create_segment(project_key, segment)
     print()
-    
-    # Create tools first
-    if "tool" in manifest["project"]:
-        print("🔧 Creating tools...")
-        for tool in manifest["project"]["tool"]:
-            bootstrap.create_tool(project_key, tool)
-        print()
     
     # Create AI configs
     print("🤖 Creating AI configs...")

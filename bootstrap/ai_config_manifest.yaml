@@ -82,7 +82,7 @@ project:
     - key: "supervisor-agent"
       name: "Supervisor Agent - Workflow Orchestration"
       variations:
-        - key: "supervisor-basic"
+        - key: "supervisor-basic-v2"
           modelConfig:
             provider: "anthropic"
             modelId: "claude-3-5-sonnet-20241022"
@@ -123,8 +123,8 @@ project:
         defaultVariation: "basic-security"
 
     # Support agent with 4 combined geographic + business tier variations
-    - key: "support-agent-business-tiers"
-      name: "Support Agent - Geographic + Business Tier Matrix"
+    - key: "support-agent"
+      name: "Support Agent"
       variations:
         # EU variations
         - key: "eu-free"
