@@ -16,6 +16,7 @@ class MultiAgentBootstrap:
     def __init__(self, api_key, base_url="https://app.launchdarkly.com"):
         self.api_key = api_key
         self.base_url = base_url
+        self.overwrite = False
         self.headers = {
             "Authorization": api_key,
             "LD-API-Version": "beta", 
@@ -98,10 +99,60 @@ class MultiAgentBootstrap:
             time.sleep(0.5)
             return response.json()
         elif response.status_code == 409:
-            print(f"  ⚠️  Variation '{variation_data['key']}' already exists")
-            return None
+            if self.overwrite:
+                print(f"  🔄 Variation '{variation_data['key']}' exists, updating...")
+                return self.update_variation(project_key, config_key, variation_data)
+            else:
+                print(f"  ⚠️  Variation '{variation_data['key']}' already exists (use --overwrite to update)")
+                return None
         else:
             print(f"  ❌ Failed to create variation: {response.status_code} - {response.text}")
+            return None
+    
+    def update_variation(self, project_key, config_key, variation_data):
+        """Update existing AI Config variation"""
+        # First get the existing variation ID
+        config_url = f"{self.base_url}/api/v2/projects/{project_key}/ai-configs/{config_key}"
+        config_response = requests.get(config_url, headers=self.headers, timeout=30)
+        
+        if config_response.status_code != 200:
+            print(f"    ❌ Could not fetch config to get variation ID")
+            return None
+            
+        config_data = config_response.json()
+        variations = config_data.get("variations", [])
+        variation_id = None
+        
+        for variation in variations:
+            if variation["key"] == variation_data["key"]:
+                variation_id = variation["_id"]
+                break
+                
+        if not variation_id:
+            print(f"    ❌ Could not find variation ID for '{variation_data['key']}'")
+            return None
+        
+        # Update the variation using PATCH
+        url = f"{self.base_url}/api/v2/projects/{project_key}/ai-configs/{config_key}/variations/{variation_id}"
+        
+        # Build the same payload as create
+        model_config = variation_data["modelConfig"]
+        
+        payload = {
+            "instructions": variation_data["instructions"],
+            "modelName": model_config["modelId"],
+            "provider": {"name": model_config["provider"].title()},
+            "tools": [{"key": tool, "version": 1} for tool in variation_data.get("tools", [])]
+        }
+        
+        response = requests.patch(url, headers=self.headers, json=payload, timeout=30)
+        
+        if response.status_code == 200:
+            print(f"    ✅ Variation '{variation_data['key']}' updated")
+            time.sleep(0.5)
+            return response.json()
+        else:
+            print(f"    ❌ Failed to update variation: {response.status_code} - {response.text}")
             return None
     
     def create_tool(self, project_key, tool_data):
@@ -228,6 +279,13 @@ class MultiAgentBootstrap:
             return None
 
 def main():
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Bootstrap LaunchDarkly AI Configs")
+    parser.add_argument("--overwrite", action="store_true", 
+                       help="Update existing variations instead of skipping them")
+    args = parser.parse_args()
+    
     load_dotenv()
     
     api_key = os.getenv("LD_API_KEY")
@@ -248,9 +306,12 @@ def main():
     
     project_key = manifest["project"]["key"]
     bootstrap = MultiAgentBootstrap(api_key)
+    bootstrap.overwrite = args.overwrite
     
     print("🚀 Starting multi-agent system bootstrap...")
     print(f"📦 Project: {project_key}")
+    if args.overwrite:
+        print("🔄 Overwrite mode: Will update existing variations")
     print()
     
     # Create segments

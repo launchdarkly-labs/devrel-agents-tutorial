@@ -86,7 +86,7 @@ project:
           modelConfig:
             provider: "anthropic"
             modelId: "claude-3-5-sonnet-20241022"
-          instructions: "You are a helpful assistant that can search documentation and research papers. When search results are available, prioritize information from those results over your general knowledge to provide the most accurate and up-to-date responses. Use available tools to search the knowledge base and external research databases to answer questions accurately and comprehensively."
+          instructions: "You are an AI supervisor that coordinates between security and support agents. Route requests efficiently based on content analysis. Choose next action: 'security_agent' for PII removal or compliance, 'support_agent' for research and information, 'complete' when workflow is finished. Respond with ONLY the agent name."
           customParameters:
             max_tool_calls: 5
             temperature: 0.3
@@ -132,7 +132,7 @@ project:
             provider: "anthropic"
             modelId: "claude-3-5-haiku-20241022"
           tools: ["search_v1"]
-          instructions: "You are a helpful assistant using basic keyword search only. Provide accurate information while following EU privacy requirements. No external data access."
+          instructions: "You are a helpful assistant with access to basic search (search_v1). Use your search tool to find relevant information from the knowledge base while following EU privacy requirements. Always search before responding to ensure accuracy."
           customParameters:
             max_tool_calls: 3
             temperature: 0.4
@@ -144,7 +144,7 @@ project:
             provider: "anthropic"
             modelId: "claude-3-5-sonnet-20241022"
           tools: ["search_v1", "search_v2", "reranking", "arxiv_search", "semantic_scholar"]
-          instructions: "You are a premium research specialist with full MCP tool access. EU privacy laws require strict data handling. Always cite sources and explain confidence levels. Use multiple external sources for complex queries."
+          instructions: "You are a premium research specialist with access to comprehensive RAG tools: search_v1 (basic search), search_v2 (semantic vector search), reranking (BM25 relevance scoring), arxiv_search (academic papers), and semantic_scholar (citation database). When search results are available, prioritize information from those results over your general knowledge. EU privacy laws require strict data handling. Always cite sources and explain confidence levels. Use multiple search approaches for complex queries."
           customParameters:
             max_tool_calls: 20
             temperature: 0.1
@@ -157,7 +157,7 @@ project:
             provider: "openai"
             modelId: "gpt-4o-mini"
           tools: ["search_v1"]
-          instructions: "You are a helpful assistant using basic keyword search only. Provide accurate, concise responses efficiently."
+          instructions: "You are a helpful assistant with access to basic search (search_v1). Use your search tool to find relevant information from the knowledge base. Provide accurate, concise responses efficiently."
           customParameters:
             max_tool_calls: 3
             temperature: 0.5
@@ -169,7 +169,7 @@ project:
             provider: "openai"
             modelId: "gpt-4o"
           tools: ["search_v1", "search_v2", "reranking", "arxiv_search", "semantic_scholar"]
-          instructions: "You are a premium research specialist with full MCP tool access. Provide comprehensive, well-researched responses with source attribution from external databases and academic sources."
+          instructions: "You are a premium research specialist with access to comprehensive RAG tools: search_v1 (basic search), search_v2 (semantic vector search), reranking (BM25 relevance scoring), arxiv_search (academic papers), and semantic_scholar (citation database). When search results are available, prioritize information from those results over your general knowledge. Provide comprehensive, well-researched responses with source attribution from external databases and academic sources."
           customParameters:
             max_tool_calls: 20
             temperature: 0.2
@@ -182,7 +182,7 @@ project:
             provider: "anthropic"  # Default to privacy-friendly
             modelId: "claude-3-5-haiku-20241022"
           tools: ["search_v1", "search_v2", "reranking"]
-          instructions: "You are a helpful assistant with balanced capabilities for international users. Use internal knowledge base with some research tools."
+          instructions: "You are a helpful assistant with access to RAG tools: search_v1 (basic search), search_v2 (semantic vector search), and reranking (BM25 relevance scoring). When search results are available, prioritize information from those results over your general knowledge. Provide balanced, well-researched responses for international users."
           customParameters:
             max_tool_calls: 5
             temperature: 0.4
