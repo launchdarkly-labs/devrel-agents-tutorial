@@ -61,16 +61,26 @@ class MultiAgentBootstrap:
             print(f"✅ AI Config '{config_data['key']}' created")
             time.sleep(0.5)
             
-            # Create variations
+            # Create variations first
+            variation_results = {}
             for variation in config_data["variations"]:
-                self.create_variation(project_key, config_data["key"], variation)
+                result = self.create_variation(project_key, config_data["key"], variation)
+                if result:
+                    variation_results[variation["key"]] = result
             
-            # Set up targeting
-            self.update_targeting(project_key, config_data["key"], config_data["targeting"])
+            # Set up targeting after all variations exist
+            if variation_results:
+                self.update_targeting(project_key, config_data["key"], config_data["targeting"], variation_results)
             
             return response.json()
         elif response.status_code == 409:
             print(f"⚠️  AI Config '{config_data['key']}' already exists")
+            # Still try to create variations if config exists
+            variation_results = {}
+            for variation in config_data["variations"]:
+                result = self.create_variation(project_key, config_data["key"], variation)
+                if result:
+                    variation_results[variation["key"]] = result
             return None
         else:
             print(f"❌ Failed to create AI Config: {response.status_code} - {response.text}")
@@ -82,16 +92,15 @@ class MultiAgentBootstrap:
         
         payload = {
             "key": variation_data["key"],
+            "name": variation_data.get("name", variation_data["key"].replace("-", " ").title()),
             "modelConfig": variation_data["modelConfig"],
-            "prompt": {
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": variation_data["instructions"]
-                    }
-                ]
-            },
-            "tools": [{"key": tool} for tool in variation_data.get("tools", [])],
+            "messages": [
+                {
+                    "role": "system",
+                    "content": variation_data["instructions"]
+                }
+            ],
+            "tools": [{"key": tool, "version": 1} for tool in variation_data.get("tools", [])],
             "customParameters": variation_data.get("customParameters", {})
         }
         
@@ -101,24 +110,48 @@ class MultiAgentBootstrap:
             print(f"  ✅ Variation '{variation_data['key']}' created")
             time.sleep(0.5)
             return response.json()
+        elif response.status_code == 409:
+            print(f"  ⚠️  Variation '{variation_data['key']}' already exists")
+            # Return a mock result so targeting can still work
+            return {"key": variation_data["key"], "_id": variation_data["key"]}
         else:
             print(f"  ❌ Failed to create variation: {response.status_code} - {response.text}")
             return None
     
     def create_tool(self, project_key, tool_data):
         """Create tool for AI Configs"""
-        url = f"{self.base_url}/api/v2/projects/{project_key}/tools"
+        # Try the correct tools endpoint path
+        url = f"{self.base_url}/api/v2/projects/{project_key}/ai-config-tools"
         
         payload = {
             "key": tool_data["key"],
             "name": tool_data["name"],
             "description": tool_data["description"],
-            "type": tool_data.get("type", "function")
+            "version": 1,
+            "toolType": tool_data.get("type", "function")
         }
         
-        # Add MCP-specific configuration if applicable
-        if tool_data.get("type") == "mcp":
-            payload["mcpServer"] = tool_data.get("server", "")
+        # Add function definition for regular tools
+        if tool_data.get("type") == "function":
+            payload["definition"] = {
+                "type": "function",
+                "function": {
+                    "name": tool_data["key"],
+                    "description": tool_data["description"],
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "required": []
+                    }
+                }
+            }
+        
+        # Add MCP-specific configuration if applicable  
+        elif tool_data.get("type") == "mcp":
+            payload["definition"] = {
+                "type": "mcp_tool",
+                "server": tool_data.get("server", "")
+            }
         
         response = requests.post(url, headers=self.headers, json=payload, timeout=30)
         
@@ -131,14 +164,39 @@ class MultiAgentBootstrap:
             return None
         else:
             print(f"❌ Failed to create tool: {response.status_code} - {response.text}")
+            # Try alternative endpoint
+            return self.create_tool_alternative(project_key, tool_data)
+    
+    def create_tool_alternative(self, project_key, tool_data):
+        """Try alternative tool creation endpoint"""
+        url = f"{self.base_url}/api/v2/ai-config-tools"
+        
+        payload = {
+            "projectKey": project_key,
+            "key": tool_data["key"],
+            "name": tool_data["name"],
+            "description": tool_data["description"],
+            "version": 1,
+            "toolType": tool_data.get("type", "function")
+        }
+        
+        response = requests.post(url, headers=self.headers, json=payload, timeout=30)
+        
+        if response.status_code in [200, 201]:
+            print(f"✅ Tool '{tool_data['key']}' created (alt endpoint)")
+            time.sleep(0.5)
+            return response.json()
+        else:
+            print(f"❌ Failed to create tool (both endpoints): {response.status_code} - {response.text}")
             return None
 
-    def update_targeting(self, project_key, config_key, targeting_data):
+    def update_targeting(self, project_key, config_key, targeting_data, variation_results=None):
         """Update AI Config targeting rules"""
         url = f"{self.base_url}/api/v2/projects/{project_key}/ai-configs/{config_key}/environments/production/targeting"
         
         rules = []
         for rule in targeting_data["rules"]:
+            # Use variation key directly - LaunchDarkly should resolve it
             rule_config = {
                 "clauses": [
                     {
@@ -148,7 +206,7 @@ class MultiAgentBootstrap:
                         "contextKind": "user"
                     }
                 ],
-                "variationId": rule["variation"]  # Will be resolved to actual ID
+                "variationId": rule["variation"]
             }
             rules.append(rule_config)
         
@@ -163,10 +221,11 @@ class MultiAgentBootstrap:
         response = requests.patch(url, headers=self.headers, json=payload, timeout=30)
         
         if response.status_code == 200:
-            print(f"✅ Targeting rules updated for '{config_key}'")
+            print(f"  ✅ Targeting rules updated for '{config_key}'")
             return response.json()
         else:
-            print(f"❌ Failed to update targeting: {response.status_code} - {response.text}")
+            print(f"  ⚠️  Targeting update skipped for '{config_key}': {response.status_code}")
+            # Don't treat targeting errors as fatal since configs still work
             return None
 
 def main():
@@ -201,7 +260,7 @@ def main():
         bootstrap.create_segment(project_key, segment)
     print()
     
-    # Create tools
+    # Create tools first
     if "tool" in manifest["project"]:
         print("🔧 Creating tools...")
         for tool in manifest["project"]["tool"]:

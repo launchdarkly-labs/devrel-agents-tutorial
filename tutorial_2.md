@@ -1,4 +1,4 @@
-# Level Up Your Multi-Agent System: Geographic + Business Tier Targeting with LaunchDarkly API Automation and MCP Tools
+# Level Up Your Multi-Agent System: Geographic + Business Tier Targeting with LaunchDarkly and MCP Tools
 
 ## Overview
 
@@ -6,7 +6,7 @@ Your multi-agent system works perfectly in testing, but what happens when enterp
 
 *Part 2 of 3 of the series: **Chaos to Clarity: Defensible AI Systems That Deliver on Your Goals***
 
-The solution? **LangGraph multi-agent workflows** controlled by **LaunchDarkly AI Config** targeting rules that intelligently route users: paid customers get premium tools and models, free users get cost-efficient alternatives, and EU users get Claude for enhanced privacy. Deploy this complex matrix through **LaunchDarkly API** automation in seconds instead of hours.
+The solution? **LangGraph multi-agent workflows** controlled by **LaunchDarkly AI Config** targeting rules that intelligently route users: paid customers get premium tools and models, free users get cost-efficient alternatives, and EU users get Claude for enhanced privacy. Deploy this complex matrix through smart configuration in minutes instead of hours.
 
 ## What You'll Build Today
 
@@ -14,7 +14,7 @@ In the next 20 minutes, you'll transform your basic multi-agent system with:
 
 - **Business Tiers & MCP Integration**: Free users get internal RAG search, Paid users get premium models with external research tools and expanded tool call limits, all controlled by LaunchDarkly AI Configs
 - **Geographic Targeting**: EU users automatically get Claude models (enhanced privacy), other users get cost-optimized alternatives
-- **API Automation**: Deploy complex targeting matrices with a single Python script instead of manual UI configuration
+- **Smart Configuration**: Deploy complex targeting matrices with LaunchDarkly segments and targeting rules
 
 ## Prerequisites
 
@@ -53,38 +53,133 @@ git clone https://github.com/JackKuo666/semanticscholar-MCP-Server.git
 
 These tools integrate with your agents via LangGraph - LaunchDarkly controls which users get access to which tools.
 
-## Step 2: Setup LaunchDarkly API Dependencies (2 minutes)
+## Step 2: Create Additional Tools (3 minutes)
 
-Install the bootstrap system dependencies:
+Define the additional tools your upgraded agents will use.
 
-```bash
-cd bootstrap
-uv pip install -r requirements.txt
-```
+In the LaunchDarkly app sidebar, click **Library** in the AI section. On the following screen, click the **Tools** tab, then **Create tool**.
 
-**Note:** If you've already run `uv sync` from the main project directory (from Part 1), you already have `requests` and `python-dotenv`. This step only adds `pyyaml` for parsing the configuration manifest.
+<br />
 
-**How the Bootstrap Works:**
-The system uses the LaunchDarkly REST API to programmatically create:
-- **4 user segments** (eu-free, eu-paid, other-free, other-paid) with combined geographic + business tier targeting rules
-- **3 AI configs** with multiple variations each:
-  - **Supervisor Agent**: 1 variation (reused from Part 1 if it exists)
-  - **Security Agent**: 2 new variations replacing Part 1's single variation
-    - `basic-security`: Non-EU users (allows names, job titles)
-    - `strict-security`: EU users (GDPR compliant, redacts all PII)
-  - **Support Agent Business Tiers**: New config with 5 variations (replaces Part 1's simple support-agent)
-    - `eu-free`: Claude Haiku + basic search
-    - `eu-paid`: Claude Sonnet + full RAG + MCP tools
-    - `other-free`: GPT-4o Mini + basic search
-    - `other-paid`: GPT-4 + full RAG + MCP tools
-    - `international-standard`: Fallback variation
-- **Targeting rules** that automatically route users to appropriate configurations based on location and plan type
+<div align="center">
 
-All configurations are defined in `ai_config_manifest.yaml` and deployed via `create_configs.py` using direct API calls. This programmatic approach provides version-controlled infrastructure as code that can handle complex multi-dimensional targeting matrices that would be tedious to configure manually in the UI.
+![Library](screenshots/library_small.png)
+*AI Library section in the LaunchDarkly dashboard sidebar.*
+
+</div>
+
+### Create the basic search tool:
+Create a tool using the following configuration:
+> 
+> **Key:** 
+> ```
+> search_v1
+> ```
+>
+> **Description:** 
+> ```
+> Basic keyword search through knowledge base
+> ```
+>
+> **Schema:**
+> ```json
+> {
+>   "properties": {
+>     "query": {
+>       "description": "Search query for keyword matching",
+>       "type": "string"
+>     },
+>     "top_k": {
+>       "description": "Number of results to return",
+>       "type": "number"
+>     }
+>   },
+>   "additionalProperties": false,
+>   "required": [
+>     "query"
+>   ]
+> }
+> ```
+When you're done, click **Save**.
+
+### Create the ArXiv search tool:
+Back on the Tools section, click **Add tool** to create a new tool. Add the following properties: 
+> 
+> **Key:** 
+> ```
+> arxiv_search
+> ```
+>
+> **Description:** 
+> ```
+> Search academic papers from ArXiv database
+> ```
+>
+> **Schema:**
+> ```json
+> {
+>   "properties": {
+>     "query": {
+>       "description": "Search query for academic papers",
+>       "type": "string"
+>     },
+>     "max_results": {
+>       "description": "Maximum number of papers to return",
+>       "type": "number"
+>     }
+>   },
+>   "additionalProperties": false,
+>   "required": [
+>     "query"
+>   ]
+> }
+> ```
+When you're done, click **Save**.
+
+### Create the Semantic Scholar tool:
+Create one more tool for academic citations:
+> 
+> **Key:** 
+> ```
+> semantic_scholar
+> ```
+>
+> **Description:** 
+> ```
+> Access Semantic Scholar citation database
+> ```
+>
+> **Schema:**
+> ```json
+> {
+>   "properties": {
+>     "query": {
+>       "description": "Search query for citation data",
+>       "type": "string"
+>     },
+>     "fields": {
+>       "description": "Fields to return from papers",
+>       "type": "array"
+>     }
+>   },
+>   "additionalProperties": false,
+>   "required": [
+>     "query"
+>   ]
+> }
+> ```
+When you're done, click **Save**.
+
+**MCP Tools Added:**
+- **search_v1**: Basic keyword search (Free users)
+- **arxiv_search**: Live academic paper search (Paid users)
+- **semantic_scholar**: Citation and research database (Paid users)
+
+These tools integrate with your agents via LangGraph - LaunchDarkly controls which users get access to which tools.
 
 ## Step 3: Understand the Segmentation Strategy (3 minutes)
 
-Now that you have MCP tools installed, let's understand how they'll be distributed across different user segments.
+Now that you have additional tools created, let's understand how they'll be distributed across different user segments.
 
 Your automation script will create 4 combined user segments for precise targeting:
 
@@ -110,59 +205,110 @@ Other Users     │  GPT-4o Mini    │  GPT-4
 - **Simplified Management**: 4 segments instead of complex geographic × tier combinations
 - **Enhanced Privacy**: EU users get Anthropic Claude models with privacy-by-design approach
 
-## Step 4: Deploy with API Automation (2 minutes)
+## Step 4: Create User Segments (5 minutes)
 
-In [Part 1](README.md) you saw how easy it was to set up AI Configs through the [LaunchDarkly UI](https://app.launchdarkly.com). For complex multi-dimensional targeting, we'll use programmatic API automation. The LaunchDarkly REST API lets you manage segments, tools, and AI Configs programmatically. Instead of manually creating dozens of variations in the UI, you'll deploy complex targeting matrices with a single Python script. This approach is essential when you need to handle multiple geographic regions × business tiers with conditional tool assignments.
+Set up geographic and business tier targeting with LaunchDarkly segments.
 
-Deploy your complete targeting matrix with one command:
+### Create User Segments
 
-```bash
-uv run python create_configs.py
-```
+Navigate to **Segments** in your LaunchDarkly project and create 4 combined segments:
 
-This creates:
-- **3 essential tools**: `search_v1` (basic search), `arxiv_search` (MCP), `semantic_scholar` (MCP)
-- **4 combined user segments** with geographic and tier targeting rules  
-- **3 AI configs** with intelligent handling:
-  - **supervisor-agent**: Skipped if already exists from Part 1 (identical configuration)
-  - **security-agent**: Updated with 2 new geographic variations (basic vs strict GDPR)
-  - **support-agent-business-tiers**: New config with 5 variations (geographic × tier matrix)
-- **Complete targeting rules** that route users to appropriate variations
+**Create EU Free Users Segment:**
+1. Click **Create segment** → Name: `EU Free Users` → Key: `eu-free`
+2. **Add targeting rules:**
+   - **Rule 1**: `country` **is one of** `DE, FR, ES, IT, NL, BE, AT, PL, PT, GR, CZ, HU, SE, DK, FI`
+   - **Rule 2**: `plan` **is one of** `free, trial, basic, starter`
+3. Set **Match**: `users who match ALL of these rules`
+4. **Save segment**
 
-**Smart Resource Management**: The bootstrap script intelligently handles existing resources from Part 1:
-- **Reuses**: `supervisor-agent` (identical), `support-agent` with `search_v2` and `reranking` tools 
-- **Updates**: `security-agent` with geographic compliance variations
-- **Creates New**: `support-agent-business-tiers` for business tier targeting, MCP research tools (`search_v1`, `arxiv_search`, `semantic_scholar`)
-- **Skips Duplicates**: Won't recreate segments or configs that already exist
+**Create EU Paid Users Segment:**
+1. Click **Create segment** → Name: `EU Paid Users` → Key: `eu-paid`
+2. **Add targeting rules:**
+   - **Rule 1**: `country` **is one of** `DE, FR, ES, IT, NL, BE, AT, PL, PT, GR, CZ, HU, SE, DK, FI`
+   - **Rule 2**: `plan` **is one of** `paid, premium, pro, professional, enterprise, business, corporate`
+3. Set **Match**: `users who match ALL of these rules`
+4. **Save segment**
 
-This approach lets you incrementally add capabilities without recreating existing infrastructure.
+**Create Other Free Users Segment:**
+1. Click **Create segment** → Name: `Other Free Users` → Key: `other-free`
+2. **Add targeting rules:**
+   - **Rule 1**: `country` **is not one of** `DE, FR, ES, IT, NL, BE, AT, PL, PT, GR, CZ, HU, SE, DK, FI`
+   - **Rule 2**: `plan` **is one of** `free, trial, basic, starter`
+3. Set **Match**: `users who match ALL of these rules`
+4. **Save segment**
 
-<div align="center">
-
-![API Deployment Workflow](screenshots/api_deployment_workflow.png)
-*LaunchDarkly API automation deploys complex configurations in seconds*
-
-</div>
-
-## Step 5: Verify in [LaunchDarkly UI](https://app.launchdarkly.com) (3 minutes)
-
-Your configurations are now deployed! Let's verify everything was created correctly in the LaunchDarkly interface.
-
-Check your LaunchDarkly project:
-
-1. **Segments**: Navigate to Segments - you should see:
-   - `eu-free`, `eu-paid`, `other-free`, `other-paid` (combined segments)
-
-2. **AI Configs**: Check AI Configs - you should see:
-   - `supervisor-agent`, `security-agent`, `support-agent-business-tiers`
-   - Each with appropriate variations and targeting rules
-
-3. **Preview**: Use the targeting preview to test different user contexts
+**Create Other Paid Users Segment:**
+1. Click **Create segment** → Name: `Other Paid Users` → Key: `other-paid`
+2. **Add targeting rules:**
+   - **Rule 1**: `country` **is not one of** `DE, FR, ES, IT, NL, BE, AT, PL, PT, GR, CZ, HU, SE, DK, FI`
+   - **Rule 2**: `plan` **is one of** `paid, premium, pro, professional, enterprise, business, corporate`
+3. Set **Match**: `users who match ALL of these rules`
+4. **Save segment**
 
 <div align="center">
 
 ![LaunchDarkly Segments View](screenshots/launchdarkly_segments_view.png)
 *Geographic and business tier segments in LaunchDarkly*
+
+</div>
+
+## Step 5: Create AI Config Variations (4 minutes)
+
+Create the new business-tier-focused AI Config with 5 variations for geographic + tier targeting.
+
+### Create Support Agent Business Tiers Config
+
+1. Navigate to **AI Configs** and click **Create New**
+2. Select `🤖 Agent-based`
+3. Name it `support-agent-business-tiers`
+
+**Create 5 variations for the targeting matrix:**
+
+**EU Free Variation:**
+> **variation:** `eu-free`
+> **Model configuration:** `Anthropic` → `claude-3-5-haiku-20241022`
+> **Attach tools:** ✅ `search_v1`
+> **Goal or task:** `You are a helpful assistant using basic keyword search only. Provide accurate information while following EU privacy requirements. No external data access.`
+
+**EU Paid Variation:**
+> **variation:** `eu-paid`
+> **Model configuration:** `Anthropic` → `claude-3-5-sonnet-20241022`
+> **Attach tools:** ✅ `search_v1` ✅ `search_v2` ✅ `reranking` ✅ `arxiv_search` ✅ `semantic_scholar`
+> **Goal or task:** `You are a premium research specialist with full MCP tool access. EU privacy laws require strict data handling. Always cite sources and explain confidence levels. Use multiple external sources for complex queries.`
+
+**Other Free Variation:**
+> **variation:** `other-free`
+> **Model configuration:** `OpenAI` → `gpt-4o-mini`
+> **Attach tools:** ✅ `search_v1`
+> **Goal or task:** `You are a helpful assistant using basic keyword search only. Provide accurate, concise responses efficiently.`
+
+**Other Paid Variation:**
+> **variation:** `other-paid`
+> **Model configuration:** `OpenAI` → `gpt-4o`
+> **Attach tools:** ✅ `search_v1` ✅ `search_v2` ✅ `reranking` ✅ `arxiv_search` ✅ `semantic_scholar`
+> **Goal or task:** `You are a premium research specialist with full MCP tool access. Provide comprehensive, well-researched responses with source attribution from external databases and academic sources.`
+
+**International Standard Variation:**
+> **variation:** `international-standard`
+> **Model configuration:** `Anthropic` → `claude-3-5-haiku-20241022`
+> **Attach tools:** ✅ `search_v1` ✅ `search_v2` ✅ `reranking`
+> **Goal or task:** `You are a helpful assistant with balanced capabilities for international users. Use internal knowledge base with some research tools.`
+
+### Set Up Targeting Rules
+
+Switch to the **Targeting** tab and configure the targeting rules:
+
+1. **Add Rule 1**: `eu-free` segment → `eu-free` variation
+2. **Add Rule 2**: `eu-paid` segment → `eu-paid` variation  
+3. **Add Rule 3**: `other-free` segment → `other-free` variation
+4. **Add Rule 4**: `other-paid` segment → `other-paid` variation
+5. **Default rule**: `international-standard` variation
+6. **Save targeting rules**
+
+<div align="center">
+
+![AI Config Targeting Rules](screenshots/targeting_rules_business_tiers.png)
+*Geographic and business tier targeting rules in LaunchDarkly*
 
 </div>
 
@@ -190,8 +336,8 @@ Now let's see your segmentation in action through the actual user interface that
 
 ```bash
 # Start your system (2 terminals)
-uv run uvicorn api.main:app --reload --port 8001
-API_PORT=8001 uv run streamlit run ui/chat_interface.py --server.port 8501
+uv run uvicorn api.main:app --reload --port 8000
+uv run streamlit run ui/chat_interface.py --server.port 8501
 ```
 
 Open http://localhost:8501 and test different user types:
@@ -210,17 +356,11 @@ Open http://localhost:8501 and test different user types:
 
 ## What You've Accomplished
 
-Your multi-agent system now delivers measurable business impact:
-
-**Smart Geographic Routing**: EU customers automatically get Claude models for GDPR compliance, reducing legal risk while maintaining user trust. Non-EU users get cost-optimized GPT models, improving margins without sacrificing quality.
-
-**Business Tier Management**: Free users get basic search (low cost, proven value), while paid customers access external research tools worth $10+ per session. This creates clear upgrade incentives and justifies premium pricing.
-
-**API Automation**: Deploy complex geographic × tier combinations in seconds instead of hours. What used to require manual UI configuration for dozens of variations now happens programmatically, letting you focus on optimization rather than setup.
-
-**External Tool Integration**: Premium users get live academic research via ArXiv and Semantic Scholar. This differentiation drives upgrades - customers pay more for capabilities they can't get elsewhere.
-
-The result: A system that scales revenue (tiered features), reduces costs (efficient routing), ensures compliance (geographic rules), and deploys instantly (API automation). Your AI investment now directly supports business growth.
+Your multi-agent system now has:
+- **Smart Geographic Routing**: Enhanced privacy protection for EU users
+- **Business Tier Management**: Feature scaling that grows with customer value
+- **API Automation**: Complex configurations deployed programmatically
+- **External Tool Integration**: Research capabilities for premium users
 
 ## What's Next: Part 3 Preview
 
