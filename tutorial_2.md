@@ -53,131 +53,7 @@ git clone https://github.com/JackKuo666/semanticscholar-MCP-Server.git
 
 These tools integrate with your agents via LangGraph - LaunchDarkly controls which users get access to which tools.
 
-## Step 2: Create Additional Tools (3 minutes)
-
-Define the additional tools your upgraded agents will use.
-
-In the LaunchDarkly app sidebar, click **Library** in the AI section. On the following screen, click the **Tools** tab, then **Create tool**.
-
-<br />
-
-<div align="center">
-
-![Library](screenshots/library_small.png)
-*AI Library section in the LaunchDarkly dashboard sidebar.*
-
-</div>
-
-### Create the basic search tool:
-Create a tool using the following configuration:
-> 
-> **Key:** 
-> ```
-> search_v1
-> ```
->
-> **Description:** 
-> ```
-> Basic keyword search through knowledge base
-> ```
->
-> **Schema:**
-> ```json
-> {
->   "properties": {
->     "query": {
->       "description": "Search query for keyword matching",
->       "type": "string"
->     },
->     "top_k": {
->       "description": "Number of results to return",
->       "type": "number"
->     }
->   },
->   "additionalProperties": false,
->   "required": [
->     "query"
->   ]
-> }
-> ```
->When you're done, click **Save**.
-
-### Create the ArXiv search tool:
-Back on the Tools section, click **Add tool** to create a new tool. Add the following properties: 
-> 
-> **Key:** 
-> ```
-> arxiv_search
-> ```
->
-> **Description:** 
-> ```
-> Search academic papers from ArXiv database
-> ```
->
-> **Schema:**
-> ```json
-> {
->   "properties": {
->     "query": {
->       "description": "Search query for academic papers",
->       "type": "string"
->     },
->     "max_results": {
->       "description": "Maximum number of papers to return",
->       "type": "number"
->     }
->   },
->   "additionalProperties": false,
->   "required": [
->     "query"
->   ]
-> }
-> ```
->When you're done, click **Save**.
-
-### Create the Semantic Scholar tool:
-Create one more tool for academic citations:
-> 
-> **Key:** 
-> ```
-> semantic_scholar
-> ```
->
-> **Description:** 
-> ```
-> Access Semantic Scholar citation database
-> ```
->
-> **Schema:**
-> ```json
-> {
->   "properties": {
->     "query": {
->       "description": "Search query for citation data",
->       "type": "string"
->     },
->     "fields": {
->       "description": "Fields to return from papers",
->       "type": "array"
->     }
->   },
->   "additionalProperties": false,
->   "required": [
->     "query"
->   ]
-> }
-> ```
->When you're done, click **Save**.
-
-**MCP Tools Added:**
-- **search_v1**: Basic keyword search (Free users)
-- **arxiv_search**: Live academic paper search (Paid users)
-- **semantic_scholar**: Citation and research database (Paid users)
-
-These tools integrate with your agents via LangGraph - LaunchDarkly controls which users get access to which tools.
-
-## Step 3: Deploy with API Automation (2 minutes)
+## Step 2: Deploy with API Automation (2 minutes)
 
 Now that you have the tools created manually, we'll use programmatic API automation to deploy the complex targeting matrix. The LaunchDarkly REST API lets you manage segments and AI Configs programmatically. Instead of manually creating dozens of variations in the UI, you'll deploy complex targeting matrices with a single Python script. This approach is essential when you need to handle multiple geographic regions × business tiers with conditional tool assignments.
 
@@ -185,7 +61,7 @@ Deploy your complete targeting matrix with one command:
 
 ```bash
 cd bootstrap
-python create_configs.py
+uv run python create_configs.py
 ```
 
 This creates:
@@ -201,35 +77,19 @@ This creates:
 - **Updates**: `security-agent` with geographic compliance variations
 - **Creates New**: `support-agent-business-tiers` for business tier targeting, references your manually created tools (`search_v1`, `arxiv_search`, `semantic_scholar`)
 
-## Step 4: Understand the Segmentation Strategy (2 minutes)
+## Step 3: Understand the Segmentation Strategy (2 minutes)
 
 The bootstrap script created 4 combined user segments for precise targeting:
 
 ### Combined Segments (Geography + Business Tier)
-- **EU Free**: European users on free plans - get Claude Haiku with basic search only
-- **EU Paid**: European users on paid plans - get Claude Sonnet with full MCP research tools  
-- **Other Free**: Non-EU users on free plans - get GPT-4o Mini with basic search only
-- **Other Paid**: Non-EU users on paid plans - get GPT-4 with full MCP research tools
 
-### Simplified Targeting Matrix
+The bootstrap script created 4 combined user segments for precise targeting. European users on free plans receive Claude Haiku with basic search capabilities only, while European users on paid plans get Claude Sonnet with full MCP research tools. Non-EU users on free plans are served GPT-4o Mini with basic search only, and non-EU users on paid plans receive GPT-4 with complete MCP research tools.
 
-```
-                │  Free           │  Paid
-────────────────┼─────────────────┼─────────────────
-EU Users        │  Claude Haiku   │  Claude Sonnet
-                │  Basic Search   │  + Full MCP
-Other Users     │  GPT-4o Mini    │  GPT-4  
-                │  Basic Search   │  + Full MCP
-```
+This segmentation strategy works by optimizing costs through efficient models for free users while providing premium capabilities to paid users. Additionally, it enhances privacy by giving EU users Anthropic Claude models with a privacy-by-design approach.
 
-**Why This Works:**
-- **Cost Optimization**: Free users get efficient models, Paid users get premium capabilities
-- **Simplified Management**: 4 segments instead of complex geographic × tier combinations
-- **Enhanced Privacy**: EU users get Anthropic Claude models with privacy-by-design approach
+## Step 4: Test Segmentation with Script (2 minutes)
 
-## Step 5: Test Segmentation with Script (2 minutes)
-
-**Why Test Validation?** The included test script simulates real user scenarios across all segments, verifying that your targeting rules work correctly. It sends actual API requests to your system and confirms each user type gets the right model, tools, and behavior - giving you confidence before real users arrive.
+The included test script simulates real user scenarios across all segments, verifying that your targeting rules work correctly. It sends actual API requests to your system and confirms each user type gets the right model, tools, and behavior - giving you confidence before real users arrive.
 
 Validate your segmentation with the test script:
 
@@ -239,7 +99,7 @@ uv run python tests/test_tutorial_2.py
 
 This confirms your targeting matrix is working correctly across all user segments.
 
-## Step 6: Experience Segmentation in the Chat UI (3 minutes)
+## Step 5: Experience Segmentation in the Chat UI (3 minutes)
 
 Now let's see your segmentation in action through the actual user interface that your customers will experience.
 

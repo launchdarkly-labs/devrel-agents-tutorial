@@ -65,6 +65,16 @@ project:
       description: "Simple keyword search through knowledge base"
       type: "function"
       
+    - key: "search_v2"
+      name: "Semantic Vector Search"
+      description: "Advanced semantic search using vector embeddings"
+      type: "function"
+      
+    - key: "reranking"
+      name: "BM25 Relevance Scoring"
+      description: "BM25-based relevance scoring and reranking"
+      type: "function"
+      
     - key: "arxiv_search"
       name: "ArXiv Academic Search"
       description: "Search academic papers from ArXiv database"
@@ -82,7 +92,7 @@ project:
     - key: "supervisor-agent"
       name: "Supervisor Agent - Workflow Orchestration"
       variations:
-        - key: "supervisor-basic-v2"
+        - key: "supervisor-basic"
           modelConfig:
             provider: "anthropic"
             modelId: "claude-3-5-sonnet-20241022"
@@ -90,6 +100,7 @@ project:
           customParameters:
             max_tool_calls: 5
             temperature: 0.3
+            
       targeting:
         rules: []
         defaultVariation: "supervisor-basic"
