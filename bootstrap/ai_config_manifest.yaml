@@ -14,7 +14,7 @@ project:
         negate: false
       - attribute: "plan"
         op: "in"
-        values: ["free", "trial", "basic", "starter"]
+        values: ["free"]
         contextKind: "user"
         negate: false
     
@@ -27,33 +27,33 @@ project:
         negate: false
       - attribute: "plan"
         op: "in"
-        values: ["paid", "premium", "pro", "professional", "enterprise", "business", "corporate"]
+        values: ["paid"]
         contextKind: "user"
         negate: false
         
     - key: other-free
       rules:
       - attribute: "country"
-        op: "not_in"
+        op: "in"
         values: ["DE", "FR", "ES", "IT", "NL", "BE", "AT", "PL", "PT", "GR", "CZ", "HU", "SE", "DK", "FI"]
         contextKind: "user"
-        negate: false
+        negate: true
       - attribute: "plan"
         op: "in"
-        values: ["free", "trial", "basic", "starter"]
+        values: ["free"]
         contextKind: "user"
         negate: false
         
     - key: other-paid
       rules:
       - attribute: "country"
-        op: "not_in"
+        op: "in"
         values: ["DE", "FR", "ES", "IT", "NL", "BE", "AT", "PL", "PT", "GR", "CZ", "HU", "SE", "DK", "FI"]
         contextKind: "user"
-        negate: false
+        negate: true
       - attribute: "plan"
         op: "in"
-        values: ["paid", "premium", "pro", "professional", "enterprise", "business", "corporate"]
+        values: ["paid"]
         contextKind: "user"
         negate: false
 
@@ -102,7 +102,15 @@ project:
             temperature: 0.3
             
       targeting:
-        rules: []
+        rules:
+          - segments: ["eu-free"]
+            variation: "supervisor-basic"
+          - segments: ["eu-paid"] 
+            variation: "supervisor-basic"
+          - segments: ["other-free"]
+            variation: "supervisor-basic"
+          - segments: ["other-paid"]
+            variation: "supervisor-basic"
         defaultVariation: "supervisor-basic"
 
     # Security agent for PII detection with geographic privacy compliance
@@ -113,7 +121,7 @@ project:
           modelConfig:
             provider: "anthropic"
             modelId: "claude-3-5-haiku-20241022"
-          instructions: "You are a privacy agent that detects and redacts sensitive PII but allows names and general personal information. Redact: emails, phone numbers, addresses, SSN, credit cards, financial info. Keep: names, general locations, job titles. Return JSON with detected (boolean), types (array), redacted (text with PII replaced by [REDACTED])."
+          instructions: "You are a privacy agent that REMOVES direct PII. Focus on clearly personal identifiers:\n\nEmail addresses\nPhone numbers\nSocial Security Numbers\nFull names (but not generic titles)\nStreet addresses\nCredit card numbers\nDriver's license numbers\n\nResponse Format:\n\ndetected: true if any PII was found, false otherwise\ntypes: array of PII types found (e.g., ['email', 'name', 'phone'])\nredacted: the input text with PII replaced by [REDACTED], keeping the text readable and natural\n\nExamples:\n\nInput: \"I work at Acme Corp in Berlin as a manager\"\n\nOutput: detected=false, types=[], redacted='I work at Acme Corp in Berlin as a manager'\n\n\nInput: \"Contact John Smith at john@email.com or 555-1234\"\n\nOutput: detected=true, types=['name', 'email', 'phone'], redacted='Contact [REDACTED] at [REDACTED] or [REDACTED]'\n\n\nInput: \"The CEO from Microsoft contacted me\"\n\nOutput: detected=false, types=[], redacted='The CEO from Microsoft contacted me'"
           customParameters:
             temperature: 0.1
             max_tool_calls: 1
@@ -121,7 +129,7 @@ project:
           modelConfig:
             provider: "anthropic"
             modelId: "claude-3-5-haiku-20241022"
-          instructions: "You are a strict privacy agent for EU GDPR compliance that REMOVES ALL PII. Redact everything personally identifiable: names, emails, phones, addresses, locations, job titles, companies, dates of birth. Return JSON with detected (boolean), types (array), redacted (text with ALL PII replaced by [REDACTED])."
+          instructions: "You are a strict privacy agent that REMOVES ALL PII. Redact everything personally identifiable:\n\nNames\nEmails\nPhones\nAddresses\nLocations (cities, countries, regions)\nJob titles\nCompanies\nDates of birth\nAny identifying references\n\nResponse Format:\n\ndetected: true if any PII was found, false otherwise\ntypes: array of PII types found (e.g., ['email', 'name', 'phone', 'location', 'company'])\nredacted: the input text with ALL PII replaced by [REDACTED], keeping the text readable and natural\n\nExamples:\n\nInput: \"I work at Acme Corp in Berlin as a manager\"\n\nOutput: detected=true, types=['company', 'location', 'job_title'], redacted='I work at [REDACTED] in [REDACTED] as a [REDACTED]'\n\n\nInput: \"The CEO from Microsoft in Seattle contacted me\"\n\nOutput: detected=true, types=['job_title', 'company', 'location'], redacted='The [REDACTED] from [REDACTED] in [REDACTED] contacted me'\n\n\nInput: \"I need help with my account settings\"\n\nOutput: detected=false, types=[], redacted='I need help with my account settings'"
           customParameters:
             temperature: 0.1
             max_tool_calls: 1
@@ -131,6 +139,10 @@ project:
             variation: "strict-security"
           - segments: ["eu-paid"]
             variation: "strict-security"
+          - segments: ["other-free"]
+            variation: "basic-security"
+          - segments: ["other-paid"]
+            variation: "basic-security"
         defaultVariation: "basic-security"
 
     # Support agent with 4 combined geographic + business tier variations

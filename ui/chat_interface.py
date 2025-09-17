@@ -7,6 +7,37 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+# Load sample users for LaunchDarkly targeting
+try:
+    with open('/Users/ld_scarlett/Documents/Github/agents-demo/data/fake_users.json', 'r') as f:
+        sample_users = json.load(f)['users']
+        print(f"🔍 UI: Loaded {len(sample_users)} sample users from fake_users.json")
+except Exception as e:
+    print(f"⚠️ UI: Failed to load fake_users.json: {e}")
+    sample_users = []
+
+# Function to get user context for LaunchDarkly targeting
+def get_user_context(user_id, sample_users):
+    """Get user context (country, region, plan) for LaunchDarkly targeting"""
+    print(f"🔍 UI: Getting user context for user_id={user_id}")
+    for user in sample_users:
+        if user['id'] == user_id:
+            context = {
+                "country": user['country'],
+                "region": user['region'], 
+                "plan": user['plan']
+            }
+            print(f"🔍 UI: Found user context: {context}")
+            return context
+    # Default context for unknown users
+    default_context = {
+        "country": "US",
+        "region": "other",
+        "plan": "free"
+    }
+    print(f"🔍 UI: User not found, using default context: {default_context}")
+    return default_context
+
 # Get API configuration from environment
 API_HOST = os.getenv('API_HOST', 'localhost')
 API_PORT = os.getenv('API_PORT', '8000')
@@ -328,7 +359,7 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 if "user_id" not in st.session_state:
-    st.session_state.user_id = "user_001"
+    st.session_state.user_id = "user_other_paid_001"
 
 # Display chat history
 for message in st.session_state.messages:
@@ -414,7 +445,8 @@ for message in st.session_state.messages:
                         processed_tools = process_tool_display(tools, tool_details)
                         
                         config_data = {
-                            "model": agent_config["model"]
+                            "model": agent_config["model"],
+                            "variation_key": agent_config["variation_key"]
                         }
                         
                         if processed_tools:
@@ -444,7 +476,7 @@ for message in st.session_state.messages:
                             # This will be passed from the API response
                             agent_data = metadata.get("agent_configurations", [])
                             for agent in agent_data:
-                                if agent.get("agent_name") == "security_agent":
+                                if agent.get("agent_name") == "security-agent":
                                     if agent.get("detected") is not None:
                                         config_data["security_clearance"] = {
                                             "detected": agent.get("detected"),
@@ -466,15 +498,19 @@ for message in st.session_state.messages:
                     st.markdown("*Console output not captured*")
 
 # Handle example query selection
-if "example_query" in st.session_state:
+prompt = None
+if "example_query" in st.session_state and st.session_state.example_query:
     prompt = st.session_state.example_query
-    del st.session_state.example_query
-else:
-    prompt = None
 
-# Chat input
+# Chat input - only show if no example query is being processed
 if not prompt:
-    prompt = st.chat_input("Ask questions about your documents or request research...")
+    user_text = st.chat_input("Ask questions about your documents or request research...")
+    if user_text is not None:
+        user_text = user_text.strip()
+        if user_text:
+            prompt = user_text
+        else:
+            st.warning("Please enter a question or pick an example query.")
 
 if prompt:
     # Add user message
@@ -486,11 +522,15 @@ if prompt:
     
     # Get agent response
     try:
+        # Get user context for LaunchDarkly targeting
+        user_context = get_user_context(st.session_state.user_id, sample_users)
+        
         response = requests.post(
             f"{API_BASE_URL}/chat",
             json={
                 "user_id": st.session_state.user_id,
-                "message": prompt
+                "message": prompt,
+                "user_context": user_context
             }
         )
         
@@ -620,7 +660,8 @@ if prompt:
                             processed_tools = process_tool_display(tools, tool_details)
                             
                             config_data = {
-                                "model": agent_config["model"]
+                                "model": agent_config["model"],
+                                "variation_key": agent_config["variation_key"]
                             }
                             
                             if processed_tools:
@@ -653,7 +694,8 @@ if prompt:
                         processed_tools = process_tool_display(tools_used, tool_details)
                         
                         config_data = {
-                            "model": data["model"]
+                            "model": data["model"],
+                            "variation_key": data["variation_key"]
                         }
                         
                         if processed_tools:
@@ -667,6 +709,10 @@ if prompt:
                             st.code(log, language="text")
                     else:
                         st.markdown("*Console output not captured*")
+
+            # Clear example query only after successful processing to avoid losing it on reruns
+            if "example_query" in st.session_state and st.session_state.example_query == prompt:
+                del st.session_state.example_query
         else:
             st.error(f"Error: {response.status_code}")
             
@@ -677,18 +723,22 @@ if prompt:
 with st.sidebar:
     st.header("Context")
     
-    # Load sample users for context
-    import json
-    try:
-        with open('/Users/ld_scarlett/Documents/Github/agents-demo/data/fake_users.json', 'r') as f:
-            sample_users = json.load(f)['users']
-    except:
-        sample_users = []
-    
     # User ID selection with improved styling
     user_options = [user['id'] for user in sample_users] + ['user_001']
-    selected_user_id = st.selectbox("User ID", user_options, index=user_options.index(st.session_state.user_id) if st.session_state.user_id in user_options else 0,
+    # Find default index for user_other_paid_001
+    default_index = 0
+    if "user_other_paid_001" in user_options:
+        default_index = user_options.index("user_other_paid_001")
+    elif st.session_state.user_id in user_options:
+        default_index = user_options.index(st.session_state.user_id)
+    
+    selected_user_id = st.selectbox("User ID", user_options, index=default_index,
                                    help="Different User IDs may receive different AI configurations via LaunchDarkly")
+    
+    # Show user context for selected user
+    if sample_users:
+        user_context = get_user_context(selected_user_id, sample_users)
+        st.caption(f"Context: {user_context['country']} {user_context['plan']} user")
     
     if selected_user_id != st.session_state.user_id:
         st.session_state.user_id = selected_user_id

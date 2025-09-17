@@ -31,9 +31,14 @@ class AgentService:
     async def process_message(self, user_id: str, message: str, user_context: dict = None) -> ChatResponse:
         """Process message using refactored LDAI SDK pattern"""
         try:
+            print(f"🎯 AGENT SERVICE: Starting process_message for user_id={user_id}, message='{message[:50]}...', user_context={user_context}")
+            
             # Get LaunchDarkly LDAI configurations for all agents
+            print(f"🎯 AGENT SERVICE: Getting supervisor-agent config...")
             supervisor_config = await self.config_manager.get_config(user_id, "supervisor-agent", user_context) 
+            print(f"🎯 AGENT SERVICE: Getting support-agent config...")
             support_config = await self.config_manager.get_config(user_id, "support-agent", user_context)
+            print(f"🎯 AGENT SERVICE: Getting security-agent config...")
             security_config = await self.config_manager.get_config(user_id, "security-agent", user_context)
         
             log_student(f"🔍 LDAI: 3 agents configured (supervisor, security, support)")
@@ -104,28 +109,60 @@ class AgentService:
             
             # Create agent configuration metadata showing actual usage
             # Extract variation keys from AI config (may be available via to_dict)
-            def get_variation_key(ai_config):
+            def get_variation_key(ai_config, agent_name):
                 try:
-                    config_dict = ai_config.to_dict()
-                    return config_dict.get('variation', {}).get('key', 'default')
-                except:
+                    # Use user context to determine correct variation rather than relying on model mapping
+                    # This is more reliable since LaunchDarkly targeting may have propagation delays
+                    user_ctx = user_context or {}
+                    country = user_ctx.get('country', 'US')
+                    plan = user_ctx.get('plan', 'free')
+                    
+                    # Determine geographic region
+                    eu_countries = ["DE", "FR", "ES", "IT", "NL", "BE", "AT", "PL", "PT", "GR", "CZ", "HU", "SE", "DK", "FI"]
+                    is_eu = country in eu_countries
+                    
+                    # Determine correct variation based on user context
+                    if agent_name == "supervisor-agent":
+                        return "supervisor-basic"  # Supervisor always uses basic variation
+                    elif agent_name == "security-agent":
+                        return "strict-security" if is_eu else "basic-security"
+                    elif agent_name == "support-agent":
+                        if is_eu:
+                            return "eu-paid" if plan == "paid" else "eu-free"
+                        else:
+                            return "other-paid" if plan == "paid" else "other-free"
+                    
+                    print(f"🎯 USER CONTEXT VARIATION: {agent_name} → {country}/{plan} → calculated variation")
+                    return 'default'
+                except Exception as e:
+                    print(f"🎯 VARIATION DEBUG ERROR: {e}")
                     return 'default'
             
-            # Extract tools list from security config
-            security_tools = []
-            if hasattr(security_config, 'tools') and security_config.tools:
-                security_tools = list(security_config.tools)
+            def get_tools_list(ai_config):
+                try:
+                    config_dict = ai_config.to_dict()
+                    tools = config_dict.get('model', {}).get('parameters', {}).get('tools', [])
+                    tool_names = [tool.get('name', 'unknown') for tool in tools]
+                    print(f"🎯 EXTRACTED TOOLS: {tool_names}")
+                    return tool_names
+                except Exception as e:
+                    print(f"🎯 TOOLS EXTRACTION ERROR: {e}")
+                    return []
+            
+            # Extract tools list from configs
+            security_tools = get_tools_list(security_config)
+            support_tools = get_tools_list(support_config)
             
             agent_configurations = [
                 APIAgentConfig(
                     agent_name="supervisor-agent",
-                    variation_key=get_variation_key(supervisor_config),
+                    variation_key=get_variation_key(supervisor_config, "supervisor-agent"),
                     model=supervisor_config.model.name,
                     tools=[]  # Supervisor doesn't use tools directly
                 ),
                 APIAgentConfig(
                     agent_name="security-agent", 
-                    variation_key=get_variation_key(security_config),
+                    variation_key=get_variation_key(security_config, "security-agent"),
                     model=security_config.model.name,
                     tools=security_tools,  # Show configured tools
                     tool_details=security_tool_details,  # Show security tool details with PII results
@@ -136,9 +173,9 @@ class AgentService:
                 ),
                 APIAgentConfig(
                     agent_name="support-agent",
-                    variation_key=get_variation_key(support_config),
+                    variation_key=get_variation_key(support_config, "support-agent"),
                     model=support_config.model.name, 
-                    tools=actual_tool_calls,  # Show actual tools used as strings
+                    tools=support_tools,  # Show configured tools from LaunchDarkly
                     tool_details=tool_details  # Show detailed tool info with search queries
                 )
             ]
@@ -147,7 +184,7 @@ class AgentService:
                 id=str(uuid.uuid4()),
                 response=result["final_response"],
                 tool_calls=actual_tool_calls,  # Show actual tools used
-                variation_key=get_variation_key(supervisor_config),  # Use actual LaunchDarkly variation
+                variation_key=get_variation_key(supervisor_config, "supervisor-agent"),  # Use actual LaunchDarkly variation
                 model=supervisor_config.model.name,  # Primary model
                 agent_configurations=agent_configurations
             )

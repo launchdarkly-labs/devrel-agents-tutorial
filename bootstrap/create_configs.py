@@ -24,25 +24,100 @@ class MultiAgentBootstrap:
         }
     
     def create_segment(self, project_key, segment_data):
-        """Create user segment for targeting"""
+        """Create user segment for targeting using two-step process"""
         url = f"{self.base_url}/api/v2/segments/{project_key}/production"
         
+        # Step 1: Create empty segment (LaunchDarkly ignores rules in POST)
         payload = {
             "key": segment_data["key"],
-            "name": segment_data["key"].replace("-", " ").title(),
-            "rules": segment_data["rules"]
+            "name": segment_data["key"].replace("-", " ").title()
         }
         
         response = requests.post(url, headers=self.headers, json=payload, timeout=30)
         
         if response.status_code in [200, 201]:
-            print(f"✅ Segment '{segment_data['key']}' created")
+            print(f"✅ Empty segment '{segment_data['key']}' created")
             time.sleep(0.5)
-            return response.json()
+            
+            # Step 2: Add rules via semantic patch
+            return self.add_segment_rules(project_key, segment_data)
+            
         elif response.status_code == 409:
-            return None
+            if self.overwrite:
+                print(f"⚠️  Segment '{segment_data['key']}' already exists, deleting and recreating...")
+                # Delete existing segment
+                delete_url = f"{self.base_url}/api/v2/segments/{project_key}/production/{segment_data['key']}"
+                delete_response = requests.delete(delete_url, headers=self.headers, timeout=30)
+                
+                if delete_response.status_code == 204:
+                    print(f"🗑️  Deleted existing segment '{segment_data['key']}'")
+                    time.sleep(1)  # Wait for deletion to propagate
+                    # Retry creation
+                    retry_response = requests.post(url, headers=self.headers, json=payload, timeout=30)
+                    if retry_response.status_code in [200, 201]:
+                        print(f"✅ Empty segment '{segment_data['key']}' recreated")
+                        time.sleep(0.5)
+                        # Step 2: Add rules via semantic patch
+                        return self.add_segment_rules(project_key, segment_data)
+                    else:
+                        print(f"❌ Failed to recreate segment: {retry_response.status_code} - {retry_response.text}")
+                        return None
+                else:
+                    print(f"❌ Failed to delete existing segment: {delete_response.status_code} - {delete_response.text}")
+                    return None
+            else:
+                print(f"⚠️  Segment '{segment_data['key']}' already exists, adding rules...")
+                return self.add_segment_rules(project_key, segment_data)
         else:
             print(f"❌ Failed to create segment: {response.status_code} - {response.text}")
+            return None
+    
+    def add_segment_rules(self, project_key, segment_data):
+        """Add rules to existing segment using semantic patch"""
+        segment_key = segment_data["key"]
+        url = f"{self.base_url}/api/v2/segments/{project_key}/production/{segment_key}"
+        
+        # Build instructions for semantic patch
+        instructions = []
+        
+        # Each segment should have one rule with multiple clauses
+        if segment_data.get("rules"):
+            clauses = []
+            for clause in segment_data["rules"]:
+                clauses.append({
+                    "attribute": clause["attribute"],
+                    "op": clause["op"],
+                    "values": clause["values"],
+                    "contextKind": clause["contextKind"],
+                    "negate": clause["negate"]
+                })
+            
+            instructions.append({
+                "kind": "addRule",
+                "clauses": clauses
+            })
+        
+        payload = {
+            "environmentKey": "production",
+            "instructions": instructions
+        }
+        
+        print(f"  🔧 Adding {len(instructions)} rules to segment '{segment_key}'")
+        
+        # Use semantic patch headers for segment rule updates
+        patch_headers = self.headers.copy()
+        patch_headers["Content-Type"] = "application/json; domain-model=launchdarkly.semanticpatch"
+        
+        response = requests.patch(url, headers=patch_headers, json=payload, timeout=30)
+        
+        if response.status_code == 200:
+            result = response.json()
+            rules_count = len(result.get("rules", []))
+            print(f"  ✅ Rules added to segment '{segment_key}' (final count: {rules_count})")
+            time.sleep(0.5)
+            return result
+        else:
+            print(f"  ❌ Failed to add rules to segment '{segment_key}': {response.status_code} - {response.text}")
             return None
     
     def create_ai_config(self, project_key, config_data):

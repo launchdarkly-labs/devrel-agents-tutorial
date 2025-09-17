@@ -20,8 +20,27 @@ async def chat(request: ChatRequest):
     # Capture all console output during request processing
     with capture_console_output() as console_logs:
         log_student(f"🌐 API: Received request from {request.user_id}")
-        log_debug(f"🌐 API: Received chat request from user {request.user_id}: {request.message[:50]}...")
+        message_text = request.message or ""
+        message_preview = message_text[:50] + ("..." if len(message_text) > 50 else "")
+        log_debug(f"🌐 API: Received chat request from user {request.user_id}: '{message_preview}' (len={len(message_text)})")
+        log_debug(f"🌐 API: User context received: {request.user_context}")
+        
+        # Server-side guard against empty/whitespace messages
+        if not message_text.strip():
+            log_debug("🌐 API: Empty or whitespace-only message; returning validation response")
+            from .models import ChatResponse as CR
+            validation_response = CR(
+                id="validation",
+                response="Please enter a question or pick an example query.",
+                tool_calls=[],
+                variation_key="validation",
+                model="validation",
+                agent_configurations=[],
+                console_logs=console_logs
+            )
+            return validation_response
         try:
+            log_debug(f"🌐 API: About to call agent_service.process_message with user_id={request.user_id}, message='{message_text[:50]}...', user_context={request.user_context}")
             result = await agent_service.process_message(
                 user_id=request.user_id,
                 message=request.message,
@@ -34,6 +53,8 @@ async def chat(request: ChatRequest):
             return result
         except Exception as e:
             print(f"🌐 API ERROR: {e}")
+            import traceback
+            print(f"🌐 API ERROR TRACEBACK: {traceback.format_exc()}")
             # Even on error, return the logs we captured
             raise
 
