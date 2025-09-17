@@ -9,7 +9,7 @@ load_dotenv()
 
 # Load sample users for LaunchDarkly targeting
 try:
-    with open('/Users/ld_scarlett/Documents/Github/agents-demo/data/fake_users.json', 'r') as f:
+    with open('data/fake_users.json', 'r') as f:
         sample_users = json.load(f)['users']
         print(f"🔍 UI: Loaded {len(sample_users)} sample users from fake_users.json")
 except Exception as e:
