@@ -1,6 +1,6 @@
 import uuid
 from typing import List
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from dotenv import load_dotenv
 from ..models import ChatResponse, AgentConfig as APIAgentConfig
 from agents.supervisor_agent import create_supervisor_agent
@@ -28,24 +28,19 @@ class AgentService:
             print(f"❌ METRICS FLUSH ERROR: {e}")
             raise
         
-    async def process_message(self, user_id: str, message: str, user_context: dict = None) -> ChatResponse:
+    async def process_message(self, user_id: str, message: str, user_context: dict = None, sanitized_conversation_history: list = None) -> ChatResponse:
         """Process message using refactored LDAI SDK pattern"""
         try:
-            print(f"🎯 AGENT SERVICE: Starting process_message for user_id={user_id}, message='{message[:50]}...', user_context={user_context}")
+            log_debug(f"🎯 AGENT SERVICE: Processing message for {user_id}")
             
             # Get LaunchDarkly LDAI configurations for all agents
-            print(f"🎯 AGENT SERVICE: Getting supervisor-agent config...")
+            log_debug("🎯 AGENT SERVICE: Loading agent configurations...")
             supervisor_config = await self.config_manager.get_config(user_id, "supervisor-agent", user_context) 
-            print(f"🎯 AGENT SERVICE: Getting support-agent config...")
             support_config = await self.config_manager.get_config(user_id, "support-agent", user_context)
-            print(f"🎯 AGENT SERVICE: Getting security-agent config...")
             security_config = await self.config_manager.get_config(user_id, "security-agent", user_context)
         
-            log_student(f"🔍 LDAI: 3 agents configured (supervisor, security, support)")
-            log_debug(f"🔍 LDAI CONFIGS LOADED:")
-            log_debug(f"   🎯 Supervisor: {supervisor_config.model.name} (enabled: True)")
-            log_debug(f"   🔧 Support: {support_config.model.name} (enabled: True)")
-            log_debug(f"   🔐 Security: {security_config.model.name} (enabled: True)")
+            log_student(f"🔍 LDAI: 3 agents configured")
+            log_debug(f"🔍 LDAI: Supervisor({supervisor_config.model.name}), Support({support_config.model.name}), Security({security_config.model.name})")
             
             # Create supervisor agent with all child agents using LDAI SDK pattern
             supervisor_agent = create_supervisor_agent(
@@ -55,16 +50,30 @@ class AgentService:
                 self.config_manager
             )
             
+            # ===== SECURITY BOUNDARY: PII ISOLATION SETUP =====
+            # Convert sanitized conversation history to LangChain messages
+            # CRITICAL: Support agent will ONLY see these sanitized messages
+            sanitized_langchain_messages = []
+            if sanitized_conversation_history:
+                for msg in sanitized_conversation_history:
+                    if msg.get("role") == "user":
+                        sanitized_langchain_messages.append(HumanMessage(content=msg["content"]))
+                    elif msg.get("role") == "assistant":
+                        sanitized_langchain_messages.append(AIMessage(content=msg["content"]))
+            
+            # Add current raw message for security agent processing
+            current_raw_message = HumanMessage(content=message)
+            
             # Process message with supervisor state format
             initial_state = {
-                "user_input": message,
+                "user_input": message,  # Raw message (security agent only)
                 "current_agent": "",
                 "security_cleared": False,
                 "support_response": "",
                 "final_response": "",
                 "workflow_stage": "initial_security",
-                "messages": [HumanMessage(content=message)],
-                "sanitized_messages": [],  # Initialize empty sanitized message history
+                "messages": [current_raw_message],  # Security agent gets raw message
+                "sanitized_messages": sanitized_langchain_messages,  # SUPPORT AGENT ONLY gets these
                 "processed_user_input": "",
                 "pii_detected": False,
                 "pii_types": [],
@@ -74,8 +83,7 @@ class AgentService:
             }
             
             log_student(f"🎯 WORKFLOW: Starting security check")
-            log_debug(f"🚀 STARTING LDAI WORKFLOW: {message[:100]}...")
-            log_debug(f"🔒 PII PROTECTION: Original message will be processed by security agent first")
+            log_debug(f"🔒 PII PROTECTION: Processing message through security agent first")
             result = await supervisor_agent.ainvoke(initial_state)
             
             # Get actual tool calls used during the workflow
@@ -100,12 +108,7 @@ class AgentService:
             
             log_student(f"✅ WORKFLOW COMPLETE: {tools_summary}, {pii_status}, Response: {response_length} chars")
             
-            log_debug(f"🔍 API DEBUG: security_tool_details = {security_tool_details}")
-            log_debug(f"✅ LDAI WORKFLOW COMPLETED:")
-            log_debug(f"   📊 Tools used: {actual_tool_calls}")
-            log_debug(f"   📊 Tool details: {len(tool_details)} items")
-            log_debug(f"   💬 Response length: {len(result['final_response'])} chars")
-            log_debug(f"   🔒 Security: detected={security_detected}")
+            log_debug(f"✅ WORKFLOW: Tools={len(actual_tool_calls)}, Details={len(tool_details)}, Response={len(result['final_response'])}chars, PII={security_detected}")
             
             # Create agent configuration metadata showing actual usage
             # Extract variation keys from AI config (may be available via to_dict)
@@ -132,10 +135,10 @@ class AgentService:
                         else:
                             return "other-paid" if plan == "paid" else "other-free"
                     
-                    print(f"🎯 USER CONTEXT VARIATION: {agent_name} → {country}/{plan} → calculated variation")
+                    log_debug(f"🎯 USER CONTEXT: {agent_name} → {country}/{plan}")
                     return 'default'
                 except Exception as e:
-                    print(f"🎯 VARIATION DEBUG ERROR: {e}")
+                    log_debug(f"🎯 VARIATION ERROR: {e}")
                     return 'default'
             
             def get_tools_list(ai_config):
@@ -143,28 +146,34 @@ class AgentService:
                     config_dict = ai_config.to_dict()
                     tools = config_dict.get('model', {}).get('parameters', {}).get('tools', [])
                     tool_names = [tool.get('name', 'unknown') for tool in tools]
-                    print(f"🎯 EXTRACTED TOOLS: {tool_names}")
+                    log_debug(f"🎯 EXTRACTED TOOLS: {tool_names}")
                     return tool_names
                 except Exception as e:
-                    print(f"🎯 TOOLS EXTRACTION ERROR: {e}")
+                    log_debug(f"🎯 TOOLS EXTRACTION ERROR: {e}")
                     return []
             
             # Extract tools list from configs
             security_tools = get_tools_list(security_config)
             support_tools = get_tools_list(support_config)
             
+            # Determine which tools were actually used by each agent
+            security_tools_used = []
+            support_tools_used = actual_tool_calls  # Support agent is the primary tool user
+            
             agent_configurations = [
                 APIAgentConfig(
                     agent_name="supervisor-agent",
                     variation_key=get_variation_key(supervisor_config, "supervisor-agent"),
                     model=supervisor_config.model.name,
-                    tools=[]  # Supervisor doesn't use tools directly
+                    tools=[],  # Supervisor doesn't have tools available
+                    tools_used=[]  # Supervisor doesn't use tools directly
                 ),
                 APIAgentConfig(
                     agent_name="security-agent", 
                     variation_key=get_variation_key(security_config, "security-agent"),
                     model=security_config.model.name,
                     tools=security_tools,  # Show configured tools
+                    tools_used=security_tools_used,  # Show actual tools used
                     tool_details=security_tool_details,  # Show security tool details with PII results
                     # Pass PII detection results to UI
                     detected=security_detected,
@@ -176,6 +185,7 @@ class AgentService:
                     variation_key=get_variation_key(support_config, "support-agent"),
                     model=support_config.model.name, 
                     tools=support_tools,  # Show configured tools from LaunchDarkly
+                    tools_used=support_tools_used,  # Show actual tools executed
                     tool_details=tool_details  # Show detailed tool info with search queries
                 )
             ]
@@ -190,7 +200,7 @@ class AgentService:
             )
             
         except Exception as e:
-            print(f"❌ LDAI WORKFLOW ERROR: {e}")
+            log_student(f"❌ LDAI WORKFLOW ERROR: {e}")
             
             # Return error response
             return ChatResponse(

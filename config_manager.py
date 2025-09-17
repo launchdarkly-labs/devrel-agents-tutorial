@@ -8,6 +8,7 @@ import ldclient
 from ldclient import Context
 from ldai.client import LDAIClient, LDAIAgentConfig, LDAIAgentDefaults, ModelConfig
 from dotenv import load_dotenv
+from utils.logger import log_student, log_debug
 
 load_dotenv()
 
@@ -52,29 +53,21 @@ class FixedConfigManager:
     
     async def get_config(self, user_id: str, config_key: str = None, user_context: dict = None):
         """Get LaunchDarkly AI Config object directly - no wrapper"""
-        print(f"🔧 CONFIG MANAGER: Getting config for user_id={user_id}, config_key={config_key}, user_context={user_context}")
+        # Removed verbose logging - use DEBUG mode if needed
         
         context_builder = Context.builder(user_id).kind('user')
         
         if user_context:
-            print(f"🔧 CONFIG MANAGER: Building context with user_context: {user_context}")
             if 'country' in user_context:
                 context_builder.set('country', user_context['country'])
-                print(f"🔧 CONFIG MANAGER: Set country = {user_context['country']}")
             if 'plan' in user_context:
                 context_builder.set('plan', user_context['plan'])
-                print(f"🔧 CONFIG MANAGER: Set plan = {user_context['plan']}")
             if 'region' in user_context:
                 context_builder.set('region', user_context['region'])
-                print(f"🔧 CONFIG MANAGER: Set region = {user_context['region']}")
-        else:
-            print(f"🔧 CONFIG MANAGER: No user_context provided, using user_id only")
         
         ld_user_context = context_builder.build()
-        print(f"🔧 CONFIG MANAGER: Built LaunchDarkly context: {ld_user_context}")
         
         ai_config_key = config_key or os.getenv('LAUNCHDARKLY_AI_CONFIG_KEY', 'support-agent')
-        print(f"🔧 CONFIG MANAGER: Using AI config key: {ai_config_key}")
         
         agent_config = LDAIAgentConfig(
             key=ai_config_key,
@@ -88,12 +81,11 @@ class FixedConfigManager:
         try:
             # Return the AI Config object directly
             result = self.ai_client.agent(agent_config, ld_user_context)
-            print(f"🔧 CONFIG MANAGER: Successfully got AI config: {result.model.name if result else 'None'}")
             return result
         except Exception as e:
-            print(f"🔧 CONFIG MANAGER ERROR: Failed to get AI config: {e}")
+            log_student(f"🔧 CONFIG MANAGER ERROR: {e}")
             import traceback
-            print(f"🔧 CONFIG MANAGER ERROR TRACEBACK: {traceback.format_exc()}")
+            log_debug(f"🔧 CONFIG MANAGER ERROR TRACEBACK: {traceback.format_exc()}")
             raise
     
     def track_metrics(self, tracker, func):

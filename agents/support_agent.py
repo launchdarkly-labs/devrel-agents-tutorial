@@ -149,21 +149,21 @@ def create_support_agent(config, config_manager=None):
                         for tool in mcp_tools:
                             if hasattr(tool, 'name'):
                                 if 'arxiv' in tool.name.lower() or 'search_papers' in tool.name:
-                                    print("✅ Added ArXiv MCP tool")
+                                    log_debug("✅ Added ArXiv MCP tool")
                                 elif 'semantic' in tool.name.lower() or 'scholar' in tool.name.lower():
-                                    print("✅ Added Semantic Scholar MCP tool")
+                                    log_debug("✅ Added Semantic Scholar MCP tool")
                         
                         # print("DEBUG: Returning {} MCP tools".format(len(mcp_tools)))
-                        print(f"✅ MCP TOOLS LOADED: {list(mcp_tool_map.keys())}")
+                        log_student(f"✅ MCP TOOLS LOADED: {list(mcp_tool_map.keys())}")
                     else:
                         log_debug("📚 NO MCP TOOLS: Using internal tools only")
                         
                 except concurrent.futures.TimeoutError:
-                    print("⏰ MCP TIMEOUT: MCP servers not responding - using internal tools only")
+                    log_debug("⏰ MCP TIMEOUT: MCP servers not responding - using internal tools only")
                     mcp_tool_map = {}
                 
         except Exception as e:
-            print(f"❌ MCP ERROR: {e} - Using internal tools only")
+            log_debug(f"❌ MCP ERROR: {e} - Using internal tools only")
             mcp_tool_map = {}
     else:
         log_debug("📚 NO MCP TOOLS REQUESTED: Skipping MCP initialization")
@@ -246,7 +246,7 @@ def create_support_agent(config, config_manager=None):
                             else:
                                 return str(result)
                         except Exception as e:
-                            print(f"❌ MCP TOOL ERROR: {e}")
+                            log_debug(f"❌ MCP TOOL ERROR: {e}")
                             return f"MCP tool error: {str(e)}"
                     
                     def _run(self, config=None, **kwargs) -> str:
@@ -261,16 +261,16 @@ def create_support_agent(config, config_manager=None):
                             finally:
                                 loop.close()
                         except Exception as e:
-                            print(f"❌ MCP TOOL SYNC ERROR: {e}")
+                            log_debug(f"❌ MCP TOOL SYNC ERROR: {e}")
                             return f"MCP tool error: {str(e)}"
                 
                 wrapped_mcp_tool = MCPToolWrapper(mcp_tool, tool_name)
                 available_tools.append(wrapped_mcp_tool)
-                print(f"🔬 MCP TOOL ADDED (WRAPPED): {tool_name} -> {mcp_tool_name} via MCP server")
+                log_debug(f"🔬 MCP TOOL ADDED: {tool_name} -> {mcp_tool_name}")
             else:
-                print(f"❌ MCP TOOL UNAVAILABLE: {tool_name} requested but not in map {list(mcp_tool_map.keys())} - SKIPPING")
+                log_debug(f"❌ MCP TOOL UNAVAILABLE: {tool_name} (available: {list(mcp_tool_map.keys())})")
         else:
-            print(f"❓ UNKNOWN TOOL REQUESTED: {tool_name} - SKIPPING")
+            log_debug(f"❓ UNKNOWN TOOL: {tool_name}")
     
     # Initialize model based on LaunchDarkly config using LDAI SDK pattern
     model_name_attr = config.model.name if hasattr(config.model, 'name') else 'claude-3-haiku-20240307'
@@ -321,9 +321,9 @@ def create_support_agent(config, config_manager=None):
                             # Apply LaunchDarkly defaults if not provided in tool call
                             if param_name not in tool_args and 'default' in param_config:
                                 tool_args[param_name] = param_config['default']
-                                print(f"🔧 APPLIED LD DEFAULT: {param_name} = {param_config['default']}")
+                                log_debug(f"🔧 APPLIED LD DEFAULT: {param_name} = {param_config['default']}")
                     else:
-                        print(f"⚠️ LD CONFIG: No 'properties' found in schema for {tool_name}")
+                        log_debug(f"⚠️ LD CONFIG: No 'properties' found in schema for {tool_name}")
                 
                 log_verbose(f"🔧 EXECUTING TOOL: {tool_name} with args: {tool_args}")
                 
@@ -353,11 +353,11 @@ def create_support_agent(config, config_manager=None):
                             if latest_search_message:
                                 # Pass the raw search_v2 output content to reranking tool
                                 tool_args['results'] = latest_search_message.content
-                                print(f"🔧 RERANKING: Found search_v2 output in message history, passing to tool")
+                                log_debug("🔧 RERANKING: Found search_v2 output in message history")
                             else:
                                 # Fallback: no search_v2 results found
                                 tool_args['results'] = ""
-                                print(f"⚠️ RERANKING: No search_v2 output found in message history")
+                                log_debug("⚠️ RERANKING: No search_v2 output found in message history")
                         
                         # For MCP tools, ensure config parameter is handled
                         if tool_name in ['arxiv_search', 'semantic_scholar']:
@@ -377,25 +377,27 @@ def create_support_agent(config, config_manager=None):
                                 scores = re.findall(relevance_pattern, str(result))
                                 if scores:
                                     max_score = max(float(score) for score in scores)
-                                    print(f"🔍 SEARCH_V2 MAX RELEVANCE: {max_score}")
+                                    log_debug(f"🔍 SEARCH_V2 MAX RELEVANCE: {max_score}")
                                     
                                     # If relevance is low, suggest escalation
                                     if max_score < 0.6:
-                                        print(f"⚠️ LOW RELEVANCE DETECTED ({max_score}) - Consider external research tools")
+                                        log_debug(f"⚠️ LOW RELEVANCE DETECTED ({max_score})")
                                         # Store low relevance flag in state for potential escalation
                                         state["low_relevance_detected"] = True
                                         state["last_search_query"] = tool_args.get('query', '')
                                 else:
-                                    print(f"🔍 SEARCH_V2: No relevance scores found in result")
+                                    log_debug("🔍 SEARCH_V2: No relevance scores found in result")
                             except Exception as e:
-                                print(f"⚠️ Error analyzing search_v2 relevance: {e}")
+                                log_debug(f"⚠️ Error analyzing search_v2 relevance: {e}")
                         
                         # Search results are automatically stored in ToolMessage content
                         # No need for manual state management
                         
                     except Exception as e:
+                        # Show the malformed parameters that caused the failure
+                        log_student(f"🚫 TOOL CALL FAILED: {tool_name} with params {tool_args} -> {str(e)}")
                         result = f"Error executing {tool_name}: {str(e)}"
-                        print(f"❌ TOOL ERROR: {result}")
+                        log_debug(f"❌ TOOL ERROR: {result}")
                 
                 # Create tool message
                 tool_message = ToolMessage(content=str(result), tool_call_id=tool_id)
@@ -407,7 +409,7 @@ def create_support_agent(config, config_manager=None):
         
         tool_node = custom_tool_node
     else:
-        print(f"⚠️  NO TOOLS AVAILABLE: Agent will work in model-only mode")
+        log_debug("⚠️  NO TOOLS AVAILABLE: Agent will work in model-only mode")
         # Create empty tool node that won't be used
         def empty_tool_node(state: AgentState):
             """Empty tool node for when no tools are available"""
@@ -455,14 +457,14 @@ def create_support_agent(config, config_manager=None):
                         
                         log_debug(f"📚 INTERNAL TOOL CALLED: {tool_name} ({query_display}) (local processing)")
                     else:
-                        print(f"🔧 UNKNOWN TOOL CALLED: {tool_name} ({query_display})")
+                        log_debug(f"🔧 UNKNOWN TOOL: {tool_name} ({query_display})")
         
         # Check for repeated identical search queries - stop if same query used 3+ times
         if len(recent_search_queries) >= 3:
             for query in set(recent_search_queries):
                 query_count = recent_search_queries.count(query)
                 if query_count >= 3:
-                    print(f"🛑 STOPPING REPEATED SEARCH: Query '{query}' used {query_count} times - no useful results found")
+                    log_student(f"🛑 STOPPING REPEATED SEARCH: Query '{query}' used {query_count} times")
                     # Add instruction to try different terms or stop searching
                     if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
                         # Agent is about to make another tool call - inject guidance
@@ -477,13 +479,13 @@ Do not repeat the same search query again."""))
         if len(recent_tool_calls) >= 4:
             last_4_tools = recent_tool_calls[-4:]
             if len(set(last_4_tools)) == 1:  # Same tool used 4 times in a row
-                print(f"🛑 STOPPING TOOL LOOP: '{last_4_tools[-1]}' used 4+ times consecutively - ending workflow")
+                log_student(f"🛑 STOPPING TOOL LOOP: '{last_4_tools[-1]}' used 4+ times consecutively")
                 return "end"
         
         # Stop if any single tool is used more than 5 times total in conversation
         for tool_name in set(recent_tool_calls):
             if recent_tool_calls.count(tool_name) >= 5:
-                print(f"🛑 STOPPING TOOL LOOP: '{tool_name}' used {recent_tool_calls.count(tool_name)} times total - ending workflow")
+                log_student(f"🛑 STOPPING TOOL LOOP: '{tool_name}' used {recent_tool_calls.count(tool_name)} times total")
                 return "end"
         
         # Use max_tool_calls extracted from config
@@ -567,7 +569,7 @@ Do not repeat the same search query again."""))
             
             # If at max tool calls, disable tools for final completion
             if total_tool_calls >= max_tool_calls:
-                print(f"🛑 DISABLING TOOLS: Reached maximum tool calls ({total_tool_calls}/{max_tool_calls})")
+                log_student(f"🛑 DISABLING TOOLS: Reached maximum ({total_tool_calls}/{max_tool_calls})")
                 
                 # Add synthesis instruction for final completion
                 synthesis_prompt = HumanMessage(content="""
@@ -586,7 +588,7 @@ Do not repeat the same search query again."""))
                     completion_provider = config.provider.name
                 completion_model = get_model_instance(model_name_for_completion, 0.0, completion_provider)
                 response = completion_model.invoke(messages)
-                print(f"🎯 FORCED SYNTHESIS: Model completing with synthesis instructions")
+                log_debug("🎯 FORCED SYNTHESIS: Model completing with synthesis instructions")
                 return {"messages": [response]}
             
             # Track the core model invocation with LaunchDarkly tracker when available
@@ -603,12 +605,12 @@ Do not repeat the same search query again."""))
                     lambda: model.invoke(messages)
                 )
             else:
-                print(f"⚠️  NO TRACKER AVAILABLE - using direct model call")
+                log_debug("⚠️  NO TRACKER AVAILABLE - using direct model call")
                 response = model.invoke(messages)
             # print(f"DEBUG: Model response received, has_tool_calls: {hasattr(response, 'tool_calls') and bool(response.tool_calls)}")
             return {"messages": [response]}
         except Exception as e:
-            print(f"ERROR in call_model: {e}")
+            log_student(f"ERROR in call_model: {e}")
             error_response = AIMessage(content="I apologize, but I encountered an error processing your request.")
             return {"messages": [error_response]}
     
@@ -646,9 +648,9 @@ Do not repeat the same search query again."""))
                     
                     # Debug: Log search query extraction
                     if search_query:
-                        print(f"🔍 EXTRACTED SEARCH QUERY: {display_tool_name} -> '{search_query}'")
+                        log_debug(f"🔍 EXTRACTED SEARCH QUERY: {display_tool_name} -> '{search_query}'")
                     else:
-                        print(f"⚠️  NO SEARCH QUERY: {display_tool_name} (args: {list(tool_args.keys())})")
+                        log_debug(f"⚠️  NO SEARCH QUERY: {display_tool_name} (args: {list(tool_args.keys())})")
                     
                     # Always append tool name as string for API compatibility
                     tool_calls.append(display_tool_name)
@@ -688,7 +690,7 @@ Do not repeat the same search query again."""))
         else:
             final_response = "I apologize, but I couldn't generate a proper response."
         
-        print(f"🔧 SUPPORT AGENT RETURNING: 📊 tool_calls: {tool_calls}")
+        log_debug(f"🔧 SUPPORT AGENT: {len(tool_calls)} tool calls executed")
         log_debug(f"   📊 tool_details: {tool_details}")
         
         return {

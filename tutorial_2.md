@@ -90,8 +90,8 @@ The included test script simulates real user scenarios across all segments, veri
 
 Validate your segmentation with the test script:
 
-```bash
-uv run python tests/test_tutorial_2.py
+```bashi
+uv run api/test_tutorial_2.py
 ```
 
 This confirms your targeting matrix is working correctly across all user segments!

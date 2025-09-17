@@ -49,7 +49,7 @@ class MCPResearchTools:
                 # Semantic Scholar MCP Server (Python-based)
                 "semanticscholar": {
                     "command": "python",
-                    "args": ["/tmp/semantic_scholar_server.py"]
+                    "args": ["/Users/ld_scarlett/Documents/Github/agents-demo/semanticscholar-MCP-Server/semantic_scholar_server.py"]
                 }
             }
             
