@@ -23,6 +23,33 @@ You'll need:
 - **Same environment**: Python 3.9+, uv, API keys from [Part 1](README.md)
 - **LaunchDarkly API key**: Add `LD_API_KEY=your-api-key` to your `.env` file ([get API key](https://launchdarkly.com/docs/home/account/api))
 
+### Getting Your LaunchDarkly API Key
+
+The automation scripts in this tutorial use the LaunchDarkly REST API to programmatically create configurations. Here's how to get your API key:
+
+To get your LaunchDarkly API key, start by navigating to Organization Settings by clicking the gear icon (⚙️) in the left sidebar of your LaunchDarkly dashboard. Once there, access Authorization Settings by clicking **"Authorization"** in the settings menu. Next, create a new access token by clicking **"Create token"** in the "Access tokens" section.
+
+![API Token Creation](screenshots/api_token.png)
+*Click "Create token" in the Access tokens section*
+
+When configuring your token, give it a descriptive name like "Tutorial Automation", select **"Writer"** as the role (required for creating configurations), use the default API version (latest), and leave "This is a service token" unchecked for now.
+
+![Name API Token](screenshots/name_api_token.png)
+*Configure your token with a descriptive name and Writer role*
+
+After configuring the settings, click **"Save token"** and immediately copy the token value. This is **IMPORTANT** because it's only shown once!
+
+![Copy API Token](screenshots/copy_api_token.png)
+*Copy the token value immediately - it's only shown once*
+
+Finally, add the token to your environment:
+   ```bash
+   # Add this line to your .env file
+   LD_API_KEY=your-copied-api-key-here
+   ```
+
+**Security Note**: Keep your API key private and never commit it to version control. The token allows full access to your LaunchDarkly account.
+
 ## Step 1: Add External Research Tools (4 minutes)
 
 Your agents need more than just your internal documents. **Model Context Protocol (MCP)** connects AI assistants to live external data and they agents become orchestrators of your digital infrastructure, tapping into databases, communication tools, development platforms, and any system that matters to your business. MCP tools run as separate servers that your agents call when needed.
@@ -102,7 +129,7 @@ Now let's see your segmentation in action through the actual user interface that
 
 ```bash
 # Start your system (2 terminals)
-uv run uvicorn api.main:app --reload --port 8001
+uv run uvicorn api.main:app --reload --port 8000
 uv run streamlit run ui/chat_interface.py --server.port 8501
 ```
 
@@ -115,7 +142,7 @@ Open http://localhost:8501 and test different user types:
 
 <div align="center">
 
-![Chat Interface User Selection](screenshots/chat_interface_user_dropdown.png)
+![Chat Interface User Selection](screenshots/chat_interface.png)
 *Select different user types to test segmentation in the chat interface*
 
 </div>

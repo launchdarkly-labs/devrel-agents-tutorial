@@ -360,7 +360,7 @@ Start the system:
 
 ```bash
 # Terminal 1: Start the backend
-uv run uvicorn api.main:app --reload --port 8001
+uv run uvicorn api.main:app --reload --port 8000
 ```
 
 ```bash
