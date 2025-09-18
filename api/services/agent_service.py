@@ -111,34 +111,13 @@ class AgentService:
             log_debug(f"✅ WORKFLOW: Tools={len(actual_tool_calls)}, Details={len(tool_details)}, Response={len(result['final_response'])}chars, PII={security_detected}")
             
             # Create agent configuration metadata showing actual usage
-            # Extract variation keys from AI config (may be available via to_dict)
+            # Extract actual variation key from LaunchDarkly AI config
             def get_variation_key(ai_config, agent_name):
                 try:
-                    # Use user context to determine correct variation rather than relying on model mapping
-                    # This is more reliable since LaunchDarkly targeting may have propagation delays
-                    user_ctx = user_context or {}
-                    country = user_ctx.get('country', 'US')
-                    plan = user_ctx.get('plan', 'free')
-                    
-                    # Determine geographic region
-                    eu_countries = ["DE", "FR", "ES", "IT", "NL", "BE", "AT", "PL", "PT", "GR", "CZ", "HU", "SE", "DK", "FI"]
-                    is_eu = country in eu_countries
-                    
-                    # Determine correct variation based on user context
-                    if agent_name == "supervisor-agent":
-                        return "supervisor-basic"  # Supervisor always uses basic variation
-                    elif agent_name == "security-agent":
-                        return "strict-security" if is_eu else "basic-security"
-                    elif agent_name == "support-agent":
-                        if is_eu:
-                            return "eu-paid" if plan == "paid" else "eu-free"
-                        else:
-                            return "other-paid" if plan == "paid" else "other-free"
-                    
-                    log_debug(f"🎯 USER CONTEXT: {agent_name} → {country}/{plan}")
-                    return 'default'
+                    config_dict = ai_config.to_dict()
+                    return config_dict.get('variation', {}).get('key', 'default')
                 except Exception as e:
-                    log_debug(f"🎯 VARIATION ERROR: {e}")
+                    log_debug(f"🎯 VARIATION EXTRACTION ERROR for {agent_name}: {e}")
                     return 'default'
             
             def get_tools_list(ai_config):
