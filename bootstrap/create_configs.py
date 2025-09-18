@@ -675,6 +675,16 @@ class MultiAgentBootstrap:
 def main():
     load_dotenv()
     
+    print("🚀 LaunchDarkly AI Config Bootstrap")
+    print("=" * 50)
+    print("⚠️  IMPORTANT: This script is for INITIAL SETUP ONLY")
+    print("📝 After bootstrap completes:")
+    print("   • Make ALL configuration changes in LaunchDarkly UI")
+    print("   • Do NOT modify ai_config_manifest.yaml")
+    print("   • LaunchDarkly is your single source of truth")
+    print("=" * 50)
+    print()
+    
     api_key = os.getenv("LD_API_KEY")
     if not api_key:
         print("❌ LD_API_KEY environment variable not set")
@@ -756,6 +766,12 @@ def main():
     print("   1. Check your LaunchDarkly dashboard to verify configurations")
     print("   2. Test different user contexts with the demo")
     print("   3. Monitor usage patterns and adjust targeting rules")
+    print()
+    print("🔄 IMPORTANT REMINDER:")
+    print("   • Future changes: Use LaunchDarkly UI only")
+    print("   • Instructions: Modify in LaunchDarkly, not YAML")
+    print("   • Targeting: Update in LaunchDarkly dashboard")
+    print("   • This YAML file is now a historical record")
 
 if __name__ == "__main__":
     main()

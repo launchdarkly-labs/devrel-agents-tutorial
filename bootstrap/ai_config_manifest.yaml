@@ -1,3 +1,14 @@
+# LaunchDarkly AI Config Bootstrap Manifest
+# 
+# IMPORTANT: This file is for INITIAL SETUP ONLY
+# 
+# Workflow:
+# 1. Bootstrap: This YAML file creates AI Configs in LaunchDarkly
+# 2. Post-Bootstrap: Make all configuration changes in LaunchDarkly UI
+# 3. Ongoing: LaunchDarkly is the single source of truth
+# 
+# DO NOT modify instructions here after bootstrap - use LaunchDarkly instead!
+
 project:
   key: "multi-agent-chatbot"  # Your LaunchDarkly project key
   environment:
@@ -96,6 +107,7 @@ project:
           modelConfig:
             provider: "anthropic"
             modelId: "claude-3-5-sonnet-20241022"
+          # NOTE: After bootstrap, modify instructions in LaunchDarkly UI, not here
           instructions: "You are an AI supervisor that coordinates between security and support agents. Route requests efficiently based on content analysis. Choose next action: 'security_agent' for PII removal or compliance, 'support_agent' for research and information, 'complete' when workflow is finished. Respond with ONLY the agent name."
           customParameters:
             max_tool_calls: 5
@@ -121,6 +133,7 @@ project:
           modelConfig:
             provider: "anthropic"
             modelId: "claude-3-5-haiku-20241022"
+          # NOTE: After bootstrap, modify instructions in LaunchDarkly UI, not here
           instructions: "You are a privacy agent that REMOVES direct PII. Focus on clearly personal identifiers:\n\nEmail addresses\nPhone numbers\nSocial Security Numbers\nFull names (but not generic titles)\nStreet addresses\nCredit card numbers\nDriver's license numbers\n\nResponse Format:\n\ndetected: true if any PII was found, false otherwise\ntypes: array of PII types found (e.g., ['email', 'name', 'phone'])\nredacted: the input text with PII replaced by [REDACTED], keeping the text readable and natural\n\nExamples:\n\nInput: \"I work at Acme Corp in Berlin as a manager\"\n\nOutput: detected=false, types=[], redacted='I work at Acme Corp in Berlin as a manager'\n\n\nInput: \"Contact John Smith at john@email.com or 555-1234\"\n\nOutput: detected=true, types=['name', 'email', 'phone'], redacted='Contact [REDACTED] at [REDACTED] or [REDACTED]'\n\n\nInput: \"The CEO from Microsoft contacted me\"\n\nOutput: detected=false, types=[], redacted='The CEO from Microsoft contacted me'"
           customParameters:
             temperature: 0.1
@@ -155,6 +168,7 @@ project:
             provider: "anthropic"
             modelId: "claude-3-5-haiku-20241022"
           tools: ["search_v1"]
+          # NOTE: After bootstrap, modify instructions in LaunchDarkly UI, not here
           instructions: "You are a helpful assistant with access to basic search (search_v1). Use your search tool to find relevant information from the knowledge base while following EU privacy requirements. Always search before responding to ensure accuracy."
           customParameters:
             max_tool_calls: 3
