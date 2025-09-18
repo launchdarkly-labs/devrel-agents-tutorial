@@ -135,7 +135,7 @@ uv run streamlit run ui/chat_interface.py --server.port 8501
 
 Open http://localhost:8501 and test different user types:
 
-1. **User Dropdown**: Select different countries (Germany, France, US) and plans (Free, Paid)
+1. **User Dropdown**: Select different regions (eu, other) and plans (Free, Paid)
 2. **Ask Questions**: Try "Search for machine learning papers" 
 3. **Watch Workflow**: See which model and tools get used for each user type
 4. **Verify Routing**: EU users get Claude, Other users get GPT, Paid users get MCP tools
