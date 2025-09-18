@@ -32,7 +32,7 @@ To get your LaunchDarkly API key, start by navigating to Organization Settings b
 ![API Token Creation](screenshots/api_token.png)
 *Click "Create token" in the Access tokens section*
 
-When configuring your token, give it a descriptive name like "Tutorial Automation", select **"Writer"** as the role (required for creating configurations), use the default API version (latest), and leave "This is a service token" unchecked for now.
+When configuring your token, give it a descriptive name like "multi-agent-chatbot", select **"Writer"** as the role (required for creating configurations), use the default API version (latest), and leave "This is a service token" unchecked for now.
 
 ![Name API Token](screenshots/name_api_token.png)
 *Configure your token with a descriptive name and Writer role*
