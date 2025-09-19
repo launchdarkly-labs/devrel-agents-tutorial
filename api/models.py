@@ -3,14 +3,18 @@ from typing import Dict, List, Optional
 
 class ChatRequest(BaseModel):
     user_id: str
-    message: str
+    message: str  # Raw user input (goes to security agent only)
     user_context: Optional[Dict] = None  # Geographic and other targeting attributes
+    # SECURITY BOUNDARY: Only sanitized conversation history is accepted
+    # This ensures support agent never sees raw PII from previous messages
+    sanitized_conversation_history: Optional[List[Dict]] = None  # Previously redacted messages only
 
 class AgentConfig(BaseModel):
     agent_name: str
     variation_key: str
     model: str
-    tools: List[str]
+    tools: List[str]  # Available tools configured from LaunchDarkly
+    tools_used: Optional[List[str]] = None  # Actual tools that were executed
     tool_details: Optional[List[Dict]] = None  # Optional detailed tool info with search queries
     # PII detection fields for security agent
     detected: Optional[bool] = None

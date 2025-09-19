@@ -19,14 +19,14 @@
       "id": "user_other_paid_001",
       "country": "US",
       "region": "other", 
-      "plan": "pro",
+      "plan": "paid",
       "description": "US professional user"
     },
     {
       "id": "user_other_paid_002",
       "country": "US",
       "region": "other",
-      "plan": "enterprise",
+      "plan": "paid",
       "description": "US enterprise customer"
     },
     {
@@ -47,14 +47,14 @@
       "id": "user_eu_paid_001",
       "country": "DE",
       "region": "europe",
-      "plan": "pro",
+      "plan": "paid",
       "description": "German professional user"
     },
     {
       "id": "user_eu_paid_002",
       "country": "FR",
       "region": "europe", 
-      "plan": "enterprise",
+      "plan": "paid",
       "description": "French enterprise customer"
     },
     {
@@ -68,21 +68,21 @@
       "id": "user_other_paid_003",
       "country": "SG",
       "region": "other",
-      "plan": "pro", 
+      "plan": "paid", 
       "description": "Singapore professional user"
     },
     {
       "id": "user_other_paid_004",
       "country": "AU",
       "region": "other",
-      "plan": "enterprise",
+      "plan": "paid",
       "description": "Australian enterprise customer"
     },
     {
       "id": "user_other_paid_005",
       "country": "CA",
       "region": "other",
-      "plan": "pro",
+      "plan": "paid",
       "description": "Canadian professional user"
     },
     {

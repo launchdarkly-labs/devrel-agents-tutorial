@@ -77,8 +77,10 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
                 lambda: model.invoke(messages)
             )
             
+            print(f"🔐 STRUCTURED OUTPUT DEBUG: pii_result type = {type(pii_result)}")
+            print(f"🔐 STRUCTURED OUTPUT DEBUG: pii_result = {pii_result}")
             print(f"🔐 STRUCTURED OUTPUT: detected={pii_result.detected}, types={pii_result.types}")
-            print(f"🔐 REDACTED TEXT: '{pii_result.redacted[:50]}...'")
+            print(f"🔐 REDACTED TEXT: '{pii_result.redacted[:50] if pii_result.redacted else 'None'}...'")
             
             # Store structured results in state and create AI message for conversation flow
             response_message = AIMessage(content=f"PII Analysis: detected={pii_result.detected}, types={pii_result.types}")

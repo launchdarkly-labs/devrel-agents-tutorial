@@ -8,6 +8,7 @@ import ldclient
 from ldclient import Context
 from ldai.client import LDAIClient, LDAIAgentConfig, LDAIAgentDefaults, ModelConfig
 from dotenv import load_dotenv
+from utils.logger import log_student, log_debug
 
 load_dotenv()
 
@@ -52,6 +53,8 @@ class FixedConfigManager:
     
     async def get_config(self, user_id: str, config_key: str = None, user_context: dict = None):
         """Get LaunchDarkly AI Config object directly - no wrapper"""
+        # Removed verbose logging - use DEBUG mode if needed
+        
         context_builder = Context.builder(user_id).kind('user')
         
         if user_context:
@@ -63,6 +66,7 @@ class FixedConfigManager:
                 context_builder.set('region', user_context['region'])
         
         ld_user_context = context_builder.build()
+        
         ai_config_key = config_key or os.getenv('LAUNCHDARKLY_AI_CONFIG_KEY', 'support-agent')
         
         agent_config = LDAIAgentConfig(
@@ -74,8 +78,15 @@ class FixedConfigManager:
             )
         )
         
-        # Return the AI Config object directly
-        return self.ai_client.agent(agent_config, ld_user_context)
+        try:
+            # Return the AI Config object directly
+            result = self.ai_client.agent(agent_config, ld_user_context)
+            return result
+        except Exception as e:
+            log_student(f"🔧 CONFIG MANAGER ERROR: {e}")
+            import traceback
+            log_debug(f"🔧 CONFIG MANAGER ERROR TRACEBACK: {traceback.format_exc()}")
+            raise
     
     def track_metrics(self, tracker, func):
         """Track metrics with LaunchDarkly"""

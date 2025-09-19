@@ -360,7 +360,7 @@ Start the system:
 
 ```bash
 # Terminal 1: Start the backend
-uv run uvicorn api.main:app --reload --port 8001
+uv run uvicorn api.main:app --reload --port 8000
 ```
 
 ```bash
@@ -456,9 +456,9 @@ Your multi-agent system is running with dynamic control and ready for optimizati
 
  **In Part 2**, we'll add:
 
-- Geographic-based privacy rules (strict for EU, standard for US)
-- MCP tools for external data (GitHub, Slack, databases)
-- Business tier configurations (free, pro, enterprise)
+- Geographic-based privacy rules (strict for EU, standard for Other)
+- MCP tools for external data
+- Business tier configurations (free, paid)
 - Cost optimization strategies
 
 **In Part 3**, we'll run A/B experiments to prove which configurations actually work best with real data.

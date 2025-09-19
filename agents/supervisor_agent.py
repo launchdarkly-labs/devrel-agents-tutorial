@@ -216,21 +216,26 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             if pii_types:
                 log_debug(f"🔍 SUPERVISOR: PII types found: {pii_types}")
             
-            # Use sanitized message history to prevent PII leakage
+            # ===== CRITICAL SECURITY BOUNDARY: PII ISOLATION =====
+            # Support agent must NEVER see raw messages containing PII
+            # Only sanitized/redacted messages are passed through this boundary
             if sanitized_messages:
-                support_messages = sanitized_messages
-                log_debug(f"🔒 SECURITY ENFORCED: Using {len(sanitized_messages)} sanitized messages for support agent")
+                # Include conversation history + current redacted message
+                support_messages = sanitized_messages + [HumanMessage(content=processed_input)]
+                log_debug(f"🔒 SECURITY ENFORCED: Using {len(sanitized_messages)} sanitized messages + current redacted message for support agent")
             else:
-                support_messages = [HumanMessage(content=processed_input)]
-                log_debug(f"⚠️ FALLBACK: No sanitized messages, using redacted text only")
+                support_messages = [HumanMessage(content=processed_input)]  # Fallback to redacted current message only
+                log_debug(f"⚠️ FALLBACK: No sanitized messages, using redacted current message only")
             
-            # Prepare support agent input with sanitized messages
+            # ===== SUPPORT AGENT COMPLETE PII ISOLATION =====
+            # This input contains ONLY sanitized/redacted content
+            # Support agent operates in completely PII-free environment
             support_input = {
-                "user_input": processed_input,
+                "user_input": processed_input,  # Redacted text only
                 "response": "",
                 "tool_calls": [],
                 "tool_details": [],
-                "messages": support_messages
+                "messages": support_messages  # Sanitized conversation history only
             }
             
             # Execute support agent
