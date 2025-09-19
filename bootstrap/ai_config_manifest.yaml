@@ -114,15 +114,7 @@ project:
             temperature: 0.3
             
       targeting:
-        rules:
-          - segments: ["eu-free"]
-            variation: "supervisor-basic"
-          - segments: ["eu-paid"] 
-            variation: "supervisor-basic"
-          - segments: ["other-free"]
-            variation: "supervisor-basic"
-          - segments: ["other-paid"]
-            variation: "supervisor-basic"
+        rules: []
         defaultVariation: "supervisor-basic"
 
     # Security agent for PII detection with geographic privacy compliance
