@@ -67,62 +67,39 @@ def send_chat_request(user, query_data):
         return None
 
 def simulate_feedback(response_data, query_data):
-    """Simulate user feedback - this is where we fake thumbs up/down"""
-    
-    # Simple rules that anyone can understand and modify:
-    thumbs_up_score = 0
-    reasons = []
-    
+    """Simulate only user thumbs up/down decision - based on realistic user behavior"""
+
+    # Simple baseline satisfaction rate (mimics real user feedback patterns)
+    base_satisfaction_rate = 0.75  # 75% baseline satisfaction
+
+    # Adjust satisfaction based on actual metrics we track in the UI:
+
+    # 1. Response quality indicators (what users actually see)
     response_text = response_data["response"].lower()
     response_length = len(response_data["response"])
     tools_used = response_data["tool_calls"]
-    
-    # Rule 1: Length matters
-    if response_length > 200:
-        thumbs_up_score += 30
-        reasons.append("good length")
-    elif response_length < 100:
-        thumbs_up_score -= 20
-        reasons.append("too short")
-    
-    # Rule 2: Check for good keywords
-    good_keywords = query_data.get("good_response_keywords", [])
-    keyword_matches = sum(1 for keyword in good_keywords if keyword.lower() in response_text)
-    if keyword_matches > 0:
-        thumbs_up_score += 25 * keyword_matches
-        reasons.append(f"found {keyword_matches} keywords")
-    
-    # Rule 3: Research queries should mention papers
-    if query_data.get("type") == "research":
-        if any(word in response_text for word in ["paper", "research", "arxiv", "study"]):
-            thumbs_up_score += 20
-            reasons.append("mentions research")
-        else:
-            thumbs_up_score -= 30
-            reasons.append("missing research content")
-    
-    # Rule 4: Tools used appropriately  
-    if len(tools_used) > 0:
-        thumbs_up_score += 15
-        reasons.append("used tools")
-    
-    # Rule 5: Negative signals
-    if any(phrase in response_text for phrase in ["i don't know", "i can't help", "i apologize"]):
-        thumbs_up_score -= 25
-        reasons.append("unhelpful response")
-    
-    # Convert score to thumbs up/down (add some randomness to make it realistic)
-    random_factor = random.randint(-10, 10)
-    final_score = thumbs_up_score + random_factor
-    
-    thumbs_up = final_score > 20  # If score is above 20, it's a thumbs up
-    rating = max(1, min(5, round((final_score + 40) / 20)))  # Convert to 1-5 scale
-    
+
+    satisfaction_modifier = 0
+
+    # Obvious quality issues that users notice
+    if response_length < 50:
+        satisfaction_modifier -= 0.3  # Very short responses are unsatisfying
+    elif any(phrase in response_text for phrase in ["i don't know", "i can't help", "sorry, i cannot"]):
+        satisfaction_modifier -= 0.4  # Users don't like "can't help" responses
+
+    # Positive indicators users notice
+    if len(tools_used) > 0 and query_data.get("type") == "research":
+        satisfaction_modifier += 0.1  # Users like when research tools are used for research queries
+
+    # Final satisfaction rate with randomness to simulate individual user preferences
+    final_satisfaction_rate = base_satisfaction_rate + satisfaction_modifier + random.uniform(-0.1, 0.1)
+    final_satisfaction_rate = max(0.1, min(0.9, final_satisfaction_rate))  # Keep between 10-90%
+
+    thumbs_up = random.random() < final_satisfaction_rate
+
     return {
         "thumbs_up": thumbs_up,
-        "rating": rating,
-        "score": final_score,
-        "reasons": reasons
+        "satisfaction_rate": final_satisfaction_rate  # For debugging only
     }
 
 def send_feedback(response_data, user_id, query_data, feedback_data):

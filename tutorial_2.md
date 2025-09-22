@@ -18,6 +18,16 @@ In the next 18 minutes, you'll transform your basic multi-agent system with:
 
 ## Prerequisites
 
+> **⚠️ CRITICAL: Naming Requirements**
+>
+> The bootstrap script depends on exact naming from Part 1. You **MUST** have used these names:
+> - **Project**: `multi-agent-chatbot`
+> - **AI Configs**: `supervisor-agent`, `security-agent`, `support-agent`
+> - **Tools**: `search_v2`, `reranking`
+> - **Variations**: `supervisor-basic`, `pii-detector`, `rag-search-enhanced`
+>
+> If you used different names in Part 1, you'll need to either rename your resources or create new ones with the correct names before proceeding.
+
 You'll need:
 - **Completed [Part 1**: Working multi-agent system with basic AI Configs](README.md)
 - **Same environment**: Python 3.9+, uv, API keys from [Part 1](README.md)

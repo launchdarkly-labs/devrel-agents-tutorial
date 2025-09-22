@@ -69,6 +69,15 @@ First, you need to get your LaunchDarkly SDK key by creating a project:
 
 3. **Create a new project** called "multi-agent-chatbot"
 
+> **⚠️ IMPORTANT: Naming Requirements for Part 2**
+>
+> For the bootstrap script in Part 2 to work correctly, you **MUST** use these exact names:
+> - **Project**: `multi-agent-chatbot`
+> - **AI Configs**: `supervisor-agent`, `security-agent`, `support-agent`
+> - **Tools**: `search_v2`, `reranking` (created in Part 1)
+> - **Variations**: `supervisor-basic`, `pii-detector`, `rag-search-enhanced`
+>
+> The configuration files are hardcoded to use these specific keys.
 
 <div align="center">
 
