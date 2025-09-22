@@ -22,6 +22,7 @@ You'll need:
 - **Completed [Part 1**: Working multi-agent system with basic AI Configs](README.md)
 - **Same environment**: Python 3.9+, uv, API keys from [Part 1](README.md)
 - **LaunchDarkly API key**: Add `LD_API_KEY=your-api-key` to your `.env` file ([get API key](https://launchdarkly.com/docs/home/account/api))
+- **Mistral API key**: Add `MISTRAL_API_KEY=your-mistral-key` to your `.env` file ([get API key](https://console.mistral.ai/)) - required for EU privacy features
 
 ### Getting Your LaunchDarkly API Key
 
