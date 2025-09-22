@@ -1,3 +1,14 @@
+---
+title: "Build a Production Multi-Agent System with LangGraph and LaunchDarkly in 20 Minutes"
+published: true
+description: "Learn to build LangGraph multi-agent workflows with RAG search and dynamic AI configuration using LaunchDarkly AI Configs - no deployments needed for changes."
+tags: langgraph, ai, agents, launchdarkly, rag, python
+canonical_url: "https://docs.launchdarkly.com/home/ai-configs/examples/agents"
+cover_image: "https://dev-to-uploads.s3.amazonaws.com/uploads/articles/your-cover-image.png"
+---
+
+*Originally published on the [LaunchDarkly Documentation](https://docs.launchdarkly.com/home/ai-configs/examples/agents)*
+
 ## Overview
 
 Build a working multi-agent system with dynamic configuration in 20 minutes using LangGraph multi-agent workflows, RAG search, and LaunchDarkly AI Configs.
@@ -43,7 +54,7 @@ First, let's get everything running locally. We'll explain what each piece does 
 ```bash
 # Get the code
 git clone https://github.com/launchdarkly-labs/devrel-agents-tutorial
-cd devrel-agents-tutorial
+cd agents-demo
 
 # Install dependencies (LangGraph, LaunchDarkly SDK, etc.)
 uv sync
@@ -55,28 +66,11 @@ cp .env.example .env
 First, you need to get your LaunchDarkly SDK key by creating a project:
 
 1. **Sign up for LaunchDarkly** at [app.launchdarkly.com](https://app.launchdarkly.com) (free account).
-<Note>If you're a brand new user, after signing up for an account, you'll need to verify your email address. You can skip through the new user onboarding flow after that. </Note>
-2. **Find projects on the side bar:**
 
-<br />
+> If you're a brand new user, after signing up for an account, you'll need to verify your email address. You can skip through the new user onboarding flow after that.
 
-<div align="center">
-
-![Sidebar Projects](screenshots/sidebar_projects_top_half.png)
-*Projects sidebar in the LaunchDarkly app UI.*
-
-</div>
-
+2. **Find projects on the side bar**
 3. **Create a new project** called "multi-agent-chatbot"
-
-
-<div align="center">
-
-![New Project](screenshots/new_project_small.png)
-*Creating a new project in LaunchDarkly.*
-
-</div>
-
 4. **Get your SDK key**:
     
     ⚙️ (bottom of sidebar) → **Projects** → **multi-agent-chatbot** → ⚙️ (to the right) 
@@ -84,15 +78,6 @@ First, you need to get your LaunchDarkly SDK key by creating a project:
     → **Environments** → **Production** → **...** → **SDK key** 
     
     this is your `LD_SDK_KEY`
-
-<br />
-
-<div align="center">
-
-![SDK Key](screenshots/sdk_key_small.png)
-*Location of the SDK key in LaunchDarkly project settings.*
-
-</div>
 
 Now edit `.env` with your keys:
 ```bash
@@ -102,7 +87,8 @@ ANTHROPIC_API_KEY=your-anthropic-key  # Required for Claude models
 ```
 
 This sets up a **LangGraph** application that uses LaunchDarkly to control AI behavior. Think of it like swapping actors, directors, even props mid-performance without stopping the show.
-Do not check the `.env` into your source control. Keep those secrets safe!
+
+> ⚠️ Do not check the `.env` into your source control. Keep those secrets safe!
 
 ## Step 2: Add Your Business Knowledge (2 minutes)
 
@@ -140,86 +126,82 @@ Define the search tools your agents will use.
 
 In the LaunchDarkly app sidebar, click **Library** in the AI section. On the following screen, click the **Tools** tab, then **Create tool**.
 
-<br />
-
-<div align="center">
-
-![Library](screenshots/library_small.png)
-*AI Library section in the LaunchDarkly dashboard sidebar.*
-
-</div>
-
 ### Create the RAG vector search tool:
-Note: we will be creating a simple search_v1 during part 3 when we learn about experimentation.
+
+> Note: we will be creating a simple search_v1 during part 3 when we learn about experimentation.
+
 Create a tool using the following configuration:
-> 
-> **Key:** 
-> ```
-> search_v2
-> ```
->
-> **Description:** 
-> ```
-> Semantic search using vector embeddings
-> ```
->
-> **Schema:**
-> ```json
-> {
->   "properties": {
->     "query": {
->       "description": "Search query for semantic matching",
->       "type": "string"
->     },
->     "top_k": {
->       "description": "Number of results to return",
->       "type": "number"
->     }
->   },
->   "additionalProperties": false,
->   "required": [
->     "query"
->   ]
-> }
-> ```
+
+**Key:** 
+```
+search_v2
+```
+
+**Description:** 
+```
+Semantic search using vector embeddings
+```
+
+**Schema:**
+```json
+{
+  "properties": {
+    "query": {
+      "description": "Search query for semantic matching",
+      "type": "string"
+    },
+    "top_k": {
+      "description": "Number of results to return",
+      "type": "number"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "query"
+  ]
+}
+```
+
 When you're done, click **Save**.
 
 ### Create the reranking tool:
-Back on the Tools section, click **Add tool** to create a new tool. Add the following properties: 
-> 
-> **Key:** 
-> ```
-> reranking
-> ```
->
-> **Description:** 
-> ```
-> Reorders results by relevance using BM25 algorithm
-> ```
->
-> **Schema:**
-> ```json
-> {
->   "properties": {
->     "query": {
->       "description": "Original query for scoring",
->       "type": "string"
->     },
->     "results": {
->       "description": "Results to rerank",
->       "type": "array"
->     }
->   },
->   "additionalProperties": false,
->   "required": [
->     "query",
->     "results"
->   ]
-> }
-> ```
-When you're done, click **Save**.
-The `reranking` tool takes search results from `search_v2` and reorders them using the BM25 algorithm to improve relevance. This hybrid approach combines semantic search (vector embeddings) with lexical matching (keyword-based scoring), making it especially useful for technical terms, product names, and error codes where exact term matching matters more than conceptual similarity.
 
+Back on the Tools section, click **Add tool** to create a new tool. Add the following properties: 
+
+**Key:** 
+```
+reranking
+```
+
+**Description:** 
+```
+Reorders results by relevance using BM25 algorithm
+```
+
+**Schema:**
+```json
+{
+  "properties": {
+    "query": {
+      "description": "Original query for scoring",
+      "type": "string"
+    },
+    "results": {
+      "description": "Results to rerank",
+      "type": "array"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "query",
+    "results"
+  ]
+}
+```
+
+When you're done, click **Save**.
+
+The `reranking` tool takes search results from `search_v2` and reorders them using the BM25 algorithm to improve relevance. This hybrid approach combines semantic search (vector embeddings) with lexical matching (keyword-based scoring), making it especially useful for technical terms, product names, and error codes where exact term matching matters more than conceptual similarity.
 
 > **🔍 How Your RAG Architecture Works**
 >
@@ -233,79 +215,60 @@ Create LaunchDarkly AI Configs to control your **LangGraph** multi-agent system 
 
 1. In the LaunchDarkly dashboard sidebar, navigate to **AI Configs** and click **Create New**
 2. Select `🤖 Agent-based`
-
-<br />
-
-<div align="center">
-
-![Agent Based](screenshots/agent-based_small.png)
-*Selecting the Agent-based configuration type.*
-
-</div>
-
 3. Name it `supervisor-agent`
 4. Add this configuration:
 
-> 
-> **variation:** 
-> ```
-> supervisor-basic
-> ```
->
-> **Model configuration:** 
-> ```
-> Anthropic
-> ``` 
-> ```
-> claude-3-7-sonnet-latest
-> ```
->
-> → **Add parameters**
-> → **Click Custom parameters**
-> ```json
-> {"max_tool_calls":5}
-> ```
->
-> **Goal or task:** 
-> ```
-> You are a helpful assistant that can search documentation and research papers. When search results are available, prioritize information from those results over your general knowledge to provide the most accurate and up-to-date responses. Use available tools to search the knowledge base and external research databases to answer questions accurately and comprehensively.
-> ```
-Click **Review and save**. Now enable your AI Config by switching to the **Targeting** tab and editing the default rule to serve the variation you just created:
+**variation:** 
+```
+supervisor-basic
+```
 
-<br />
+**Model configuration:** 
+```
+Anthropic
+``` 
+```
+claude-3-7-sonnet-latest
+```
 
-<div align="center">
+→ **Add parameters**
+→ **Click Custom parameters**
+```json
+{"max_tool_calls":5}
+```
 
-![Targeting Configuration](screenshots/targeting.png)
-*Targeting tab showing the default rule configuration for AI agents.*
+**Goal or task:** 
+```
+You are a helpful assistant that can search documentation and research papers. When search results are available, prioritize information from those results over your general knowledge to provide the most accurate and up-to-date responses. Use available tools to search the knowledge base and external research databases to answer questions accurately and comprehensively.
+```
 
-</div>
+Click **Review and save**. Now enable your AI Config by switching to the **Targeting** tab and editing the default rule to serve the variation you just created.
 
 Click **Edit** on the Default rule, change it to serve your `supervisor-basic` variation, and save with a note like "Enabling new agent config".
-The supervisor **agent** demonstrates **LangGraph** orchestration by routing requests based on content analysis rather than rigid rules. **LangGraph** enables this **agent** to maintain conversation context and make intelligent routing decisions that adapt to user needs and LaunchDarkly AI Config parameters.
 
+The supervisor **agent** demonstrates **LangGraph** orchestration by routing requests based on content analysis rather than rigid rules. **LangGraph** enables this **agent** to maintain conversation context and make intelligent routing decisions that adapt to user needs and LaunchDarkly AI Config parameters.
 
 ### Create the Security Agent
 
 Similarly, create another AI Config called `security-agent`
 
-> 
-> **variation:** 
-> ```
-> pii-detector
-> ```
->
-> **Model configuration:** 
-> ```
-> Anthropic
-> ``` 
-> ```
-> claude-3-7-sonnet-latest
-> ```
->
-> **Goal or task:** 
-> ```
->You are a privacy agent that REMOVES PII and formats the input for another process. Analyze the input text and identify any personally identifiable information including: Email addresses, Phone numbers, Social Security Numbers, Names (first, last, full names), Physical addresses, Credit card numbers, Driver's license numbers, Any other sensitive personal data. Respond with: detected: true if any PII was found, false otherwise,types: array of PII types found (e.g., ['email', 'name', 'phone']), redacted: the input text with PII replaced by [REDACTED], keeping the text readable and natural. Examples: Input: 'My email is john@company.com and I need help', Output: detected=true, types=['email'], redacted='My email is [REDACTED] and I need help'. Input: 'I need help with my account',Output: detected=false, types=[], redacted='I need help with my account'. Input: 'My name is Sarah Johnson and my phone is 555-1234', Output: detected=true, types=['name', 'phone'], redacted='My name is [REDACTED] and my phone is [REDACTED]'. Be thorough in your analysis and err on the side of caution when identifying potential PII. ```
+**variation:** 
+```
+pii-detector
+```
+
+**Model configuration:** 
+```
+Anthropic
+``` 
+```
+claude-3-7-sonnet-latest
+```
+
+**Goal or task:** 
+```
+You are a privacy agent that REMOVES PII and formats the input for another process. Analyze the input text and identify any personally identifiable information including: Email addresses, Phone numbers, Social Security Numbers, Names (first, last, full names), Physical addresses, Credit card numbers, Driver's license numbers, Any other sensitive personal data. Respond with: detected: true if any PII was found, false otherwise,types: array of PII types found (e.g., ['email', 'name', 'phone']), redacted: the input text with PII replaced by [REDACTED], keeping the text readable and natural. Examples: Input: 'My email is john@company.com and I need help', Output: detected=true, types=['email'], redacted='My email is [REDACTED] and I need help'. Input: 'I need help with my account',Output: detected=false, types=[], redacted='I need help with my account'. Input: 'My name is Sarah Johnson and my phone is 555-1234', Output: detected=true, types=['name', 'phone'], redacted='My name is [REDACTED] and my phone is [REDACTED]'. Be thorough in your analysis and err on the side of caution when identifying potential PII.
+```
 
 This agent detects PII and provides detailed redaction information, showing exactly what sensitive data was found and how it would be handled for compliance and transparency.
 
@@ -315,44 +278,33 @@ This agent detects PII and provides detailed redaction information, showing exac
 
 Finally, create `support-agent`
 
+**variation:** 
+```
+rag-search-enhanced
+```
 
-> 
-> **variation:** 
-> ```
-> rag-search-enhanced
-> ```
->
-> **Model configuration:** 
-> ```
-> Anthropic
-> ``` 
-> ```
-> claude-3-7-sonnet-latest
-> ```
->
-> Click **Attach tools**.
-> 
-> select:  **✅ reranking** **✅ search_v2**
->
-> **Goal or task:** 
-> ```
-> You are a helpful assistant that can search documentation and research papers. When search results are available, prioritize information from those results over your general knowledge to provide the most accurate and up-to-date responses. Use available tools to search the knowledge base and external research databases to answer questions accurately and comprehensively.
-> ```
+**Model configuration:** 
+```
+Anthropic
+``` 
+```
+claude-3-7-sonnet-latest
+```
+
+Click **Attach tools**.
+
+select: **✅ reranking** **✅ search_v2**
+
+**Goal or task:** 
+```
+You are a helpful assistant that can search documentation and research papers. When search results are available, prioritize information from those results over your general knowledge to provide the most accurate and up-to-date responses. Use available tools to search the knowledge base and external research databases to answer questions accurately and comprehensively.
+```
 
 This **agent** combines **LangGraph** workflow management with your **RAG** tools. **LangGraph** enables the **agent** to chain multiple tool calls together: first using **RAG** for document retrieval, then semantic reranking, all while maintaining conversation state and handling error recovery gracefully.
 
 **Remember to switch to the Targeting tab and enable this agent the same way - edit the default rule to serve your `rag-search-enhanced` variation and save it.**
 
-When you are done, you should have three enabled AI Config Agents as shown below.
-
-<br />
-
-<div align="center">
-
-![Agents](screenshots/agents_small.png)
-*Overview of all three configured AI agents in LaunchDarkly.*
-
-</div>
+When you are done, you should have three enabled AI Config Agents.
 
 ## Step 6: Launch Your System (2 minutes)
 
@@ -360,7 +312,7 @@ Start the system:
 
 ```bash
 # Terminal 1: Start the backend
-uv run uvicorn api.main:app --reload --port 8001
+uv run uvicorn api.main:app --reload --port 8000
 ```
 
 ```bash
@@ -385,15 +337,6 @@ Or ask about your specific domain: "What's our refund policy?"
 - Which agents are activated
 - What models and tools are being used
 - Text after redaction
-
-<br />
-
-<div align="center">
-
-![UI](screenshots/ui_small.png)
-*Chat interface showing the multi-agent workflow in action.*
-
-</div>
 
 Watch LangGraph in action: the supervisor agent first routes to the security agent, which detects PII. It then passes control to the support agent, which uses your RAG system for document search. LangGraph maintains state across this multi-agent workflow so that context flows seamlessly between agents.
 
@@ -454,11 +397,11 @@ LaunchDarkly controls both **LangGraph** behavior and **RAG** parameters without
 
 Your multi-agent system is running with dynamic control and ready for optimization.
 
- **In Part 2**, we'll add:
+**In Part 2**, we'll add:
 
-- Geographic-based privacy rules (strict for EU, standard for US)
-- MCP tools for external data (GitHub, Slack, databases)
-- Business tier configurations (free, pro, enterprise)
+- Geographic-based privacy rules (strict for EU, standard for Other)
+- MCP tools for external data
+- Business tier configurations (free, paid)
 - Cost optimization strategies
 
 **In Part 3**, we'll run A/B experiments to prove which configurations actually work best with real data.
@@ -483,8 +426,10 @@ Every change is instant, measurable, and reversible.
 
 ## Related Resources
 
-Explore the **[LaunchDarkly MCP Server](/home/getting-started/mcp)** - enable AI agents to access feature flag configurations, user segments, and experimentation data directly through the Model Context Protocol.
+Explore the **[LaunchDarkly MCP Server](https://docs.launchdarkly.com/home/getting-started/mcp)** - enable AI agents to access feature flag configurations, user segments, and experimentation data directly through the Model Context Protocol.
 
 ---
 
 *Questions? Issues? Reach out at `aiproduct@launchdarkly.com` or open an issue in the [GitHub repo](https://github.com/launchdarkly-labs/devrel-agents-tutorial/issues).*
+
+*This post was originally published on the [LaunchDarkly Documentation site](https://docs.launchdarkly.com/home/ai-configs/examples/agents). Follow [@LaunchDarkly](https://twitter.com/launchdarkly) for more AI and feature flag content!*
