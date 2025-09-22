@@ -96,17 +96,6 @@ cd bootstrap
 uv run python create_configs.py
 ```
 
-<<<<<<< HEAD
-This creates:
-- **3 essential tools**: `search_v1` (basic search), `arxiv_search` (MCP), `semantic_scholar` (MCP)
-- **4 combined user segments** with geographic and tier targeting rules  
-- **3 AI configs** (supervisor, security, support) with multiple variations
-- **Complete targeting rules** that route users to appropriate variations
-
-**Tool Creation**: The CLI programmatically creates only the tools needed for Tutorial 2 (search_v1 and MCP research tools), while reusing `search_v2` and `reranking` tools from Part 1. This approach lets you incrementally add capabilities without recreating existing infrastructure.
-
-<div align="center">
-=======
 The configuration script intelligently handles existing resources from Part 1:
 - **Reuses**: `supervisor-agent` (identical), existing `search_v2` and `reranking` tools
 - **Updates**: `security-agent` with additional geographic compliance config variations
@@ -114,12 +103,11 @@ The configuration script intelligently handles existing resources from Part 1:
 
 **LaunchDarkly Resources Added**
 - **3 new tools**: `search_v1` (basic search), `arxiv_search` and `semantic_scholar` (MCP research tools)
-- **4 combined user segments** with [geographic and tier targeting rules](https://launchdarkly.com/docs/home/flags/segments)  
+- **4 combined user segments** with [geographic and tier targeting rules](https://launchdarkly.com/docs/home/flags/segments)
 - **3 [AI Configs](https://launchdarkly.com/docs/home/ai-configs) Variations** with intelligent handling:
   - **security-agent**: Updated with 2 new geographic variations (basic vs strict GDPR)
   - **support-agent-business-tiers**: New config with 5 variations (geographic × tier matrix)
 - **Complete [targeting rules](https://launchdarkly.com/docs/home/flags/target-rules)** that route users to appropriate variations
->>>>>>> cbcc14b1d40e2484023d83a04dc122652de0577e
 
 ## Step 3: See How Smart Segmentation Works (2 minutes)
 
@@ -156,12 +144,8 @@ Open http://localhost:8501 and test different user types:
 3. **Watch Workflow**: See which model and tools get used for each user type
 4. **Verify Routing**: EU users get Mistral, Other users get GPT, Paid users get MCP tools
 
-<div align="center">
-
 ![Chat Interface User Selection](screenshots/chat_interface.png)
 *Select different user types to test segmentation in the chat interface*
-
-</div>
 
 ## What You've Accomplished
 
