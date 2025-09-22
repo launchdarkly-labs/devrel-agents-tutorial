@@ -114,8 +114,14 @@ class AgentService:
             # Extract actual variation key from LaunchDarkly AI config
             def get_variation_key(ai_config, agent_name):
                 try:
-                    config_dict = ai_config.to_dict()
-                    return config_dict.get('variation', {}).get('key', 'default')
+                    # The variation key is stored in the tracker object
+                    if hasattr(ai_config, 'tracker') and hasattr(ai_config.tracker, '_variation_key'):
+                        variation_key = ai_config.tracker._variation_key
+                        log_debug(f"🎯 VARIATION EXTRACTED for {agent_name}: {variation_key}")
+                        return variation_key
+                    else:
+                        log_debug(f"🎯 VARIATION NOT FOUND for {agent_name}: no tracker._variation_key")
+                        return 'default'
                 except Exception as e:
                     log_debug(f"🎯 VARIATION EXTRACTION ERROR for {agent_name}: {e}")
                     return 'default'

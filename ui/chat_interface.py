@@ -336,7 +336,7 @@ with col2:
 col4, col5, col6 = st.columns(3)
 with col4:
     if st.button("Security Check", use_container_width=True):
-        st.session_state.example_query = "My email is john.doe@example.com, I am a VP at StarSystems, and I need help with my account"
+        st.session_state.example_query = "My name is John Doe, email: john.doe@example.com. I'm a VP at StarSystems, and I need help with my account"
 
 with col5:
     if st.button("ArXiv Research", use_container_width=True):

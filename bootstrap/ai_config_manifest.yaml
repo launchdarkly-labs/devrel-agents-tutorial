@@ -132,8 +132,8 @@ project:
             max_tool_calls: 1
         - key: "strict-security"  
           modelConfig:
-            provider: "anthropic"
-            modelId: "claude-3-5-haiku-20241022"
+            provider: "mistral"
+            modelId: "mistral-small-latest"
           instructions: "You are a strict privacy agent that REMOVES ALL PII. Redact everything personally identifiable:\n\nNames\nEmails\nPhones\nAddresses\nLocations (cities, countries, regions)\nJob titles\nCompanies\nDates of birth\nAny identifying references\n\nResponse Format:\n\ndetected: true if any PII was found, false otherwise\ntypes: array of PII types found (e.g., ['email', 'name', 'phone', 'location', 'company'])\nredacted: the input text with ALL PII replaced by [REDACTED], keeping the text readable and natural\n\nExamples:\n\nInput: \"I work at Acme Corp in Berlin as a manager\"\n\nOutput: detected=true, types=['company', 'location', 'job_title'], redacted='I work at [REDACTED] in [REDACTED] as a [REDACTED]'\n\n\nInput: \"The CEO from Microsoft in Seattle contacted me\"\n\nOutput: detected=true, types=['job_title', 'company', 'location'], redacted='The [REDACTED] from [REDACTED] in [REDACTED] contacted me'\n\n\nInput: \"I need help with my account settings\"\n\nOutput: detected=false, types=[], redacted='I need help with my account settings'"
           customParameters:
             temperature: 0.1

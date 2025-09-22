@@ -199,9 +199,10 @@ class MultiAgentBootstrap:
         # Map to correct LaunchDarkly model config keys
         model_config_key_map = {
             "claude-3-5-sonnet-20241022": "Anthropic.claude-3-7-sonnet-latest",
-            "claude-3-5-haiku-20241022": "Anthropic.claude-3-5-haiku-20241022", 
+            "claude-3-5-haiku-20241022": "Anthropic.claude-3-5-haiku-20241022",
             "gpt-4o": "OpenAI.gpt-4o",
-            "gpt-4o-mini": "OpenAI.gpt-4o-mini-2024-07-18"
+            "gpt-4o-mini": "OpenAI.gpt-4o-mini-2024-07-18",
+            "mistral-small-latest": "Mistral.mistral-small-latest"
         }
         
         model_config_key = model_config_key_map.get(model_id)
@@ -268,9 +269,10 @@ class MultiAgentBootstrap:
         # Map to correct LaunchDarkly model config keys
         model_config_key_map = {
             "claude-3-5-sonnet-20241022": "Anthropic.claude-3-7-sonnet-latest",
-            "claude-3-5-haiku-20241022": "Anthropic.claude-3-5-haiku-20241022", 
+            "claude-3-5-haiku-20241022": "Anthropic.claude-3-5-haiku-20241022",
             "gpt-4o": "OpenAI.gpt-4o",
-            "gpt-4o-mini": "OpenAI.gpt-4o-mini-2024-07-18"
+            "gpt-4o-mini": "OpenAI.gpt-4o-mini-2024-07-18",
+            "mistral-small-latest": "Mistral.mistral-small-latest"
         }
         
         model_config_key = model_config_key_map.get(model_id)
@@ -756,8 +758,10 @@ def main():
         config_key = ai_config["key"]
         if config_key not in existing_config_keys:
             continue
-        if "targeting" in ai_config:
+        if "targeting" in ai_config and ai_config["targeting"].get("rules"):
             bootstrap.update_targeting(project_key, config_key, ai_config["targeting"])
+        elif "targeting" in ai_config and not ai_config["targeting"].get("rules"):
+            print(f"  ⏭️  Skipping targeting for '{config_key}' (empty rules)")
     print()
 
     print("✨ Bootstrap complete!")
