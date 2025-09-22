@@ -7,6 +7,37 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+# Load sample users for LaunchDarkly targeting
+try:
+    with open('data/fake_users.json', 'r') as f:
+        sample_users = json.load(f)['users']
+        print(f"🔍 UI: Loaded {len(sample_users)} sample users from fake_users.json")
+except Exception as e:
+    print(f"⚠️ UI: Failed to load fake_users.json: {e}")
+    sample_users = []
+
+# Function to get user context for LaunchDarkly targeting
+def get_user_context(user_id, sample_users):
+    """Get user context (country, region, plan) for LaunchDarkly targeting"""
+    print(f"🔍 UI: Getting user context for user_id={user_id}")
+    for user in sample_users:
+        if user['id'] == user_id:
+            context = {
+                "country": user['country'],
+                "region": user['region'], 
+                "plan": user['plan']
+            }
+            print(f"🔍 UI: Found user context: {context}")
+            return context
+    # Default context for unknown users
+    default_context = {
+        "country": "US",
+        "region": "other",
+        "plan": "free"
+    }
+    print(f"🔍 UI: User not found, using default context: {default_context}")
+    return default_context
+
 # Get API configuration from environment
 API_HOST = os.getenv('API_HOST', 'localhost')
 API_PORT = os.getenv('API_PORT', '8000')
@@ -305,7 +336,7 @@ with col2:
 col4, col5, col6 = st.columns(3)
 with col4:
     if st.button("Security Check", use_container_width=True):
-        st.session_state.example_query = "My email is john.doe@example.com and I need help with my account"
+        st.session_state.example_query = "My name is John Doe, email: john.doe@example.com. I'm a VP at StarSystems, and I need help with my account"
 
 with col5:
     if st.button("ArXiv Research", use_container_width=True):
@@ -323,12 +354,17 @@ with col7:
 
 st.markdown("---")
 
-# Initialize session state
+# Initialize session state with dual history for PII isolation
 if "messages" not in st.session_state:
-    st.session_state.messages = []
+    st.session_state.messages = []  # Raw messages (display only, contains PII)
+
+# SECURITY BOUNDARY: Sanitized history for API calls
+# This ensures support agent never sees raw PII from conversation history
+if "sanitized_messages" not in st.session_state:
+    st.session_state.sanitized_messages = []  # PII-free messages (API calls only)
 
 if "user_id" not in st.session_state:
-    st.session_state.user_id = "user_001"
+    st.session_state.user_id = "user_other_paid_001"
 
 # Display chat history
 for message in st.session_state.messages:
@@ -408,17 +444,26 @@ for message in st.session_state.messages:
                     for agent_config in metadata["agent_configurations"]:
                         st.markdown(f"**{agent_config['agent_name']}:**")
                         
-                        # Use shared tool processing function
-                        tools = agent_config.get("tools", [])
+                        # Process both available tools and tools used
+                        tools_available = agent_config.get("tools", [])
+                        tools_used = agent_config.get("tools_used", [])
                         tool_details = agent_config.get("tool_details", [])
-                        processed_tools = process_tool_display(tools, tool_details)
+                        
+                        # Process tools used with details for display
+                        processed_tools_used = process_tool_display(tools_used, tool_details)
                         
                         config_data = {
-                            "model": agent_config["model"]
+                            "model": agent_config["model"],
+                            "variation_key": agent_config["variation_key"]
                         }
                         
-                        if processed_tools:
-                            config_data["tools_used"] = processed_tools
+                        # Show available tools if any
+                        if tools_available:
+                            config_data["tools_available"] = tools_available
+                        
+                        # Show tools actually used if any
+                        if processed_tools_used:
+                            config_data["tools_used"] = processed_tools_used
                         
                         # Show redacted text for supervisor agent only if PII was detected
                         if agent_config.get("agent_name") == "supervisor-agent":
@@ -444,7 +489,7 @@ for message in st.session_state.messages:
                             # This will be passed from the API response
                             agent_data = metadata.get("agent_configurations", [])
                             for agent in agent_data:
-                                if agent.get("agent_name") == "security_agent":
+                                if agent.get("agent_name") == "security-agent":
                                     if agent.get("detected") is not None:
                                         config_data["security_clearance"] = {
                                             "detected": agent.get("detected"),
@@ -465,16 +510,22 @@ for message in st.session_state.messages:
                 else:
                     st.markdown("*Console output not captured*")
 
-# Handle example query selection
-if "example_query" in st.session_state:
-    prompt = st.session_state.example_query
-    del st.session_state.example_query
-else:
-    prompt = None
+# Handle input sources
+prompt = None
 
-# Chat input
-if not prompt:
-    prompt = st.chat_input("Ask questions about your documents or request research...")
+# Check for example query first
+if "example_query" in st.session_state and st.session_state.example_query:
+    prompt = st.session_state.example_query
+
+# Always show chat input - it should never disappear
+user_text = st.chat_input("Ask questions about your documents or request research...")
+if user_text is not None:
+    user_text = user_text.strip()
+    if user_text:
+        # Override example query if user types something
+        prompt = user_text
+    else:
+        st.warning("Please enter a question or pick an example query.")
 
 if prompt:
     # Add user message
@@ -486,11 +537,18 @@ if prompt:
     
     # Get agent response
     try:
+        # Get user context for LaunchDarkly targeting
+        user_context = get_user_context(st.session_state.user_id, sample_users)
+        
+        # SECURITY BOUNDARY: Send only sanitized conversation history to API
+        # Raw messages (with PII) are never sent to backend - support agent isolation maintained
         response = requests.post(
             f"{API_BASE_URL}/chat",
             json={
                 "user_id": st.session_state.user_id,
-                "message": prompt
+                "message": prompt,  # Raw current message (security agent will process)
+                "user_context": user_context,
+                "sanitized_conversation_history": st.session_state.sanitized_messages  # PII-free history only
             }
         )
         
@@ -499,6 +557,27 @@ if prompt:
             
             # Extract console logs if available
             console_logs = data.get("console_logs", [])
+            
+            # SECURITY BOUNDARY: Extract sanitized messages from security agent
+            # Support agent only ever sees these PII-free versions
+            sanitized_user_message = prompt  # Default fallback
+            
+            # Extract redacted user message from security agent output
+            if "agent_configurations" in data:
+                for agent_config in data["agent_configurations"]:
+                    if agent_config.get("agent_name") == "security-agent" and agent_config.get("redacted"):
+                        sanitized_user_message = agent_config["redacted"]
+                        break
+            
+            # Update sanitized conversation history (PII-free, for API calls)
+            st.session_state.sanitized_messages.append({
+                "role": "user",
+                "content": sanitized_user_message  # Redacted version only
+            })
+            st.session_state.sanitized_messages.append({
+                "role": "assistant",
+                "content": data["response"]
+            })
             
             # Add assistant message with all agent configurations
             metadata = {
@@ -614,17 +693,26 @@ if prompt:
                         for agent_config in data["agent_configurations"]:
                             st.markdown(f"**{agent_config['agent_name']}:**")
                             
-                            # Use shared tool processing function
-                            tools = agent_config.get("tools", [])
+                            # Process both available tools and tools used
+                            tools_available = agent_config.get("tools", [])
+                            tools_used = agent_config.get("tools_used", [])
                             tool_details = agent_config.get("tool_details", [])
-                            processed_tools = process_tool_display(tools, tool_details)
+                            
+                            # Process tools used with details for display
+                            processed_tools_used = process_tool_display(tools_used, tool_details)
                             
                             config_data = {
-                                "model": agent_config["model"]
+                                "model": agent_config["model"],
+                                "variation_key": agent_config["variation_key"]
                             }
                             
-                            if processed_tools:
-                                config_data["tools_used"] = processed_tools
+                            # Show available tools if any
+                            if tools_available:
+                                config_data["tools_available"] = tools_available
+                            
+                            # Show tools actually used if any
+                            if processed_tools_used:
+                                config_data["tools_used"] = processed_tools_used
                             
                             # Show redacted text for supervisor agent only if PII was detected
                             if agent_config.get("agent_name") == "supervisor-agent":
@@ -653,7 +741,8 @@ if prompt:
                         processed_tools = process_tool_display(tools_used, tool_details)
                         
                         config_data = {
-                            "model": data["model"]
+                            "model": data["model"],
+                            "variation_key": data["variation_key"]
                         }
                         
                         if processed_tools:
@@ -667,6 +756,10 @@ if prompt:
                             st.code(log, language="text")
                     else:
                         st.markdown("*Console output not captured*")
+
+            # Clear example query only after successful processing to avoid losing it on reruns
+            if "example_query" in st.session_state and st.session_state.example_query == prompt:
+                del st.session_state.example_query
         else:
             st.error(f"Error: {response.status_code}")
             
@@ -677,18 +770,22 @@ if prompt:
 with st.sidebar:
     st.header("Context")
     
-    # Load sample users for context
-    import json
-    try:
-        with open('/Users/ld_scarlett/Documents/Github/agents-demo/data/fake_users.json', 'r') as f:
-            sample_users = json.load(f)['users']
-    except:
-        sample_users = []
-    
     # User ID selection with improved styling
     user_options = [user['id'] for user in sample_users] + ['user_001']
-    selected_user_id = st.selectbox("User ID", user_options, index=user_options.index(st.session_state.user_id) if st.session_state.user_id in user_options else 0,
+    # Find default index for user_other_paid_001
+    default_index = 0
+    if "user_other_paid_001" in user_options:
+        default_index = user_options.index("user_other_paid_001")
+    elif st.session_state.user_id in user_options:
+        default_index = user_options.index(st.session_state.user_id)
+    
+    selected_user_id = st.selectbox("User ID", user_options, index=default_index,
                                    help="Different User IDs may receive different AI configurations via LaunchDarkly")
+    
+    # Show user context for selected user
+    if sample_users:
+        user_context = get_user_context(selected_user_id, sample_users)
+        st.caption(f"Context: {user_context['country']} {user_context['plan']} user")
     
     if selected_user_id != st.session_state.user_id:
         st.session_state.user_id = selected_user_id
