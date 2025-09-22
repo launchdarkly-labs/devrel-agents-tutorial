@@ -146,7 +146,7 @@ Check your LaunchDarkly project:
 Validate your segmentation with the test script:
 
 ```bash
-uv run python test_tutorial_2.py
+uv run python api/segmentation_test.py
 ```
 
 The script tests 4 user scenarios:
