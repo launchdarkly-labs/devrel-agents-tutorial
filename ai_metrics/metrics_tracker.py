@@ -320,7 +320,7 @@ class AIMetricsTracker:
         """Finalize workflow tracking and return comprehensive metrics"""
         total_duration_ms = (time.time() - self.start_time) * 1000
         total_tool_calls = sum(len(agent.tool_calls) for agent in self.agent_metrics)
-        
+
         metrics = MultiAgentMetrics(
             total_duration_ms=total_duration_ms,
             agent_metrics=self.agent_metrics,
@@ -330,6 +330,9 @@ class AIMetricsTracker:
             final_response_length=len(final_response),
             total_tool_calls=total_tool_calls
         )
+
+        # Track tool efficiency metric for experimentation
+        self._track_tool_efficiency(total_tool_calls)
         
         # Log comprehensive metrics
         metrics_dict = metrics.to_dict()
@@ -433,3 +436,31 @@ class AIMetricsTracker:
         except Exception as e:
             print(f"❌ FEEDBACK SUBMISSION ERROR: {e}")
             return False
+
+    def _track_tool_efficiency(self, total_tool_calls: int):
+        """Track tool efficiency metric for A/B testing"""
+        try:
+            if self.ld_tracker and hasattr(self.ld_tracker, 'track_score'):
+                # Track average tool calls per query as a score metric
+                self.ld_tracker.track_score("tool_efficiency", total_tool_calls)
+                print(f"🔧 TOOL EFFICIENCY: {total_tool_calls} tools used")
+        except Exception as e:
+            print(f"⚠️  TOOL EFFICIENCY TRACKING ERROR: {e}")
+
+    def check_guardrails(self, duration_ms: float, error_occurred: bool) -> bool:
+        """Check if metrics violate safety guardrails for experiments"""
+        guardrails_violated = []
+
+        # Guardrail 1: Response time threshold (10 seconds)
+        if duration_ms > 10000:
+            guardrails_violated.append(f"Response time exceeded: {duration_ms:.0f}ms > 10000ms")
+
+        # Guardrail 2: Error rate threshold (tracked cumulatively)
+        if error_occurred:
+            guardrails_violated.append("Error occurred during processing")
+
+        if guardrails_violated:
+            print(f"🚨 GUARDRAIL VIOLATION: {', '.join(guardrails_violated)}")
+            return False
+
+        return True

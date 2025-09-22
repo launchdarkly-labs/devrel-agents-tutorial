@@ -42,6 +42,8 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
             langchain_provider = "openai"
         elif "claude" in model_name or "anthropic" in model_name:
             langchain_provider = "anthropic"
+        elif "mistral" in model_name:
+            langchain_provider = "mistralai"
         else:
             langchain_provider = "anthropic"  # default
     
@@ -50,7 +52,7 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
         model_provider=langchain_provider,
         temperature=0.0
     )
-    
+
     # Create structured output model for guaranteed PII detection format
     model = base_model.with_structured_output(PIIDetectionResponse)
     
@@ -60,29 +62,27 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
     
     # Store config values for nested functions
     config_instructions = agent_config.instructions
-    
+
     def call_model(state: AgentState):
         """Call the security model to get structured PII detection response"""
         try:
             messages = state["messages"]
-            
+
             # Add system message with instructions if this is the first call
             if len(messages) == 1:  # Only user message
                 system_prompt = config_instructions
                 messages = [SystemMessage(content=system_prompt)] + messages
-            
+
             # Track model call with LDAI metrics - returns PIIDetectionResponse object
             pii_result = config_manager.track_metrics(
                 tracker,
                 lambda: model.invoke(messages)
             )
-            
-            print(f"🔐 STRUCTURED OUTPUT: detected={pii_result.detected}, types={pii_result.types}")
-            print(f"🔐 REDACTED TEXT: '{pii_result.redacted[:50]}...'")
-            
+
+
             # Store structured results in state and create AI message for conversation flow
             response_message = AIMessage(content=f"PII Analysis: detected={pii_result.detected}, types={pii_result.types}")
-            
+
             return {
                 "messages": [response_message],
                 "detected": pii_result.detected,
@@ -91,7 +91,7 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
             }
             
         except Exception as e:
-            print(f"❌ SECURITY ERROR: {e}")
+            log_debug(f"❌ SECURITY ERROR: {e}")
             
             # Track error with LDAI metrics
             try:
