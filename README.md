@@ -69,6 +69,15 @@ First, you need to get your LaunchDarkly SDK key by creating a project:
 
 3. **Create a new project** called "multi-agent-chatbot"
 
+> **⚠️ IMPORTANT: Naming Requirements for Part 2**
+>
+> For the bootstrap script in Part 2 to work correctly, you **MUST** use these exact names:
+> - **Project**: `multi-agent-chatbot`
+> - **AI Configs**: `supervisor-agent`, `security-agent`, `support-agent`
+> - **Tools**: `search_v2`, `reranking` (created in Part 1)
+> - **Variations**: `supervisor-basic`, `pii-detector`, `rag-search-enhanced`
+>
+> The configuration files are hardcoded to use these specific keys.
 
 <div align="center">
 
@@ -305,7 +314,7 @@ Similarly, create another AI Config called `security-agent`
 >
 > **Goal or task:** 
 > ```
->You are a privacy agent that REMOVES PII and formats the input for another process. Analyze the input text and identify any personally identifiable information including: Email addresses, Phone numbers, Social Security Numbers, Names (first, last, full names), Physical addresses, Credit card numbers, Driver's license numbers, Any other sensitive personal data. Respond with: detected: true if any PII was found, false otherwise,types: array of PII types found (e.g., ['email', 'name', 'phone']), redacted: the input text with PII replaced by [REDACTED], keeping the text readable and natural. Examples: Input: 'My email is john@company.com and I need help', Output: detected=true, types=['email'], redacted='My email is [REDACTED] and I need help'. Input: 'I need help with my account',Output: detected=false, types=[], redacted='I need help with my account'. Input: 'My name is Sarah Johnson and my phone is 555-1234', Output: detected=true, types=['name', 'phone'], redacted='My name is [REDACTED] and my phone is [REDACTED]'. Be thorough in your analysis and err on the side of caution when identifying potential PII. ```
+>You are a privacy agent that REMOVES PII and formats the input for another process. Analyze the input text and identify any personally identifiable information including: Email addresses, Phone numbers, Social Security Numbers, Names (first, last, full names), Physical addresses, Credit card numbers, Driver's license numbers, Any other sensitive personal data. Respond with: detected: true if any PII was found, false otherwise,types: array of PII types found (e.g., ['email', 'name', 'phone']), redacted: the input text with PII replaced by [REDACTED], keeping the text readable and natural. Examples: Input: 'My email is john@company.com and I need help', Output: detected=true, types=['email'], redacted='My email is [REDACTED] and I need help'. Input: 'I need help with my account',Output: detected=false, types=[], redacted='I need help with my account'. Input: 'My name is Sarah Johnson and my phone is 555-1234', Output: detected=true, types=['name', 'phone'], redacted='My name is [REDACTED] and my phone is [REDACTED]'. Be thorough in your analysis and err on the side of caution when identifying potential PII.
 
 This agent detects PII and provides detailed redaction information, showing exactly what sensitive data was found and how it would be handled for compliance and transparency.
 
@@ -360,7 +369,7 @@ Start the system:
 
 ```bash
 # Terminal 1: Start the backend
-uv run uvicorn api.main:app --reload --port 8001
+uv run uvicorn api.main:app --reload --port 8000
 ```
 
 ```bash
@@ -456,9 +465,9 @@ Your multi-agent system is running with dynamic control and ready for optimizati
 
  **In Part 2**, we'll add:
 
-- Geographic-based privacy rules (strict for EU, standard for US)
-- MCP tools for external data (GitHub, Slack, databases)
-- Business tier configurations (free, pro, enterprise)
+- Geographic-based privacy rules (strict for EU, standard for Other)
+- MCP tools for external data
+- Business tier configurations (free, paid)
 - Cost optimization strategies
 
 **In Part 3**, we'll run A/B experiments to prove which configurations actually work best with real data.

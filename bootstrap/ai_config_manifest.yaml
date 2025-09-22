@@ -1,3 +1,14 @@
+# LaunchDarkly AI Config Bootstrap Manifest
+# 
+# IMPORTANT: This file is for INITIAL SETUP ONLY
+# 
+# Workflow:
+# 1. Bootstrap: This YAML file creates AI Configs in LaunchDarkly
+# 2. Post-Bootstrap: Make all configuration changes in LaunchDarkly UI
+# 3. Ongoing: LaunchDarkly is the single source of truth
+# 
+# DO NOT modify instructions here after bootstrap - use LaunchDarkly instead!
+
 project:
   key: "multi-agent-chatbot"  # Your LaunchDarkly project key
   environment:
@@ -14,7 +25,7 @@ project:
         negate: false
       - attribute: "plan"
         op: "in"
-        values: ["free", "trial", "basic", "starter"]
+        values: ["free"]
         contextKind: "user"
         negate: false
     
@@ -27,33 +38,33 @@ project:
         negate: false
       - attribute: "plan"
         op: "in"
-        values: ["paid", "premium", "pro", "professional", "enterprise", "business", "corporate"]
+        values: ["paid"]
         contextKind: "user"
         negate: false
         
     - key: other-free
       rules:
       - attribute: "country"
-        op: "not_in"
+        op: "in"
         values: ["DE", "FR", "ES", "IT", "NL", "BE", "AT", "PL", "PT", "GR", "CZ", "HU", "SE", "DK", "FI"]
         contextKind: "user"
-        negate: false
+        negate: true
       - attribute: "plan"
         op: "in"
-        values: ["free", "trial", "basic", "starter"]
+        values: ["free"]
         contextKind: "user"
         negate: false
         
     - key: other-paid
       rules:
       - attribute: "country"
-        op: "not_in"
+        op: "in"
         values: ["DE", "FR", "ES", "IT", "NL", "BE", "AT", "PL", "PT", "GR", "CZ", "HU", "SE", "DK", "FI"]
         contextKind: "user"
-        negate: false
+        negate: true
       - attribute: "plan"
         op: "in"
-        values: ["paid", "premium", "pro", "professional", "enterprise", "business", "corporate"]
+        values: ["paid"]
         contextKind: "user"
         negate: false
 
@@ -63,6 +74,16 @@ project:
     - key: "search_v1"
       name: "Basic Keyword Search"
       description: "Simple keyword search through knowledge base"
+      type: "function"
+      
+    - key: "search_v2"
+      name: "Semantic Vector Search"
+      description: "Advanced semantic search using vector embeddings"
+      type: "function"
+      
+    - key: "reranking"
+      name: "BM25 Relevance Scoring"
+      description: "BM25-based relevance scoring and reranking"
       type: "function"
       
     - key: "arxiv_search"
@@ -86,10 +107,12 @@ project:
           modelConfig:
             provider: "anthropic"
             modelId: "claude-3-5-sonnet-20241022"
-          instructions: "You are a helpful assistant that can search documentation and research papers. When search results are available, prioritize information from those results over your general knowledge to provide the most accurate and up-to-date responses. Use available tools to search the knowledge base and external research databases to answer questions accurately and comprehensively."
+          # NOTE: After bootstrap, modify instructions in LaunchDarkly UI, not here
+          instructions: "You are an AI supervisor that coordinates between security and support agents. Route requests efficiently based on content analysis. Choose next action: 'security_agent' for PII removal or compliance, 'support_agent' for research and information, 'complete' when workflow is finished. Respond with ONLY the agent name."
           customParameters:
             max_tool_calls: 5
             temperature: 0.3
+            
       targeting:
         rules: []
         defaultVariation: "supervisor-basic"
@@ -102,15 +125,16 @@ project:
           modelConfig:
             provider: "anthropic"
             modelId: "claude-3-5-haiku-20241022"
-          instructions: "You are a privacy agent that detects and redacts sensitive PII but allows names and general personal information. Redact: emails, phone numbers, addresses, SSN, credit cards, financial info. Keep: names, general locations, job titles. Return JSON with detected (boolean), types (array), redacted (text with PII replaced by [REDACTED])."
+          # NOTE: After bootstrap, modify instructions in LaunchDarkly UI, not here
+          instructions: "You are a privacy agent that REMOVES direct PII. Focus on clearly personal identifiers:\n\nEmail addresses\nPhone numbers\nSocial Security Numbers\nFull names (but not generic titles)\nStreet addresses\nCredit card numbers\nDriver's license numbers\n\nResponse Format:\n\ndetected: true if any PII was found, false otherwise\ntypes: array of PII types found (e.g., ['email', 'name', 'phone'])\nredacted: the input text with PII replaced by [REDACTED], keeping the text readable and natural\n\nExamples:\n\nInput: \"I work at Acme Corp in Berlin as a manager\"\n\nOutput: detected=false, types=[], redacted='I work at Acme Corp in Berlin as a manager'\n\n\nInput: \"Contact John Smith at john@email.com or 555-1234\"\n\nOutput: detected=true, types=['name', 'email', 'phone'], redacted='Contact [REDACTED] at [REDACTED] or [REDACTED]'\n\n\nInput: \"The CEO from Microsoft contacted me\"\n\nOutput: detected=false, types=[], redacted='The CEO from Microsoft contacted me'"
           customParameters:
             temperature: 0.1
             max_tool_calls: 1
         - key: "strict-security"  
           modelConfig:
-            provider: "anthropic"
-            modelId: "claude-3-5-haiku-20241022"
-          instructions: "You are a strict privacy agent for EU GDPR compliance that REMOVES ALL PII. Redact everything personally identifiable: names, emails, phones, addresses, locations, job titles, companies, dates of birth. Return JSON with detected (boolean), types (array), redacted (text with ALL PII replaced by [REDACTED])."
+            provider: "mistral"
+            modelId: "mistral-small-latest"
+          instructions: "You are a strict privacy agent that REMOVES ALL PII. Redact everything personally identifiable including names, emails, phones, addresses, locations (cities, countries, regions), job titles, companies, dates of birth, and any identifying references.\n\nYou must return a structured response with these exact fields:\n- detected: boolean (true if ANY PII found, false otherwise)\n- types: array of strings listing PII types found\n- redacted: string with ALL PII replaced by [REDACTED]\n\nPII types to detect: 'name', 'email', 'phone', 'address', 'location', 'job_title', 'company', 'date_of_birth', 'identifying_reference'\n\nExamples:\nInput: \"I work at Acme Corp in Berlin as a manager\" → detected=true, types=[\"company\", \"location\", \"job_title\"], redacted=\"I work at [REDACTED] in [REDACTED] as a [REDACTED]\"\n\nInput: \"I need help with my account\" → detected=false, types=[], redacted=\"I need help with my account\""
           customParameters:
             temperature: 0.1
             max_tool_calls: 1
@@ -120,11 +144,15 @@ project:
             variation: "strict-security"
           - segments: ["eu-paid"]
             variation: "strict-security"
+          - segments: ["other-free"]
+            variation: "basic-security"
+          - segments: ["other-paid"]
+            variation: "basic-security"
         defaultVariation: "basic-security"
 
     # Support agent with 4 combined geographic + business tier variations
-    - key: "support-agent-business-tiers"
-      name: "Support Agent - Geographic + Business Tier Matrix"
+    - key: "support-agent"
+      name: "Support Agent"
       variations:
         # EU variations
         - key: "eu-free"
@@ -132,7 +160,8 @@ project:
             provider: "anthropic"
             modelId: "claude-3-5-haiku-20241022"
           tools: ["search_v1"]
-          instructions: "You are a helpful assistant using basic keyword search only. Provide accurate information while following EU privacy requirements. No external data access."
+          # NOTE: After bootstrap, modify instructions in LaunchDarkly UI, not here
+          instructions: "You are a helpful assistant with access to basic search (search_v1). Use your search tool to find relevant information from the knowledge base while following EU privacy requirements. Always search before responding to ensure accuracy."
           customParameters:
             max_tool_calls: 3
             temperature: 0.4
@@ -144,7 +173,7 @@ project:
             provider: "anthropic"
             modelId: "claude-3-5-sonnet-20241022"
           tools: ["search_v1", "search_v2", "reranking", "arxiv_search", "semantic_scholar"]
-          instructions: "You are a premium research specialist with full MCP tool access. EU privacy laws require strict data handling. Always cite sources and explain confidence levels. Use multiple external sources for complex queries."
+          instructions: "You are a premium research specialist with access to comprehensive RAG tools: search_v1 (basic search), search_v2 (semantic vector search), reranking (BM25 relevance scoring), arxiv_search (academic papers), and semantic_scholar (citation database). When search results are available, prioritize information from those results over your general knowledge. EU privacy laws require strict data handling. Always cite sources and explain confidence levels. Use multiple search approaches for complex queries."
           customParameters:
             max_tool_calls: 20
             temperature: 0.1
@@ -157,7 +186,7 @@ project:
             provider: "openai"
             modelId: "gpt-4o-mini"
           tools: ["search_v1"]
-          instructions: "You are a helpful assistant using basic keyword search only. Provide accurate, concise responses efficiently."
+          instructions: "You are a helpful assistant with access to basic search (search_v1). Use your search tool to find relevant information from the knowledge base. Provide accurate, concise responses efficiently."
           customParameters:
             max_tool_calls: 3
             temperature: 0.5
@@ -169,7 +198,7 @@ project:
             provider: "openai"
             modelId: "gpt-4o"
           tools: ["search_v1", "search_v2", "reranking", "arxiv_search", "semantic_scholar"]
-          instructions: "You are a premium research specialist with full MCP tool access. Provide comprehensive, well-researched responses with source attribution from external databases and academic sources."
+          instructions: "You are a premium research specialist with access to comprehensive RAG tools: search_v1 (basic search), search_v2 (semantic vector search), reranking (BM25 relevance scoring), arxiv_search (academic papers), and semantic_scholar (citation database). When search results are available, prioritize information from those results over your general knowledge. Provide comprehensive, well-researched responses with source attribution from external databases and academic sources."
           customParameters:
             max_tool_calls: 20
             temperature: 0.2
@@ -182,7 +211,7 @@ project:
             provider: "anthropic"  # Default to privacy-friendly
             modelId: "claude-3-5-haiku-20241022"
           tools: ["search_v1", "search_v2", "reranking"]
-          instructions: "You are a helpful assistant with balanced capabilities for international users. Use internal knowledge base with some research tools."
+          instructions: "You are a helpful assistant with access to RAG tools: search_v1 (basic search), search_v2 (semantic vector search), and reranking (BM25 relevance scoring). When search results are available, prioritize information from those results over your general knowledge. Provide balanced, well-researched responses for international users."
           customParameters:
             max_tool_calls: 5
             temperature: 0.4
