@@ -1,6 +1,7 @@
 from typing import TypedDict, List, Annotated
 from langgraph.graph import StateGraph, add_messages
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage, SystemMessage
+from langchain.chat_models import init_chat_model
 from config_manager import FixedConfigManager as ConfigManager
 from pydantic import BaseModel
 from utils.logger import log_student
@@ -66,19 +67,17 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
         try:
             messages = state["messages"]
 
-            # Use LaunchDarkly pattern for security agent
+            # Fetch config dynamically for each call
             import asyncio
-            from .ld_agent_helpers import create_agent_with_fresh_config, track_langgraph_metrics
 
-            agent, tracker, disabled = asyncio.run(create_agent_with_fresh_config(
-                config_manager=config_manager,
-                config_key="security-agent",
+            # Get latest config from LaunchDarkly
+            agent_config = asyncio.run(config_manager.get_config(
                 user_id=state.get("user_id", "security_user"),
-                user_context=state.get("user_context", {}),
-                tools=[]  # Security agent doesn't need external tools
+                config_key="security-agent",
+                user_context=state.get("user_context", {})
             ))
 
-            if disabled:
+            if not agent_config.enabled:
                 # Return safe default if config is disabled
                 return {
                     "messages": [AIMessage(content="PII Analysis: detected=false, types=[]")],
@@ -88,35 +87,36 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
                     "response": "Security check disabled"
                 }
 
-            # Execute security agent with instructions
-            pii_response = track_langgraph_metrics(
-                tracker,
-                lambda: agent.invoke({"messages": messages})
+            # Create model with structured output and up-to-date instructions
+            from config_manager import map_provider_to_langchain
+            langchain_provider = map_provider_to_langchain(agent_config.provider.name)
+
+            base_model = init_chat_model(
+                model=agent_config.model.name,
+                model_provider=langchain_provider,
+                temperature=0.0
             )
 
-            # Extract the content from the agent's response
-            response_content = pii_response["messages"][-1].content if pii_response["messages"] else ""
+            # Use structured output for guaranteed PII format
+            structured_model = base_model.with_structured_output(PIIDetectionResponse)
 
-            # Parse the structured response (basic parsing for now)
-            detected = "detected=true" in response_content.lower()
-            types = []
-            redacted_text = state["messages"][0].content if state["messages"] else ""
+            # Create system message with current instructions from LaunchDarkly
+            system_message = SystemMessage(content=agent_config.instructions)
+            full_messages = [system_message] + messages
 
-            # Simple extraction of types and redacted text from response
-            if "types=" in response_content:
-                try:
-                    types_part = response_content.split("types=")[1].split(",")[0].strip()
-                    if types_part and types_part != "[]":
-                        types = [t.strip().strip("[]'\"") for t in types_part.split(",") if t.strip()]
-                except:
-                    pass
+            # Call model with structured output
+            pii_result = structured_model.invoke(full_messages)
 
-            if "redacted=" in response_content:
-                try:
-                    redacted_text = response_content.split("redacted=")[1].strip().strip("'\"")
-                except:
-                    pass
+            # Track metrics
+            config_manager.track_metrics(
+                agent_config.tracker,
+                lambda: "security_pii_detection_success"
+            )
 
+            # Extract structured results
+            detected = pii_result.detected
+            types = pii_result.types
+            redacted_text = pii_result.redacted
 
             # Store structured results in state and create AI message for conversation flow
             response_message = AIMessage(content=f"PII Analysis: detected={detected}, types={types}")
@@ -126,7 +126,7 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
                 "detected": detected,
                 "types": types,
                 "redacted": redacted_text,
-                "response": response_content
+                "response": f"PII Analysis: detected={detected}, types={types}"
             }
             
         except Exception as e:
@@ -173,9 +173,9 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
         if pii_detected:
             pii_summary = f"Found {', '.join(pii_types)}" if pii_types else "Sensitive data detected"
             log_student(f"🔒 PII PROTECTION: {pii_summary} → Text sanitized for downstream agents")
+            log_student(f"🔒 REDACTED TEXT: '{redacted_text[:50]}...' (truncated for display)")
         else:
             log_student(f"🔒 PII PROTECTION: No sensitive data detected → Original text preserved")
-        
         
         return {
             "user_input": state["user_input"],

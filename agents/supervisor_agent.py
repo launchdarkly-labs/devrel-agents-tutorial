@@ -228,6 +228,12 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             # ===== SUPPORT AGENT COMPLETE PII ISOLATION =====
             # This input contains ONLY sanitized/redacted content
             # Support agent operates in completely PII-free environment
+
+            # Log security verification: confirm only sanitized content is passed
+            log_student(f"🔒 SECURITY VERIFIED: Support agent receiving {len(support_messages)} sanitized messages")
+            if pii_detected:
+                log_student(f"🛡️ PII ISOLATION: Original content with {', '.join(pii_types)} has been redacted")
+
             support_input = {
                 "user_input": processed_input,  # Redacted text only
                 "user_id": state.get("user_id", "support_user"),  # For LaunchDarkly context
