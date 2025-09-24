@@ -15,6 +15,8 @@ class PIIDetectionResponse(BaseModel):
 class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]
     user_input: str
+    user_id: str  # For LaunchDarkly targeting
+    user_context: dict  # For LaunchDarkly targeting
     response: str
     tool_calls: List[str]
     tool_details: List[dict]
@@ -29,35 +31,7 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
     # Clear cache to ensure latest config
     config_manager.clear_cache()
     
-    # Create LangChain model using official LDAI SDK pattern
-    from langchain.chat_models import init_chat_model
-    from config_manager import map_provider_to_langchain
-    
-    # Use provider information from LaunchDarkly config
-    if agent_config.provider and hasattr(agent_config.provider, 'name'):
-        langchain_provider = map_provider_to_langchain(agent_config.provider.name)
-    else:
-        # Fallback: infer provider from model name
-        model_name = agent_config.model.name.lower()
-        if "gpt" in model_name or "openai" in model_name:
-            langchain_provider = "openai"
-        elif "claude" in model_name or "anthropic" in model_name:
-            langchain_provider = "anthropic"
-        elif "mistral" in model_name:
-            langchain_provider = "mistralai"
-        else:
-            langchain_provider = "anthropic"  # default
-    
-    base_model = init_chat_model(
-        model=agent_config.model.name,
-        model_provider=langchain_provider,
-        temperature=0.0
-    )
-
-    # Create structured output model for guaranteed PII detection format
-    model = base_model.with_structured_output(PIIDetectionResponse)
-    
-    tracker = agent_config.tracker
+    # NOTE: Model will be created at runtime with fresh LaunchDarkly config
     
     
     # NOTE: Instructions are fetched on each call using LaunchDarkly pattern
@@ -71,10 +45,13 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
             import asyncio
 
             # Get latest config from LaunchDarkly
+            user_context = state.get("user_context", {})
+            user_id = state.get("user_id", "security_user")
+
             agent_config = asyncio.run(config_manager.get_config(
-                user_id=state.get("user_id", "security_user"),
+                user_id=user_id,
                 config_key="security-agent",
-                user_context=state.get("user_context", {})
+                user_context=user_context
             ))
 
             if not agent_config.enabled:

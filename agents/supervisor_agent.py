@@ -137,6 +137,8 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             # Prepare security agent input
             security_input = {
                 "user_input": state["user_input"],
+                "user_id": state.get("user_id", "security_user"),  # Pass user ID for LaunchDarkly targeting
+                "user_context": state.get("user_context", {}),    # Pass user context for LaunchDarkly targeting
                 "response": "",
                 "tool_calls": [],
                 "messages": [HumanMessage(content=state["messages"][-2].content if len(state["messages"]) >= 2 else state["user_input"])]
