@@ -3,7 +3,7 @@ from langgraph.graph import StateGraph, add_messages
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage, SystemMessage
 from config_manager import FixedConfigManager as ConfigManager
 from pydantic import BaseModel
-from utils.logger import log_student, log_debug, log_verbose
+from utils.logger import log_student
 
 class PIIDetectionResponse(BaseModel):
     """Structured response for PII detection results"""
@@ -58,40 +58,78 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
     
     tracker = agent_config.tracker
     
-    log_debug(f"🔐 CREATING SECURITY AGENT: Using LDAI model {agent_config.model.name} (no tools - direct JSON responses)")
     
-    # Store config values for nested functions
-    config_instructions = agent_config.instructions
+    # NOTE: Instructions are fetched on each call using LaunchDarkly pattern
 
     def call_model(state: AgentState):
         """Call the security model to get structured PII detection response"""
         try:
             messages = state["messages"]
 
-            # Add system message with instructions if this is the first call
-            if len(messages) == 1:  # Only user message
-                system_prompt = config_instructions
-                messages = [SystemMessage(content=system_prompt)] + messages
+            # Use LaunchDarkly pattern for security agent
+            import asyncio
+            from .ld_agent_helpers import create_agent_with_fresh_config, track_langgraph_metrics
 
-            # Track model call with LDAI metrics - returns PIIDetectionResponse object
-            pii_result = config_manager.track_metrics(
+            agent, tracker, disabled = asyncio.run(create_agent_with_fresh_config(
+                config_manager=config_manager,
+                config_key="security-agent",
+                user_id=state.get("user_id", "security_user"),
+                user_context=state.get("user_context", {}),
+                tools=[]  # Security agent doesn't need external tools
+            ))
+
+            if disabled:
+                # Return safe default if config is disabled
+                return {
+                    "messages": [AIMessage(content="PII Analysis: detected=false, types=[]")],
+                    "detected": False,
+                    "types": [],
+                    "redacted": state["messages"][0].content if state["messages"] else "",
+                    "response": "Security check disabled"
+                }
+
+            # Execute security agent with instructions
+            pii_response = track_langgraph_metrics(
                 tracker,
-                lambda: model.invoke(messages)
+                lambda: agent.invoke({"messages": messages})
             )
+
+            # Extract the content from the agent's response
+            response_content = pii_response["messages"][-1].content if pii_response["messages"] else ""
+
+            # Parse the structured response (basic parsing for now)
+            detected = "detected=true" in response_content.lower()
+            types = []
+            redacted_text = state["messages"][0].content if state["messages"] else ""
+
+            # Simple extraction of types and redacted text from response
+            if "types=" in response_content:
+                try:
+                    types_part = response_content.split("types=")[1].split(",")[0].strip()
+                    if types_part and types_part != "[]":
+                        types = [t.strip().strip("[]'\"") for t in types_part.split(",") if t.strip()]
+                except:
+                    pass
+
+            if "redacted=" in response_content:
+                try:
+                    redacted_text = response_content.split("redacted=")[1].strip().strip("'\"")
+                except:
+                    pass
 
 
             # Store structured results in state and create AI message for conversation flow
-            response_message = AIMessage(content=f"PII Analysis: detected={pii_result.detected}, types={pii_result.types}")
+            response_message = AIMessage(content=f"PII Analysis: detected={detected}, types={types}")
 
             return {
                 "messages": [response_message],
-                "detected": pii_result.detected,
-                "types": pii_result.types,
-                "redacted": pii_result.redacted
+                "detected": detected,
+                "types": types,
+                "redacted": redacted_text,
+                "response": response_content
             }
             
         except Exception as e:
-            log_debug(f"❌ SECURITY ERROR: {e}")
             
             # Track error with LDAI metrics
             try:
@@ -138,8 +176,6 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
         else:
             log_student(f"🔒 PII PROTECTION: No sensitive data detected → Original text preserved")
         
-        log_debug(f"🔍 SECURITY AGENT: detected={pii_detected}, types={pii_types}")
-        log_verbose(f"🔒 REDACTED TEXT: '{redacted_text[:50]}...'")
         
         return {
             "user_input": state["user_input"],

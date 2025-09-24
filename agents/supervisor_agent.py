@@ -1,14 +1,16 @@
 from typing import TypedDict, List, Annotated, Literal, Optional
 from langgraph.graph import StateGraph, add_messages
-from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
+from langchain_core.messages import HumanMessage, AIMessage, BaseMessage, SystemMessage
 from .support_agent import create_support_agent
 from .security_agent import create_security_agent
 from config_manager import FixedConfigManager as ConfigManager
-from utils.logger import log_student, log_debug, log_verbose
+from utils.logger import log_student
 
 class SupervisorState(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]
     user_input: str
+    user_id: str  # User ID for LaunchDarkly context
+    user_context: dict  # User context for LaunchDarkly targeting
     current_agent: str
     security_cleared: bool
     support_response: str
@@ -62,8 +64,6 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             security_cleared = state.get("security_cleared", False)
             support_response = state.get("support_response", "")
             
-            log_debug(f"🎯 SUPERVISOR: Stage={workflow_stage}, Security={security_cleared}, Support={bool(support_response)}")
-            
             # Track supervisor decision-making process
             config_manager.track_metrics(
                 supervisor_config.tracker,
@@ -80,17 +80,29 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
                 next_agent = "complete"
             else:
                 # Use model for complex routing decisions
-                # Use model for complex routing decisions
-                system_prompt = f"""
-                {supervisor_config.instructions}
-                Current stage: {workflow_stage}, Security cleared: {security_cleared}, Has support response: {bool(support_response)}
-                """
-                prompt = HumanMessage(content=system_prompt + f"\n\nLast message: {messages[-1].content if messages else state['user_input']}")
-                response = config_manager.track_metrics(
-                    supervisor_config.tracker,
-                    lambda: supervisor_model.invoke([prompt])
-                )
-                next_agent = response.content.strip().lower()
+                import asyncio
+                from .ld_agent_helpers import create_agent_with_fresh_config
+
+                agent, tracker, disabled = asyncio.run(create_agent_with_fresh_config(
+                    config_manager=config_manager,
+                    config_key="supervisor-agent",
+                    user_id=state.get("user_id", "supervisor_user"),
+                    user_context=state.get("user_context", {}),
+                    tools=[]  # Supervisor doesn't need tools for routing
+                ))
+
+                if disabled:
+                    next_agent = "complete"
+                else:
+                    from langchain_core.messages import HumanMessage
+                    routing_message = HumanMessage(content=f"Current stage: {workflow_stage}, Security cleared: {security_cleared}, Has support response: {bool(support_response)}\n\nLast message: {messages[-1].content if messages else state['user_input']}")
+
+                    from .ld_agent_helpers import track_langgraph_metrics
+                    response = track_langgraph_metrics(
+                        tracker,
+                        lambda: agent.invoke({"messages": [routing_message]})
+                    )
+                    next_agent = response["messages"][-1].content.strip().lower()
             
             # Track successful supervisor decision
             config_manager.track_metrics(
@@ -98,11 +110,9 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
                 lambda: f"supervisor_decision_success_{next_agent}"
             )
             
-            log_debug(f"🎯 SUPERVISOR: Final routing decision -> {next_agent}")
             return {"current_agent": next_agent}
             
         except Exception as e:
-            log_debug(f"❌ SUPERVISOR ERROR: {e}")
             
             # Track supervisor error with LDAI metrics
             config_manager.track_metrics(
@@ -117,7 +127,6 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
         """Route to security agent with LDAI metrics tracking"""
         try:
             log_student(f"🔐 SECURITY INSTRUCTIONS: {security_config.instructions}")
-            log_debug(f"🎯 SUPERVISOR: Orchestrating security agent execution")
             
             # Track supervisor orchestration start for security agent
             config_manager.track_metrics(
@@ -146,20 +155,17 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             current_stage = state.get("workflow_stage", "initial_security")
             new_stage = "research" if current_stage == "initial_security" else "complete"
             
-            log_debug(f"🎯 SUPERVISOR: Security agent completed, transitioning {current_stage} -> {new_stage}")
             
             # Extract PII schema fields from security agent
             detected = result.get("detected", False)
             types = result.get("types", [])
             redacted_text = result.get("redacted", state["user_input"])
             
-            log_debug(f"🔒 SUPERVISOR: PII detected={detected}, types={types}")
             
             # Create sanitized message history - replace original user input with redacted version
             sanitized_messages = []
             original_messages = state.get("messages", [])
             
-            log_debug(f"🔒 PII PROTECTION: Sanitizing {len(original_messages)} messages")
             for msg in original_messages:
                 if isinstance(msg, HumanMessage):
                     sanitized_msg = HumanMessage(content=redacted_text)
@@ -185,7 +191,6 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             }
             
         except Exception as e:
-            log_debug(f"❌ SUPERVISOR: Security agent orchestration error: {e}")
             
             # Track error with LDAI metrics
             config_manager.track_metrics(
@@ -198,7 +203,6 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
         """Route to support agent with LDAI metrics tracking"""
         try:
             log_student(f"🔧 SUPPORT INSTRUCTIONS: {support_config.instructions}")
-            log_debug(f"🎯 SUPERVISOR: Orchestrating support agent execution")
             
             # Track supervisor orchestration start for support agent
             config_manager.track_metrics(
@@ -212,26 +216,22 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             pii_types = state.get("pii_types", [])
             sanitized_messages = state.get("sanitized_messages", [])
             
-            log_debug(f"🔒 SUPERVISOR: Passing to support agent - PII detected: {pii_detected}")
-            if pii_types:
-                log_debug(f"🔍 SUPERVISOR: PII types found: {pii_types}")
-            
             # ===== CRITICAL SECURITY BOUNDARY: PII ISOLATION =====
             # Support agent must NEVER see raw messages containing PII
             # Only sanitized/redacted messages are passed through this boundary
             if sanitized_messages:
                 # Include conversation history + current redacted message
                 support_messages = sanitized_messages + [HumanMessage(content=processed_input)]
-                log_debug(f"🔒 SECURITY ENFORCED: Using {len(sanitized_messages)} sanitized messages + current redacted message for support agent")
             else:
                 support_messages = [HumanMessage(content=processed_input)]  # Fallback to redacted current message only
-                log_debug(f"⚠️ FALLBACK: No sanitized messages, using redacted current message only")
             
             # ===== SUPPORT AGENT COMPLETE PII ISOLATION =====
             # This input contains ONLY sanitized/redacted content
             # Support agent operates in completely PII-free environment
             support_input = {
                 "user_input": processed_input,  # Redacted text only
+                "user_id": state.get("user_id", "support_user"),  # For LaunchDarkly context
+                "user_context": state.get("user_context", {}),  # For LaunchDarkly targeting
                 "response": "",
                 "tool_calls": [],
                 "tool_details": [],
@@ -253,12 +253,7 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             log_student(f"🔧 SUPPORT RESPONSE: {support_response[:200]}{'...' if len(support_response) > 200 else ''}")
             
             tool_details = result.get('tool_details', [])
-            log_debug(f"🔧 SUPERVISOR RECEIVED FROM SUPPORT:")
-            log_debug(f"   📊 tool_calls: {tool_calls}")
-            if tool_details:
-                log_debug(f"   📊 tool_details: {tool_details}")
-            log_debug(f"🎯 SUPERVISOR: Support agent completed with {len(tool_calls)} tools used")
-            
+
             return {
                 "messages": [AIMessage(content=result["response"])],
                 "support_response": result["response"],
@@ -268,7 +263,6 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             }
             
         except Exception as e:
-            log_debug(f"❌ SUPERVISOR: Support agent orchestration error: {e}")
             
             # Track error with LDAI metrics
             config_manager.track_metrics(
@@ -318,7 +312,6 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
     def format_final(state: SupervisorState):
         """Format final response with supervisor completion metrics"""
         try:
-            log_debug(f"🎯 SUPERVISOR: Finalizing workflow")
             
             # Track supervisor workflow completion
             support_tool_calls = state.get("support_tool_calls", [])
@@ -335,9 +328,6 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
                 final_message = state["messages"][-1]
                 final_content = final_message.content
             
-            log_debug(f"🎯 SUPERVISOR: Workflow completed successfully")
-            log_debug(f"   📊 Final response length: {len(final_content)} chars")
-            log_debug(f"   📊 Tools used in workflow: {support_tool_calls}")
             
             return {
                 "final_response": final_content,
@@ -348,7 +338,6 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             }
             
         except Exception as e:
-            log_debug(f"❌ SUPERVISOR: Final formatting error: {e}")
             
             # Track supervisor final formatting error
             config_manager.track_metrics(
