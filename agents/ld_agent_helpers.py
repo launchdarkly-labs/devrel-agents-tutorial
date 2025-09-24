@@ -171,10 +171,21 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                     if hasattr(message, 'tool_calls') and message.tool_calls:
                         for tool_call in message.tool_calls:
                             tool_name = tool_call.get('name', 'unknown')
+                            tool_args = tool_call.get('args', {})
                             tool_calls.append(tool_name)
+
+                            # Extract search query from tool arguments (multiple possible field names)
+                            search_query = (
+                                tool_args.get('query', '') or
+                                tool_args.get('search_query', '') or
+                                tool_args.get('q', '') or
+                                str(tool_args) if len(str(tool_args)) < 100 else ''
+                            )
+
                             tool_details.append({
                                 "name": tool_name,
-                                "args": tool_call.get('args', {})
+                                "search_query": search_query if search_query else None,
+                                "args": tool_args
                             })
 
                 return {
