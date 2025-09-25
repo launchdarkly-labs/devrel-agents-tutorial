@@ -4,14 +4,15 @@ from rank_bm25 import BM25Okapi
 from pydantic import BaseModel, Field
 import re
 import json
+from langchain_core.messages import ToolMessage
 
 class RerankingInput(BaseModel):
-    query: str = Field(..., description="The search query to rerank results for")
-    results: Optional[List[Dict[str, Any]]] = Field(None, description="Optional: search results. If not provided, will look for recent search_v2 output")
+    query: str
+    results: List[Dict[str, Any]]
 
 class RerankingTool(BaseTool):
     name: str = "reranking"
-    description: str = "Rerank search results using BM25 algorithm. Pass 'query' (str) and 'results' (the JSON items array from search_v2, not the human summary)."
+    description: str = "Reorders results by relevance using BM25 algorithm"
     args_schema: type[BaseModel] = RerankingInput
     
     def _tokenize(self, text: str) -> List[str]:
@@ -24,18 +25,36 @@ class RerankingTool(BaseTool):
     def _parse_search_v2_output(self, search_output: str) -> List[Dict[str, Any]]:
         """Parse search_v2 text output format into structured results."""
         try:
-            # First try to extract JSON payload from search_v2 output
-            json_match = re.search(r'```json\s*({.*?})\s*```', search_output, re.DOTALL)
+            print(f"🔧 RERANKING: Parsing search_v2 output (length: {len(search_output)})")
+
+            # Primary method: Extract JSON payload from search_v2 output
+            json_match = re.search(r'```json\s*(\{.*?\})\s*```', search_output, re.DOTALL)
             if json_match:
                 json_str = json_match.group(1)
-                data = json.loads(json_str)
-                if isinstance(data, dict) and 'items' in data:
-                    print(f"🔧 RERANKING: Successfully parsed JSON payload with {len(data['items'])} items")
-                    return data['items']
-            
-            # Fallback: Search_v2 returns format like: "Found N relevant document(s):\n[Relevance: 0.454] content..."
+                try:
+                    data = json.loads(json_str)
+                    if isinstance(data, dict) and 'items' in data and data['items']:
+                        print(f"🔧 RERANKING: Successfully parsed JSON payload with {len(data['items'])} items")
+                        return data['items']
+                    else:
+                        print(f"⚠️ RERANKING: JSON payload found but no 'items' field or empty items")
+                except json.JSONDecodeError as je:
+                    print(f"⚠️ RERANKING: JSON decode error: {je}")
+
+            # Fallback 1: Try to find JSON block anywhere in the text (more flexible)
+            json_blocks = re.findall(r'\{[^{}]*"items"[^{}]*\[[^\]]*\][^{}]*\}', search_output, re.DOTALL)
+            for json_block in json_blocks:
+                try:
+                    data = json.loads(json_block)
+                    if isinstance(data, dict) and 'items' in data and data['items']:
+                        print(f"🔧 RERANKING: Successfully parsed loose JSON block with {len(data['items'])} items")
+                        return data['items']
+                except json.JSONDecodeError:
+                    continue
+
+            # Fallback 2: Search_v2 returns format like: "Found N relevant document(s):\n[Relevance: 0.454] content..."
             relevance_entries = re.findall(r'\[Relevance: ([\d.]+)\] (.+?)(?=\[Relevance:|$)', search_output, re.DOTALL)
-            
+
             if relevance_entries:
                 search_results = []
                 for i, (score, content) in enumerate(relevance_entries):
@@ -47,8 +66,9 @@ class RerankingTool(BaseTool):
                 print(f"🔧 RERANKING: Successfully parsed {len(search_results)} items from relevance format")
                 return search_results
             else:
-                print(f"⚠️ RERANKING: Could not parse search_v2 format from: {search_output[:200]}...")
+                print(f"⚠️ RERANKING: Could not parse search_v2 format. Preview: {search_output[:300]}...")
                 return []
+
         except Exception as e:
             print(f"⚠️ RERANKING: Error parsing search_v2 output: {e}")
             return []
@@ -74,29 +94,10 @@ class RerankingTool(BaseTool):
             pass
         return []
 
-    def _run(self, query: str, results: Optional[List[Dict[str, Any]]] = None, **kwargs) -> str:
-        # Handle different input formats for results
-        if results is None:
-            # No results provided, need to parse from conversation context
-            # Try to get state from kwargs or other context
-            print(f"🔧 RERANKING: No results provided, looking for recent search_v2 output...")
-            
-            # For now, return an error - we'll need to access the conversation state
-            # This would require the agent to pass the state or search results
-            return "ERROR: No search results provided. Please run search_v2 first to get results to rerank."
-            
-        elif isinstance(results, str):
-            print(f"🔧 RERANKING: Got string results, trying to parse...")
-            # First try search_v2 format (which includes JSON payload)
-            items = self._parse_search_v2_output(results)
-            if not items:
-                # Fallback to JSON format
-                items = self._extract_items_from_string(results)
-            if not items:
-                print(f"⚠️ RERANKING: Failed to parse. Input preview: {results[:300]}...")
-                return f"ERROR: Could not parse search results from string format. Expected search_v2 output with [Relevance: X.XX] format or JSON payload."
-        else:
-            items = results
+
+    def _run(self, query: str, results: List[Dict[str, Any]], **kwargs) -> str:
+        print(f"🔧 RERANKING: Got array results directly ({len(results)} items)")
+        items = results
         
         # Validate inputs
         if not query:

@@ -43,7 +43,7 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
     support_agent = create_support_agent(support_config, config_manager)
     security_agent = create_security_agent(security_config, config_manager)
     
-    log_student(f"🎯 SUPERVISOR INSTRUCTIONS: {supervisor_config.instructions}")
+    log_student(f"SUPERVISOR INSTRUCTIONS: {supervisor_config.instructions}")
 
     def pii_prescreen_node(state: SupervisorState):
         """Intelligent PII pre-screening to route requests efficiently"""
@@ -84,7 +84,7 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             )
 
             # Log the intelligent decision
-            log_student(f"🧠 ROUTING: {screening_result.recommended_route} ({screening_result.confidence:.1f}) - {screening_result.reasoning}")
+            log_student(f"ROUTING: {screening_result.recommended_route} ({screening_result.confidence:.1f}) - {screening_result.reasoning}")
 
             # Update workflow stage based on decision
             if screening_result.recommended_route == "security_agent":
@@ -105,7 +105,7 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
                 lambda: (_ for _ in ()).throw(e)
             )
 
-            log_student(f"⚠️ PII PRE-SCREENING ERROR: Defaulting to security agent for safety")
+            log_student(f"PII PRE-SCREENING ERROR: Defaulting to security agent for safety")
             return {
                 "current_agent": "security_agent",
                 "workflow_stage": "security_processing",
@@ -133,10 +133,10 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
                 next_agent = "security_agent"
             elif workflow_stage == "direct_support" and not support_response:
                 next_agent = "support_agent"
-                log_student(f"🚀 BYPASS: Direct to support (no PII detected)")
+                log_student(f"BYPASS: Direct to support (no PII detected)")
             elif workflow_stage == "post_security_support" and not support_response:
                 next_agent = "support_agent"
-                log_student(f"🛡️ SECURED: Routing to support with sanitized data")
+                log_student(f"SECURED: Routing to support with sanitized data")
             elif support_response:
                 next_agent = "complete"
             else:
@@ -283,7 +283,7 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
 
             # Log PII protection status
             if pii_detected:
-                log_student(f"🛡️ PII PROTECTED: {', '.join(pii_types)} redacted")
+                log_student(f"PII PROTECTED: {', '.join(pii_types)} redacted")
 
             support_input = {
                 "user_input": processed_input,  # Redacted text only

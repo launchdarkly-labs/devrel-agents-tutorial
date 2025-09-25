@@ -39,7 +39,7 @@ class AgentService:
             support_config = await self.config_manager.get_config(user_id, "support-agent", user_context)
             security_config = await self.config_manager.get_config(user_id, "security-agent", user_context)
         
-            log_student(f"🔍 LDAI: 3 agents configured")
+            log_student(f"LDAI: 3 agents configured")
             log_debug(f"🔍 LDAI: Supervisor({supervisor_config.model.name}), Support({support_config.model.name}), Security({security_config.model.name})")
             
             # Create supervisor agent with all child agents using LDAI SDK pattern
@@ -82,7 +82,7 @@ class AgentService:
                 "support_tool_details": []
             }
             
-            log_student(f"🧠 INTELLIGENT ROUTING: Starting PII pre-screening analysis")
+            log_student(f"INTELLIGENT ROUTING: Starting PII pre-screening analysis")
             log_debug(f"🔒 PII PROTECTION: Enhanced supervisor will decide routing path")
             result = await supervisor_agent.ainvoke(initial_state)
             
@@ -106,7 +106,7 @@ class AgentService:
             pii_status = f"PII detected: {security_detected}"
             response_length = len(result['final_response'])
             
-            log_student(f"✅ WORKFLOW COMPLETE: {tools_summary}, {pii_status}, Response: {response_length} chars")
+            log_student(f"WORKFLOW COMPLETE: {tools_summary}, {pii_status}, Response: {response_length} chars")
             
             log_debug(f"✅ WORKFLOW: Tools={len(actual_tool_calls)}, Details={len(tool_details)}, Response={len(result['final_response'])}chars, PII={security_detected}")
             
@@ -185,7 +185,7 @@ class AgentService:
             )
             
         except Exception as e:
-            log_student(f"❌ LDAI WORKFLOW ERROR: {e}")
+            log_student(f"LDAI WORKFLOW ERROR: {e}")
             
             # Return error response
             return ChatResponse(
