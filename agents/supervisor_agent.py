@@ -5,6 +5,14 @@ from .support_agent import create_support_agent
 from .security_agent import create_security_agent
 from config_manager import FixedConfigManager as ConfigManager
 from utils.logger import log_student
+from pydantic import BaseModel
+
+class PIIPreScreening(BaseModel):
+    """Structured response for PII pre-screening"""
+    likely_contains_pii: bool
+    confidence: float  # 0.0 to 1.0
+    reasoning: str
+    recommended_route: str  # "security_agent" or "support_agent"
 
 class SupervisorState(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]
@@ -55,31 +63,103 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
     security_agent = create_security_agent(security_config, config_manager)
     
     log_student(f"🎯 SUPERVISOR INSTRUCTIONS: {supervisor_config.instructions}")
-    
+
+    def pii_prescreen_node(state: SupervisorState):
+        """Intelligent PII pre-screening to route requests efficiently"""
+        try:
+            user_input = state["user_input"]
+            user_id = state.get("user_id", "supervisor_user")
+            user_context = state.get("user_context", {})
+
+            # Track PII pre-screening start
+            config_manager.track_metrics(
+                supervisor_config.tracker,
+                lambda: "supervisor_pii_prescreen_start"
+            )
+
+            # Create PII pre-screening model with structured output
+            from config_manager import map_provider_to_langchain
+            langchain_provider = map_provider_to_langchain(supervisor_config.provider.name)
+
+            base_model = init_chat_model(
+                model=supervisor_config.model.name,
+                model_provider=langchain_provider,
+                temperature=0.1
+            )
+
+            prescreen_model = base_model.with_structured_output(PIIPreScreening)
+
+            # Get pre-screening prompt from LaunchDarkly config
+            prescreen_prompt = supervisor_config.instructions
+
+            screening_message = HumanMessage(content=f"{prescreen_prompt}\n\nUser Input: {user_input}")
+
+            # Get structured pre-screening result
+            screening_result = prescreen_model.invoke([screening_message])
+
+            # Track successful pre-screening
+            config_manager.track_metrics(
+                supervisor_config.tracker,
+                lambda: f"supervisor_pii_prescreen_success_{screening_result.recommended_route}"
+            )
+
+            # Log the intelligent decision
+            log_student(f"🧠 ROUTING: {screening_result.recommended_route} ({screening_result.confidence:.1f}) - {screening_result.reasoning}")
+
+            # Update workflow stage based on decision
+            if screening_result.recommended_route == "security_agent":
+                next_stage = "security_processing"
+            else:
+                next_stage = "direct_support"
+
+            return {
+                "current_agent": screening_result.recommended_route,
+                "workflow_stage": next_stage,
+                "messages": [AIMessage(content=f"Routing decision: {screening_result.reasoning}")]
+            }
+
+        except Exception as e:
+            # Fallback to security agent for safety
+            config_manager.track_metrics(
+                supervisor_config.tracker,
+                lambda: (_ for _ in ()).throw(e)
+            )
+
+            log_student(f"⚠️ PII PRE-SCREENING ERROR: Defaulting to security agent for safety")
+            return {
+                "current_agent": "security_agent",
+                "workflow_stage": "security_processing",
+                "messages": [AIMessage(content="Pre-screening error, routing to security for safety")]
+            }
+
     def supervisor_node(state: SupervisorState):
         """Supervisor decides next step in workflow with LDAI metrics tracking"""
         try:
             messages = state["messages"]
-            workflow_stage = state.get("workflow_stage", "initial_security")
+            workflow_stage = state.get("workflow_stage", "pii_prescreen")  # Start with intelligent pre-screening
             security_cleared = state.get("security_cleared", False)
             support_response = state.get("support_response", "")
-            
+
             # Track supervisor decision-making process
             config_manager.track_metrics(
                 supervisor_config.tracker,
                 lambda: "supervisor_decision_start"
             )
-            
-            # Simplified routing logic
-            if workflow_stage == "initial_security" and not security_cleared:
+
+            # Enhanced routing logic with intelligent pre-screening
+            if workflow_stage == "pii_prescreen":
+                next_agent = "pii_prescreen"
+            elif workflow_stage == "security_processing" and not security_cleared:
                 next_agent = "security_agent"
+            elif workflow_stage == "direct_support" and not support_response:
+                next_agent = "support_agent"
+                log_student(f"🚀 BYPASS: Direct to support (no PII detected)")
             elif workflow_stage == "research" and not support_response:
                 next_agent = "support_agent"
-                log_student(f"🎯 ROUTING: Proceeding to support agent")
             elif support_response:
                 next_agent = "complete"
             else:
-                # Use model for complex routing decisions
+                # Fallback to AI decision-making for complex cases
                 import asyncio
                 from .ld_agent_helpers import create_agent_with_fresh_config
 
@@ -103,30 +183,29 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
                         lambda: agent.invoke({"messages": [routing_message]})
                     )
                     next_agent = response["messages"][-1].content.strip().lower()
-            
+
             # Track successful supervisor decision
             config_manager.track_metrics(
                 supervisor_config.tracker,
                 lambda: f"supervisor_decision_success_{next_agent}"
             )
-            
+
             return {"current_agent": next_agent}
-            
+
         except Exception as e:
-            
+
             # Track supervisor error with LDAI metrics
             config_manager.track_metrics(
                 supervisor_config.tracker,
                 lambda: (_ for _ in ()).throw(e)  # Trigger error tracking
             )
-            
-            # Fallback to security agent
+
+            # Fallback to security agent for safety
             return {"current_agent": "security_agent"}
     
     def security_node(state: SupervisorState):
         """Route to security agent with LDAI metrics tracking"""
         try:
-            log_student(f"🔐 SECURITY INSTRUCTIONS: {security_config.instructions}")
             
             # Track supervisor orchestration start for security agent
             config_manager.track_metrics(
@@ -204,7 +283,6 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
     def support_node(state: SupervisorState):
         """Route to support agent with LDAI metrics tracking"""
         try:
-            log_student(f"🔧 SUPPORT INSTRUCTIONS: {support_config.instructions}")
             
             # Track supervisor orchestration start for support agent
             config_manager.track_metrics(
@@ -231,10 +309,9 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             # This input contains ONLY sanitized/redacted content
             # Support agent operates in completely PII-free environment
 
-            # Log security verification: confirm only sanitized content is passed
-            log_student(f"🔒 SECURITY VERIFIED: Support agent receiving {len(support_messages)} sanitized messages")
+            # Log PII protection status
             if pii_detected:
-                log_student(f"🛡️ PII ISOLATION: Original content with {', '.join(pii_types)} has been redacted")
+                log_student(f"🛡️ PII PROTECTED: {', '.join(pii_types)} redacted")
 
             support_input = {
                 "user_input": processed_input,  # Redacted text only
@@ -256,9 +333,7 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
                 lambda: f"supervisor_orchestrating_support_success_tools_{len(tool_calls)}"
             )
             
-            # Show support agent response to students
             support_response = result["response"]
-            log_student(f"🔧 SUPPORT RESPONSE: {support_response[:200]}{'...' if len(support_response) > 200 else ''}")
             
             tool_details = result.get('tool_details', [])
 
@@ -281,13 +356,11 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
     
     def revise_node(state: SupervisorState):
         """Ask support agent to revise for clarity"""
-        revision_prompt = f"""
-        Please revise the following response for better clarity and readability:
-        
-        {state.get("support_response", "No response to revise")}
-        
-        Make it more clear, well-structured, and easy to understand.
-        """
+        revision_prompt = f"""Please revise the following response for better clarity and readability:
+
+{state.get("support_response", "No response to revise")}
+
+Make it more clear, well-structured, and easy to understand."""
         
         support_input = {
             "user_input": revision_prompt,
@@ -304,11 +377,13 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             "workflow_stage": "final_compliance"
         }
     
-    def route_decision(state: SupervisorState) -> Literal["security_agent", "support_agent", "revise", "complete"]:
-        """Route based on supervisor decision"""
-        current_agent = state.get("current_agent", "security_agent")
-        
-        if "security" in current_agent:
+    def route_decision(state: SupervisorState) -> Literal["pii_prescreen", "security_agent", "support_agent", "revise", "complete"]:
+        """Route based on supervisor decision with intelligent pre-screening"""
+        current_agent = state.get("current_agent", "pii_prescreen")
+
+        if "pii_prescreen" in current_agent:
+            return "pii_prescreen"
+        elif "security" in current_agent:
             return "security_agent"
         elif "support" in current_agent:
             return "support_agent"
@@ -362,11 +437,12 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
                 "workflow_stage": "error"
             }
     
-    # Build supervisor workflow
+    # Build intelligent supervisor workflow
     workflow = StateGraph(SupervisorState)
-    
-    # Add nodes
+
+    # Add nodes including new PII pre-screening
     workflow.add_node("supervisor", supervisor_node)
+    workflow.add_node("pii_prescreen", pii_prescreen_node)  # New intelligent pre-screening node
     workflow.add_node("security_agent", security_node)
     workflow.add_node("support_agent", support_node)
     workflow.add_node("revise", revise_node)
@@ -375,18 +451,22 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
     # Set entry point
     workflow.set_entry_point("supervisor")
     
-    # Add routing
+    # Add intelligent routing with PII pre-screening
     workflow.add_conditional_edges(
         "supervisor",
         route_decision,
         {
-            "security_agent": "security_agent",
-            "support_agent": "support_agent", 
+            "pii_prescreen": "pii_prescreen",      # New intelligent pre-screening route
+            "security_agent": "security_agent",    # Traditional security route
+            "support_agent": "support_agent",      # Direct bypass route (new!)
             "revise": "revise",
             "complete": "format_final"
         }
     )
-    
+
+    # After PII pre-screening, return to supervisor for routing decision
+    workflow.add_edge("pii_prescreen", "supervisor")
+
     # After each agent, return to supervisor
     workflow.add_edge("security_agent", "supervisor")
     workflow.add_edge("support_agent", "supervisor")
