@@ -29,7 +29,7 @@ def track_supervisor_metrics(metric_name: str, config_manager: Any, supervisor_c
                 return result
                 
             except Exception as e:
-                log_debug(f"❌ SUPERVISOR ERROR in {metric_name}: {e}")
+                log_debug(f"SUPERVISOR ERROR in {metric_name}: {e}")
                 
                 # Track error with LDAI metrics
                 config_manager.track_metrics(

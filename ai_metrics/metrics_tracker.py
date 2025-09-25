@@ -81,7 +81,7 @@ def track_langchain_metrics(tracker, func):
         # Note: TTFT (Time To First Token) should only be tracked when actual streaming data is available
         
         tracker.track_success()
-        print(f"✅ PROPER LAUNCHDARKLY TRACKING: Operation completed successfully")
+        print(f" PROPER LAUNCHDARKLY TRACKING: Operation completed successfully")
         
         # Extract token usage from LangChain response - only track when data is available
         if hasattr(result, "usage_metadata") and result.usage_metadata:
@@ -98,7 +98,7 @@ def track_langchain_metrics(tracker, func):
                     total=total_tokens or (input_tokens or 0) + (output_tokens or 0)
                 )
                 tracker.track_tokens(token_usage)
-                print(f"🎯 PROPER LD TOKEN TRACKING: {token_usage.total} tokens")
+                print(f" PROPER LD TOKEN TRACKING: {token_usage.total} tokens")
         elif hasattr(result, "response_metadata") and result.response_metadata:
             # Handle Anthropic Claude response format - only track when data is available
             metadata = result.response_metadata
@@ -117,13 +117,13 @@ def track_langchain_metrics(tracker, func):
                             total=total_tokens
                         )
                         tracker.track_tokens(token_usage)
-                        print(f"🎯 PROPER LD TOKEN TRACKING: {total_tokens} tokens (Claude format)")
+                        print(f" PROPER LD TOKEN TRACKING: {total_tokens} tokens (Claude format)")
         
-        print(f"✅ PROPER LAUNCHDARKLY TRACKING: Operation completed successfully")
+        print(f" PROPER LAUNCHDARKLY TRACKING: Operation completed successfully")
         
     except Exception as e:
         tracker.track_error()
-        print(f"❌ PROPER LAUNCHDARKLY TRACKING: Error occurred: {e}")
+        print(f" PROPER LAUNCHDARKLY TRACKING: Error occurred: {e}")
         raise
 
     return result
@@ -188,11 +188,11 @@ class AIMetricsTracker:
         # Debug: Check what methods are available on the tracker
         if tracker:
             pass  # Tracker exists - no debug needed
-            # print(f"🔍 TRACKER DEBUG: Tracker type = {type(tracker)}")
-            # print(f"🔍 TRACKER DEBUG: Available methods = {[method for method in dir(tracker) if not method.startswith('_')]}")
+            # print(f" TRACKER DEBUG: Tracker type = {type(tracker)}")
+            # print(f" TRACKER DEBUG: Available methods = {[method for method in dir(tracker) if not method.startswith('_')]}")
         else:
             pass  # No tracker provided
-            # print(f"🔍 TRACKER DEBUG: No tracker provided (tracker is None)")
+            # print(f" TRACKER DEBUG: No tracker provided (tracker is None)")
         
     def start_workflow(self, user_id: str, query: str):
         """Start tracking a multi-agent workflow"""
@@ -201,7 +201,7 @@ class AIMetricsTracker:
         self.query = query
         self.agent_metrics = []
         self.overall_success = True
-        print(f"🔍 AI METRICS: Starting workflow tracking for user {user_id}")
+        print(f" AI METRICS: Starting workflow tracking for user {user_id}")
         
     def track_agent_start(self, agent_name: str, model: str, variation_key: str) -> float:
         """Track the start of an agent's execution"""
@@ -255,16 +255,16 @@ class AIMetricsTracker:
                             total=tokens_used
                         )
                         self.ld_tracker.track_tokens(token_usage)
-                        print(f"🎯 PROPER TOKEN TRACKING: {tokens_used} tokens (total only)")
+                        print(f" PROPER TOKEN TRACKING: {tokens_used} tokens (total only)")
                     except Exception as token_error:
-                        print(f"⚠️  TOKEN TRACKING ERROR: {token_error}")
+                        print(f"  TOKEN TRACKING ERROR: {token_error}")
                     
-                print(f"✅ AI METRICS: Tracked {agent_name} metrics to LaunchDarkly")
+                print(f" AI METRICS: Tracked {agent_name} metrics to LaunchDarkly")
                 
             except Exception as e:
-                print(f"⚠️  AI METRICS WARNING: Failed to track to LaunchDarkly: {e}")
+                print(f"  AI METRICS WARNING: Failed to track to LaunchDarkly: {e}")
         
-        print(f"📊 AI METRICS: Agent {agent_name} completed - Duration: {duration_ms:.2f}ms, Success: {success}, Tools: {len(tool_calls)}")
+        print(f" AI METRICS: Agent {agent_name} completed - Duration: {duration_ms:.2f}ms, Success: {success}, Tools: {len(tool_calls)}")
         
     def track_model_call(self, model_call_func, agent_name: str, *args, **kwargs):
         """Track a model call using the official LaunchDarkly AI SDK pattern"""
@@ -272,12 +272,12 @@ class AIMetricsTracker:
             # No tracker available, just execute the call
             return model_call_func(*args, **kwargs)
             
-        print(f"🚀 USING PROPER LAUNCHDARKLY AI SDK TRACKING for {agent_name}")
+        print(f" USING PROPER LAUNCHDARKLY AI SDK TRACKING for {agent_name}")
         
         # Use the official track_langchain_metrics pattern from LaunchDarkly
         result = track_langchain_metrics(self.ld_tracker, lambda: model_call_func(*args, **kwargs))
         
-        print(f"✅ PROPER LD AI SDK TRACKING COMPLETED for {agent_name}")
+        print(f" PROPER LD AI SDK TRACKING COMPLETED for {agent_name}")
         return result
     
     def _extract_token_usage(self, response) -> Optional[int]:
@@ -313,7 +313,7 @@ class AIMetricsTracker:
             return None
             
         except Exception as e:
-            print(f"⚠️  AI METRICS: Failed to extract token usage: {e}")
+            print(f"  AI METRICS: Failed to extract token usage: {e}")
             return None
     
     def finalize_workflow(self, final_response: str) -> MultiAgentMetrics:
@@ -350,17 +350,17 @@ class AIMetricsTracker:
                         }
                         self.ld_tracker.track_feedback(feedback_dict)
                     except Exception as feedback_error:
-                        print(f"⚠️  FEEDBACK TRACKING ERROR: {feedback_error}")
+                        print(f"  FEEDBACK TRACKING ERROR: {feedback_error}")
                     
                 # Get summary to show metrics were tracked
                 try:
                     summary = self.ld_tracker.get_summary()
-                    print(f"🚀 AI METRICS: Flushed metrics to LaunchDarkly - Duration: {summary.duration}ms")
+                    print(f" AI METRICS: Flushed metrics to LaunchDarkly - Duration: {summary.duration}ms")
                 except Exception as summary_error:
-                    print(f"🚀 AI METRICS: Metrics tracked to LaunchDarkly (no summary available: {summary_error})")
+                    print(f" AI METRICS: Metrics tracked to LaunchDarkly (no summary available: {summary_error})")
                 
             except Exception as e:
-                print(f"⚠️  AI METRICS WARNING: Failed to finalize LaunchDarkly metrics: {e}")
+                print(f"  AI METRICS WARNING: Failed to finalize LaunchDarkly metrics: {e}")
         
         return metrics
     
@@ -370,7 +370,7 @@ class AIMetricsTracker:
         """Submit user feedback to LaunchDarkly AI metrics"""
         try:
             if not self.ld_tracker:
-                print(f"⚠️  AI METRICS: No LaunchDarkly tracker available for feedback submission")
+                print(f"  AI METRICS: No LaunchDarkly tracker available for feedback submission")
                 return False
             
             # Track satisfaction based on thumbs up/down using correct SDK method
@@ -382,20 +382,20 @@ class AIMetricsTracker:
                         "kind": FeedbackKind.Positive if thumbs_up else FeedbackKind.Negative
                     }
                     self.ld_tracker.track_feedback(feedback_dict)
-                    print(f"📊 FEEDBACK TRACKED: {'👍 Positive' if thumbs_up else '👎 Negative'}")
+                    print(f" FEEDBACK TRACKED: {'👍 Positive' if thumbs_up else '👎 Negative'}")
                 else:
-                    print(f"⚠️  No track_feedback method available")
+                    print(f"  No track_feedback method available")
             except Exception as feedback_error:
-                print(f"⚠️  FEEDBACK TRACKING ERROR: {feedback_error}")
+                print(f"  FEEDBACK TRACKING ERROR: {feedback_error}")
                 # Try alternative - treat feedback as success/error
                 try:
                     if thumbs_up:
                         self.ld_tracker.track_success()
                     else:
                         self.ld_tracker.track_error()
-                    print(f"📊 FEEDBACK AS SUCCESS/ERROR: {'success' if thumbs_up else 'error'}")
+                    print(f" FEEDBACK AS SUCCESS/ERROR: {'success' if thumbs_up else 'error'}")
                 except Exception as alt_error:
-                    print(f"⚠️  ALTERNATIVE FEEDBACK TRACKING ERROR: {alt_error}")
+                    print(f"  ALTERNATIVE FEEDBACK TRACKING ERROR: {alt_error}")
             
             # Track additional metrics
             response_length = len(ai_response)
@@ -422,19 +422,19 @@ class AIMetricsTracker:
             }
             
             print(f"👍👎 AI FEEDBACK: {source} - {'👍' if thumbs_up else '👎'} for {variation_key}")
-            print(f"📊 FEEDBACK DETAILS: {json.dumps(feedback_details, indent=2)}")
+            print(f" FEEDBACK DETAILS: {json.dumps(feedback_details, indent=2)}")
             
             # Flush feedback to LaunchDarkly immediately
             try:
                 summary = self.ld_tracker.get_summary()
-                print(f"🚀 FEEDBACK FLUSHED: Sent {source} feedback to LaunchDarkly")
+                print(f" FEEDBACK FLUSHED: Sent {source} feedback to LaunchDarkly")
             except Exception as e:
-                print(f"⚠️  FEEDBACK FLUSH ERROR: {e}")
+                print(f"  FEEDBACK FLUSH ERROR: {e}")
             
             return True
             
         except Exception as e:
-            print(f"❌ FEEDBACK SUBMISSION ERROR: {e}")
+            print(f" FEEDBACK SUBMISSION ERROR: {e}")
             return False
 
     def _track_tool_efficiency(self, total_tool_calls: int):
@@ -443,9 +443,9 @@ class AIMetricsTracker:
             if self.ld_tracker and hasattr(self.ld_tracker, 'track_score'):
                 # Track average tool calls per query as a score metric
                 self.ld_tracker.track_score("tool_efficiency", total_tool_calls)
-                print(f"🔧 TOOL EFFICIENCY: {total_tool_calls} tools used")
+                print(f" TOOL EFFICIENCY: {total_tool_calls} tools used")
         except Exception as e:
-            print(f"⚠️  TOOL EFFICIENCY TRACKING ERROR: {e}")
+            print(f"  TOOL EFFICIENCY TRACKING ERROR: {e}")
 
     def check_guardrails(self, duration_ms: float, error_occurred: bool) -> bool:
         """Check if metrics violate safety guardrails for experiments"""

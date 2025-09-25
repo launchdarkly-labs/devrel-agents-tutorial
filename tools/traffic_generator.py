@@ -32,7 +32,7 @@ def load_json_file(filename):
         with open(filename, 'r') as f:
             return json.load(f)
     except Exception as e:
-        print(f"❌ ERROR: Couldn't load {filename}: {e}")
+        print(f" ERROR: Couldn't load {filename}: {e}")
         return None
 
 def send_chat_request(user, query_data):
@@ -56,14 +56,14 @@ def send_chat_request(user, query_data):
         
         if response.status_code == 200:
             result = response.json()
-            print(f"✅ SUCCESS: Got {len(result['response'])} chars, used {len(result['tool_calls'])} tools")
+            print(f" SUCCESS: Got {len(result['response'])} chars, used {len(result['tool_calls'])} tools")
             return result
         else:
-            print(f"❌ ERROR: Status {response.status_code}")
+            print(f" ERROR: Status {response.status_code}")
             return None
             
     except Exception as e:
-        print(f"❌ REQUEST FAILED: {e}")
+        print(f" REQUEST FAILED: {e}")
         return None
 
 def simulate_feedback(response_data, query_data):
@@ -127,11 +127,11 @@ def send_feedback(response_data, user_id, query_data, feedback_data):
                   f"(rating: {feedback_data['rating']}/5) - {', '.join(feedback_data['reasons'])}")
             return True
         else:
-            print(f"❌ FEEDBACK FAILED: Status {response.status_code} - {response.text}")
+            print(f" FEEDBACK FAILED: Status {response.status_code} - {response.text}")
             return False
             
     except Exception as e:
-        print(f"❌ FEEDBACK ERROR: {e}")
+        print(f" FEEDBACK ERROR: {e}")
         return False
 
 def flush_metrics():
@@ -139,13 +139,13 @@ def flush_metrics():
     try:
         response = requests.post(f"{API_BASE_URL}/admin/flush", timeout=10)
         if response.status_code == 200:
-            print("🚀 METRICS: Flushed to LaunchDarkly")
+            print(" METRICS: Flushed to LaunchDarkly")
             return True
         else:
-            print(f"❌ FLUSH FAILED: Status {response.status_code}")
+            print(f" FLUSH FAILED: Status {response.status_code}")
             return False
     except Exception as e:
-        print(f"❌ FLUSH ERROR: {e}")
+        print(f" FLUSH ERROR: {e}")
         return False
 
 def main():
@@ -170,8 +170,8 @@ def main():
     users = users_data["users"]
     queries = queries_data["queries"]
     
-    print(f"📊 LOADED: {len(users)} fake users, {len(queries)} sample queries")
-    print(f"🎯 PLAN: Sending {args.queries} requests with {args.delay}s delays")
+    print(f" LOADED: {len(users)} fake users, {len(queries)} sample queries")
+    print(f" PLAN: Sending {args.queries} requests with {args.delay}s delays")
     print("=" * 60)
     
     # Keep track of results
@@ -209,17 +209,17 @@ def main():
             time.sleep(args.delay)
     
     # Flush metrics to LaunchDarkly
-    print(f"\n🚀 FLUSHING: Sending metrics to LaunchDarkly...")
+    print(f"\n FLUSHING: Sending metrics to LaunchDarkly...")
     flush_metrics()
     
     # Show final results
     print("\n" + "=" * 60)
-    print("📊 FINAL RESULTS:")
+    print(" FINAL RESULTS:")
     print(f"   Total requests: {total_requests}")
     print(f"   Successful requests: {successful_requests} ({successful_requests/total_requests*100:.1f}%)")
     print(f"   Successful feedback: {successful_feedback}")
     print(f"   Thumbs up: {thumbs_up_count}/{successful_feedback} ({thumbs_up_count/successful_feedback*100:.1f}%)" if successful_feedback > 0 else "   Thumbs up: 0%")
-    print("\n✅ DONE! Check your LaunchDarkly dashboard for metrics.")
+    print("\n DONE! Check your LaunchDarkly dashboard for metrics.")
     print("🎉 TIP: It may take 1-2 minutes for metrics to appear in LaunchDarkly.")
 
 if __name__ == "__main__":

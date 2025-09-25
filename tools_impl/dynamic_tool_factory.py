@@ -36,12 +36,12 @@ def extract_tool_configs_from_launchdarkly(config) -> tuple[List[str], Dict[str,
                     # Extract tool parameters/schema from LaunchDarkly
                     tool_configs[tool_name] = tool.get('parameters', {})
 
-        log_debug(f"🏗️ EXTRACTED TOOLS FROM LAUNCHDARKLY: {tools_list}")
+        log_debug(f"EXTRACTED TOOLS FROM LAUNCHDARKLY: {tools_list}")
         if tool_configs:
-            log_verbose(f"🔧 TOOL CONFIGS FROM LAUNCHDARKLY: {tool_configs}")
+            log_verbose(f" TOOL CONFIGS FROM LAUNCHDARKLY: {tool_configs}")
 
     except Exception as e:
-        log_debug(f"⚠️ Error extracting tool configs from LaunchDarkly: {e}")
+        log_debug(f"Error extracting tool configs from LaunchDarkly: {e}")
         pass  # Fallback to just the tools list and defaults
 
     return tools_list, tool_configs
@@ -53,7 +53,7 @@ def create_dynamic_tool_instance(tool_name: str, tool_config: Dict[str, Any]) ->
 
     This replaces hardcoded tool schemas with LaunchDarkly-provided configurations.
     """
-    log_debug(f"⚙️ Creating dynamic tool: {tool_name}")
+    log_debug(f"Creating dynamic tool: {tool_name}")
 
     if tool_name == "search_v1":
         return _create_dynamic_search_v1(tool_config)
@@ -77,7 +77,7 @@ def _create_dynamic_search_v1(tool_config: Dict[str, Any]) -> BaseTool:
 
     # Apply LaunchDarkly configuration if available
     if tool_config and 'properties' in tool_config:
-        log_debug(f"📚 SEARCH_V1: Applying LaunchDarkly config")
+        log_debug(f"SEARCH_V1: Applying LaunchDarkly config")
         # Could override defaults here based on LaunchDarkly config
         # For now, just log that config is available
         pass
@@ -91,7 +91,7 @@ def _create_dynamic_search_v2(tool_config: Dict[str, Any]) -> BaseTool:
     # Create dynamic input schema based on LaunchDarkly tool definition
     if tool_config and 'properties' in tool_config:
         properties = tool_config['properties']
-        log_debug(f"📚 SEARCH_V2: Creating dynamic schema from LaunchDarkly: {properties}")
+        log_debug(f"SEARCH_V2: Creating dynamic schema from LaunchDarkly: {properties}")
 
         # Build Pydantic field definitions from LaunchDarkly schema
         field_definitions = {}
@@ -119,7 +119,7 @@ def _create_dynamic_search_v2(tool_config: Dict[str, Any]) -> BaseTool:
 
     else:
         # Fallback to minimal schema
-        log_debug(f"📚 SEARCH_V2: No LaunchDarkly config found, using minimal schema")
+        log_debug(f"SEARCH_V2: No LaunchDarkly config found, using minimal schema")
         class DynamicSearchV2Input(BaseModel):
             query: str
             top_k: Optional[int] = 3
@@ -145,7 +145,7 @@ def _create_dynamic_reranking_tool(tool_config: Dict[str, Any]) -> BaseTool:
     # Create dynamic input schema based on LaunchDarkly tool definition
     if tool_config and 'properties' in tool_config:
         properties = tool_config['properties']
-        log_debug(f"📊 RERANKING: Creating dynamic schema from LaunchDarkly: {properties}")
+        log_debug(f"RERANKING: Creating dynamic schema from LaunchDarkly: {properties}")
 
         # Build Pydantic field definitions from LaunchDarkly schema
         field_definitions = {}
@@ -169,7 +169,7 @@ def _create_dynamic_reranking_tool(tool_config: Dict[str, Any]) -> BaseTool:
 
     else:
         # Fallback to minimal schema matching LaunchDarkly
-        log_debug(f"📊 RERANKING: No LaunchDarkly config found, using minimal schema")
+        log_debug(f"RERANKING: No LaunchDarkly config found, using minimal schema")
         class DynamicRerankingInput(BaseModel):
             query: str
             results: List[Dict[str, Any]]
@@ -214,7 +214,7 @@ def _create_dynamic_mcp_tool(tool_name: str, tool_config: Dict[str, Any]) -> Opt
                 return available_mcp_tools
 
             except Exception as e:
-                log_debug(f"❌ MCP initialization error: {e}")
+                log_debug(f"MCP initialization error: {e}")
                 return []
             finally:
                 try:
@@ -239,14 +239,14 @@ def _create_dynamic_mcp_tool(tool_name: str, tool_config: Dict[str, Any]) -> Opt
                     # Find matching MCP tool
                     for mcp_tool in mcp_tools:
                         if hasattr(mcp_tool, 'name') and mcp_tool_name in mcp_tool.name.lower():
-                            log_debug(f"🔬 MCP TOOL CREATED: {tool_name} -> {mcp_tool_name}")
+                            log_debug(f"MCP TOOL CREATED: {tool_name} -> {mcp_tool_name}")
                             return mcp_tool
 
             except concurrent.futures.TimeoutError:
-                log_debug(f"⏰ MCP TIMEOUT: {tool_name} not available")
+                log_debug(f"MCP TIMEOUT: {tool_name} not available")
 
     except ImportError:
-        log_debug(f"❌ MCP IMPORT ERROR: {tool_name} not available")
+        log_debug(f"MCP IMPORT ERROR: {tool_name} not available")
 
     return None
 
@@ -266,10 +266,10 @@ def create_dynamic_tools_from_launchdarkly(config) -> List[BaseTool]:
 
         if tool_instance:
             available_tools.append(tool_instance)
-            log_debug(f"✅ DYNAMIC TOOL CREATED: {tool_name}")
+            log_debug(f"DYNAMIC TOOL CREATED: {tool_name}")
         else:
-            log_debug(f"❌ DYNAMIC TOOL FAILED: {tool_name}")
+            log_debug(f"DYNAMIC TOOL FAILED: {tool_name}")
 
-    log_student(f"🔧 DYNAMIC TOOLS LOADED: {[tool.name for tool in available_tools]}")
+    log_student(f"DYNAMIC TOOLS LOADED: {[tool.name for tool in available_tools]}")
 
     return available_tools

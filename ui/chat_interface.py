@@ -11,15 +11,15 @@ load_dotenv()
 try:
     with open('data/fake_users.json', 'r') as f:
         sample_users = json.load(f)['users']
-        print(f"🔍 UI: Loaded {len(sample_users)} sample users from fake_users.json")
+        print(f" UI: Loaded {len(sample_users)} sample users from fake_users.json")
 except Exception as e:
-    print(f"⚠️ UI: Failed to load fake_users.json: {e}")
+    print(f" UI: Failed to load fake_users.json: {e}")
     sample_users = []
 
 # Function to get user context for LaunchDarkly targeting
 def get_user_context(user_id, sample_users):
     """Get user context (country, region, plan) for LaunchDarkly targeting"""
-    print(f"🔍 UI: Getting user context for user_id={user_id}")
+    print(f" UI: Getting user context for user_id={user_id}")
     for user in sample_users:
         if user['id'] == user_id:
             context = {
@@ -27,7 +27,7 @@ def get_user_context(user_id, sample_users):
                 "region": user['region'], 
                 "plan": user['plan']
             }
-            print(f"🔍 UI: Found user context: {context}")
+            print(f" UI: Found user context: {context}")
             return context
     # Default context for unknown users
     default_context = {
@@ -35,7 +35,7 @@ def get_user_context(user_id, sample_users):
         "region": "other",
         "plan": "free"
     }
-    print(f"🔍 UI: User not found, using default context: {default_context}")
+    print(f" UI: User not found, using default context: {default_context}")
     return default_context
 
 # Get API configuration from environment

@@ -23,24 +23,24 @@ class AgentService:
         try:
             # Use the config manager's close method which handles flushing
             self.config_manager.close()
-            print("✅ METRICS: Successfully flushed to LaunchDarkly")
+            print(" METRICS: Successfully flushed to LaunchDarkly")
         except Exception as e:
-            print(f"❌ METRICS FLUSH ERROR: {e}")
+            print(f" METRICS FLUSH ERROR: {e}")
             raise
         
     async def process_message(self, user_id: str, message: str, user_context: dict = None, sanitized_conversation_history: list = None) -> ChatResponse:
         """Process message using refactored LDAI SDK pattern"""
         try:
-            log_debug(f"🎯 AGENT SERVICE: Processing message for {user_id}")
+            log_debug(f"AGENT SERVICE: Processing message for {user_id}")
             
             # Get LaunchDarkly LDAI configurations for all agents
-            log_debug("🎯 AGENT SERVICE: Loading agent configurations...")
+            log_debug(" AGENT SERVICE: Loading agent configurations...")
             supervisor_config = await self.config_manager.get_config(user_id, "supervisor-agent", user_context) 
             support_config = await self.config_manager.get_config(user_id, "support-agent", user_context)
             security_config = await self.config_manager.get_config(user_id, "security-agent", user_context)
         
             log_student(f"LDAI: 3 agents configured")
-            log_debug(f"🔍 LDAI: Supervisor({supervisor_config.model.name}), Support({support_config.model.name}), Security({security_config.model.name})")
+            log_debug(f"LDAI: Supervisor({supervisor_config.model.name}), Support({support_config.model.name}), Security({security_config.model.name})")
             
             # Create supervisor agent with all child agents using LDAI SDK pattern
             supervisor_agent = create_supervisor_agent(
@@ -108,7 +108,7 @@ class AgentService:
             
             log_student(f"WORKFLOW COMPLETE: {tools_summary}, {pii_status}, Response: {response_length} chars")
             
-            log_debug(f"✅ WORKFLOW: Tools={len(actual_tool_calls)}, Details={len(tool_details)}, Response={len(result['final_response'])}chars, PII={security_detected}")
+            log_debug(f"WORKFLOW: Tools={len(actual_tool_calls)}, Details={len(tool_details)}, Response={len(result['final_response'])}chars, PII={security_detected}")
             
             # Create agent configuration metadata showing actual usage
             # Extract actual variation key from LaunchDarkly AI config
@@ -117,13 +117,13 @@ class AgentService:
                     # The variation key is stored in the tracker object
                     if hasattr(ai_config, 'tracker') and hasattr(ai_config.tracker, '_variation_key'):
                         variation_key = ai_config.tracker._variation_key
-                        log_debug(f"🎯 VARIATION EXTRACTED for {agent_name}: {variation_key}")
+                        log_debug(f"VARIATION EXTRACTED for {agent_name}: {variation_key}")
                         return variation_key
                     else:
-                        log_debug(f"🎯 VARIATION NOT FOUND for {agent_name}: no tracker._variation_key")
+                        log_debug(f"VARIATION NOT FOUND for {agent_name}: no tracker._variation_key")
                         return 'default'
                 except Exception as e:
-                    log_debug(f"🎯 VARIATION EXTRACTION ERROR for {agent_name}: {e}")
+                    log_debug(f"VARIATION EXTRACTION ERROR for {agent_name}: {e}")
                     return 'default'
             
             def get_tools_list(ai_config):
@@ -131,10 +131,10 @@ class AgentService:
                     config_dict = ai_config.to_dict()
                     tools = config_dict.get('model', {}).get('parameters', {}).get('tools', [])
                     tool_names = [tool.get('name', 'unknown') for tool in tools]
-                    log_debug(f"🎯 EXTRACTED TOOLS: {tool_names}")
+                    log_debug(f"EXTRACTED TOOLS: {tool_names}")
                     return tool_names
                 except Exception as e:
-                    log_debug(f"🎯 TOOLS EXTRACTION ERROR: {e}")
+                    log_debug(f"TOOLS EXTRACTION ERROR: {e}")
                     return []
             
             # Extract tools list from configs

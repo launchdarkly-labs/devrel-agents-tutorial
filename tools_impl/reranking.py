@@ -25,7 +25,7 @@ class RerankingTool(BaseTool):
     def _parse_search_v2_output(self, search_output: str) -> List[Dict[str, Any]]:
         """Parse search_v2 text output format into structured results."""
         try:
-            print(f"🔧 RERANKING: Parsing search_v2 output (length: {len(search_output)})")
+            print(f" RERANKING: Parsing search_v2 output (length: {len(search_output)})")
 
             # Primary method: Extract JSON payload from search_v2 output
             json_match = re.search(r'```json\s*(\{.*?\})\s*```', search_output, re.DOTALL)
@@ -34,12 +34,12 @@ class RerankingTool(BaseTool):
                 try:
                     data = json.loads(json_str)
                     if isinstance(data, dict) and 'items' in data and data['items']:
-                        print(f"🔧 RERANKING: Successfully parsed JSON payload with {len(data['items'])} items")
+                        print(f" RERANKING: Successfully parsed JSON payload with {len(data['items'])} items")
                         return data['items']
                     else:
-                        print(f"⚠️ RERANKING: JSON payload found but no 'items' field or empty items")
+                        print(f" RERANKING: JSON payload found but no 'items' field or empty items")
                 except json.JSONDecodeError as je:
-                    print(f"⚠️ RERANKING: JSON decode error: {je}")
+                    print(f" RERANKING: JSON decode error: {je}")
 
             # Fallback 1: Try to find JSON block anywhere in the text (more flexible)
             json_blocks = re.findall(r'\{[^{}]*"items"[^{}]*\[[^\]]*\][^{}]*\}', search_output, re.DOTALL)
@@ -47,7 +47,7 @@ class RerankingTool(BaseTool):
                 try:
                     data = json.loads(json_block)
                     if isinstance(data, dict) and 'items' in data and data['items']:
-                        print(f"🔧 RERANKING: Successfully parsed loose JSON block with {len(data['items'])} items")
+                        print(f" RERANKING: Successfully parsed loose JSON block with {len(data['items'])} items")
                         return data['items']
                 except json.JSONDecodeError:
                     continue
@@ -63,14 +63,14 @@ class RerankingTool(BaseTool):
                         "score": float(score),
                         "metadata": {"source": "search_v2", "rank": i+1}
                     })
-                print(f"🔧 RERANKING: Successfully parsed {len(search_results)} items from relevance format")
+                print(f" RERANKING: Successfully parsed {len(search_results)} items from relevance format")
                 return search_results
             else:
-                print(f"⚠️ RERANKING: Could not parse search_v2 format. Preview: {search_output[:300]}...")
+                print(f" RERANKING: Could not parse search_v2 format. Preview: {search_output[:300]}...")
                 return []
 
         except Exception as e:
-            print(f"⚠️ RERANKING: Error parsing search_v2 output: {e}")
+            print(f" RERANKING: Error parsing search_v2 output: {e}")
             return []
 
     def _extract_items_from_string(self, results_str: str) -> List[Dict[str, Any]]:
@@ -96,7 +96,7 @@ class RerankingTool(BaseTool):
 
 
     def _run(self, query: str, results: List[Dict[str, Any]], **kwargs) -> str:
-        print(f"🔧 RERANKING: Got array results directly ({len(results)} items)")
+        print(f" RERANKING: Got array results directly ({len(results)} items)")
         items = results
         
         # Validate inputs
@@ -106,7 +106,7 @@ class RerankingTool(BaseTool):
         if not isinstance(items, list) or not items:
             return "ERROR: `results` must be a non-empty list of search result items from search_v2."
         
-        print(f"🔧 RERANKING: Query='{query}', Items={len(items)}")
+        print(f" RERANKING: Query='{query}', Items={len(items)}")
         
         # Extract text content from each item
         docs = []
@@ -154,7 +154,7 @@ class RerankingTool(BaseTool):
                     reranked_results.append(f"{i}. [BM25: {score:.3f}] {item}")
             
             result = f"BM25 reranked results for '{query}':\n\n" + '\n\n'.join(reranked_results)
-            print(f"🔧 RERANKING COMPLETE: {len(item_scores)} items reranked")
+            print(f" RERANKING COMPLETE: {len(item_scores)} items reranked")
             return result
             
         except Exception as e:
