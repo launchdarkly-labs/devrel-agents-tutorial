@@ -71,7 +71,7 @@ class AgentService:
                 "security_cleared": False,
                 "support_response": "",
                 "final_response": "",
-                "workflow_stage": "initial_security",
+                "workflow_stage": "pii_prescreen",  # Start with intelligent PII pre-screening
                 "messages": [current_raw_message],  # Security agent gets raw message
                 "sanitized_messages": sanitized_langchain_messages,  # SUPPORT AGENT ONLY gets these
                 "processed_user_input": "",
@@ -82,8 +82,8 @@ class AgentService:
                 "support_tool_details": []
             }
             
-            log_student(f"🎯 WORKFLOW: Starting security check")
-            log_debug(f"🔒 PII PROTECTION: Processing message through security agent first")
+            log_student(f"🧠 INTELLIGENT ROUTING: Starting PII pre-screening analysis")
+            log_debug(f"🔒 PII PROTECTION: Enhanced supervisor will decide routing path")
             result = await supervisor_agent.ainvoke(initial_state)
             
             # Get actual tool calls used during the workflow

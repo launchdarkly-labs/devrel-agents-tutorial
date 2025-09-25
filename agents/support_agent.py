@@ -17,7 +17,6 @@ def create_support_agent(config, config_manager):
     - Initialize tools once
     - Fetch instructions on each call (LaunchDarkly pattern)
     """
-    log_student("🔧 SUPPORT: Creating agent with LaunchDarkly pattern")
 
     # Get tools from the initial config (tools are stable, instructions are dynamic)
 
@@ -74,5 +73,4 @@ def create_support_agent(config, config_manager):
         tools=available_tools
     )
 
-    log_student(f"✅ SUPPORT: Agent created with {len(available_tools)} tools")
     return agent_wrapper

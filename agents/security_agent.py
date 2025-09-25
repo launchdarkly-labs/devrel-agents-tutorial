@@ -149,10 +149,9 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
         
         if pii_detected:
             pii_summary = f"Found {', '.join(pii_types)}" if pii_types else "Sensitive data detected"
-            log_student(f"🔒 PII PROTECTION: {pii_summary} → Text sanitized for downstream agents")
-            log_student(f"🔒 REDACTED TEXT: '{redacted_text[:50]}...' (truncated for display)")
+            log_student(f"🔒 SECURITY: {pii_summary} → Sanitized")
         else:
-            log_student(f"🔒 PII PROTECTION: No sensitive data detected → Original text preserved")
+            log_student(f"🔒 SECURITY: Clean - No PII detected")
         
         return {
             "user_input": state["user_input"],
