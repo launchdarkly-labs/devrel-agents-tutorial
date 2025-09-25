@@ -172,7 +172,7 @@ def _create_dynamic_reranking_tool(tool_config: Dict[str, Any]) -> BaseTool:
         log_debug(f"RERANKING: No LaunchDarkly config found, using minimal schema")
         class DynamicRerankingInput(BaseModel):
             query: str
-            results: List[Dict[str, Any]]
+            results: Optional[List[Dict[str, Any]]] = None
 
     # Create dynamic tool class
     class DynamicRerankingTool(BaseTool):
@@ -180,7 +180,7 @@ def _create_dynamic_reranking_tool(tool_config: Dict[str, Any]) -> BaseTool:
         description: str = "Reorders results by relevance using BM25 algorithm"
         args_schema: type[BaseModel] = DynamicRerankingInput
 
-        def _run(self, query: str, results: List[Dict[str, Any]], **kwargs) -> str:
+        def _run(self, query: str, results: List[Dict[str, Any]] = None, **kwargs) -> str:
             # Import and delegate to actual implementation
             from tools_impl.reranking import RerankingTool
             actual_tool = RerankingTool()

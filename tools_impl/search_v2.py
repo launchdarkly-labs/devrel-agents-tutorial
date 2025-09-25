@@ -59,7 +59,7 @@ class SearchToolV2(BaseTool):
         # Lazy init; will raise a clean error on first use if uninitialized
         self.vector_store = None
 
-    def _run(self, query: str, top_k: int = 3) -> str:
+    def _run(self, query: str, top_k: int = 3, **kwargs) -> str:
         try:
             # clamp for safety (in case someone bypasses args_schema)
             top_k = max(1, min(int(top_k), 20))

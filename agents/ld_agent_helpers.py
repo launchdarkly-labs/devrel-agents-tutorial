@@ -7,7 +7,6 @@ from langchain.chat_models import init_chat_model
 from langgraph.prebuilt import create_react_agent
 from ldai.tracker import TokenUsage
 from utils.logger import log_student
-from langchain_core.messages import ToolMessage
 
 
 def map_provider_to_langchain(provider_name):
@@ -22,48 +21,6 @@ def map_provider_to_langchain(provider_name):
     return provider_mapping.get(lower_provider, lower_provider)
 
 
-def find_recent_search_output(messages: List[Any], tool_name: str = "search_v2") -> Optional[str]:
-    """
-    Find the most recent output from a specific tool in the conversation messages.
-
-    Args:
-        messages: List of conversation messages
-        tool_name: Name of the tool to find output for (default: "search_v2")
-
-    Returns:
-        The complete tool output string, or None if not found
-    """
-    try:
-        # Search messages in reverse order (most recent first)
-        for message in reversed(messages):
-            # Check for ToolMessage (contains tool output)
-            if isinstance(message, ToolMessage):
-                # Check if this is the tool we're looking for
-                if hasattr(message, 'name') and message.name == tool_name:
-                    log_student(f"CONTEXT INJECTION: Found recent {tool_name} output ({len(message.content)} chars)")
-                    return message.content
-
-            # Also check for tool_calls in AIMessage to get tool_call_id
-            elif hasattr(message, 'tool_calls') and message.tool_calls:
-                for tool_call in message.tool_calls:
-                    if tool_call.get('name') == tool_name:
-                        # Found the tool call, now look for corresponding ToolMessage
-                        tool_call_id = tool_call.get('id')
-                        if tool_call_id:
-                            # Search for ToolMessage with matching tool_call_id
-                            for msg in messages:
-                                if (isinstance(msg, ToolMessage) and
-                                    hasattr(msg, 'tool_call_id') and
-                                    msg.tool_call_id == tool_call_id):
-                                    log_student(f"CONTEXT INJECTION: Found recent {tool_name} output via call_id ({len(msg.content)} chars)")
-                                    return msg.content
-
-        log_student(f"CONTEXT INJECTION: No recent {tool_name} output found in {len(messages)} messages")
-        return None
-
-    except Exception as e:
-        log_student(f"CONTEXT INJECTION ERROR: Error finding recent tool output: {e}")
-        return None
 
 
 def track_langgraph_metrics(tracker, func):
@@ -149,7 +106,6 @@ async def create_agent_with_fresh_config(
         except Exception as e:
             log_student(f"DEBUG: Error extracting max_tool_calls in create_agent_with_fresh_config: {e}")
 
-        log_student(f"LaunchDarkly config has max_tool_calls={max_tool_calls} (Note: LangGraph React agent handles iterations internally)")
 
         # Create React agent with instructions
         # Note: LangGraph's create_react_agent handles max iterations internally
@@ -193,9 +149,6 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                 user_context = request_data.get("user_context", {})
                 messages = request_data.get("messages", [])
 
-                # Debug logging
-                log_student(f"{config_key}: Creating agent with {len(tools)} tools: {[getattr(tool, 'name', str(tool)) for tool in tools]}")
-
                 # Create agent with config
                 agent, tracker, disabled = asyncio.run(create_agent_with_fresh_config(
                     config_manager=config_manager,
@@ -215,14 +168,17 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                         "messages": []
                     }
 
-                log_student(f"{config_key}: Agent created successfully, executing with input: {user_input[:100]}...")
-
                 # Prepare messages for agent
                 if messages:
                     agent_messages = messages
                 else:
                     from langchain_core.messages import HumanMessage
                     agent_messages = [HumanMessage(content=user_input)]
+
+                # Prepare initial state for agent
+                initial_state = {
+                    "messages": agent_messages
+                }
 
                 # Get max_tool_calls from LaunchDarkly config by fetching it fresh
                 agent_config = asyncio.run(config_manager.get_config(
@@ -242,9 +198,9 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                             custom_params = config_dict['model']['custom']
                             if 'max_tool_calls' in custom_params:
                                 max_tool_calls = custom_params['max_tool_calls']
-                                log_student(f"EXTRACTED: max_tool_calls={max_tool_calls} from LaunchDarkly model.custom")
+                                pass  # Successfully extracted max_tool_calls
                             else:
-                                log_student(f"DEBUG: No max_tool_calls in model.custom: {custom_params}")
+                                pass  # max_tool_calls not in custom params
                         else:
                             log_student(f"DEBUG: No model.custom found in config_dict")
                     except Exception as e:
@@ -254,12 +210,10 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                 # LangGraph formula: recursion_limit = 2 * max_tool_calls + 1
                 # Each tool call requires 2 steps: LLM -> Tool -> LLM
                 recursion_limit = 2 * max_tool_calls + 1
-                log_student(f"Using max_tool_calls={max_tool_calls} from LaunchDarkly config")
-                log_student(f"Converting to recursion_limit={recursion_limit} (LangGraph formula: 2*max_tool_calls+1)")
-
+        
                 response = track_langgraph_metrics(
                     tracker,
-                    lambda: agent.invoke({"messages": agent_messages}, config={"recursion_limit": recursion_limit})
+                    lambda: agent.invoke(initial_state, config={"recursion_limit": recursion_limit})
                 )
 
                 # Extract final response and tool calls
@@ -287,8 +241,6 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                                 "search_query": search_query if search_query else None,
                                 "args": tool_args
                             })
-
-                log_student(f"{config_key}: Completed with {len(tool_calls)} tool calls: {tool_calls}")
 
                 return {
                     "user_input": user_input,
