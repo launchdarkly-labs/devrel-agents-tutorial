@@ -70,7 +70,51 @@ class AgentService:
         """
         try:
             log_debug(f"AGENT SERVICE: Processing message for {user_id}")
-            
+
+            # =============================================
+            # INPUT VALIDATION & SAFETY CHECKS
+            # =============================================
+
+            # Validate message content
+            if not message or not message.strip():
+                return ChatResponse(
+                    id=str(uuid.uuid4()),
+                    response="Please provide a message to process.",
+                    tool_calls=[],
+                    variation_key="validation_error",
+                    model="validation",
+                    agent_configurations=[]
+                )
+
+            # Validate message length (prevent extremely long inputs)
+            max_message_length = 5000  # Reasonable limit for tutorial use
+            if len(message) > max_message_length:
+                return ChatResponse(
+                    id=str(uuid.uuid4()),
+                    response=f"Message too long ({len(message)} characters). Please limit to {max_message_length} characters.",
+                    tool_calls=[],
+                    variation_key="validation_error",
+                    model="validation",
+                    agent_configurations=[]
+                )
+
+            # Validate user_id
+            if not user_id or not user_id.strip():
+                user_id = "anonymous_user"  # Provide safe default
+                log_debug("VALIDATION: Empty user_id provided, using 'anonymous_user'")
+
+            # Validate user_context structure
+            if user_context is not None and not isinstance(user_context, dict):
+                log_debug("VALIDATION: Invalid user_context type, using empty dict")
+                user_context = {}  # Safe fallback
+
+            # Validate sanitized_conversation_history
+            if sanitized_conversation_history is not None and not isinstance(sanitized_conversation_history, list):
+                log_debug("VALIDATION: Invalid conversation history type, ignoring")
+                sanitized_conversation_history = None  # Safe fallback
+
+            log_debug("✅ INPUT VALIDATION: All inputs validated successfully")
+
             # Get LaunchDarkly LDAI configurations for all agents
             log_debug(" AGENT SERVICE: Loading agent configurations...")
             supervisor_config = await self.config_manager.get_config(user_id, "supervisor-agent", user_context) 
@@ -97,10 +141,32 @@ class AgentService:
             sanitized_langchain_messages = []
             if sanitized_conversation_history:
                 for msg in sanitized_conversation_history:
-                    if msg.get("role") == "user":
-                        sanitized_langchain_messages.append(HumanMessage(content=msg["content"]))
-                    elif msg.get("role") == "assistant":
-                        sanitized_langchain_messages.append(AIMessage(content=msg["content"]))
+                    # Validate message structure
+                    if not isinstance(msg, dict):
+                        log_debug("VALIDATION: Skipping invalid message in conversation history")
+                        continue
+
+                    role = msg.get("role")
+                    content = msg.get("content")
+
+                    # Validate content exists and is not empty
+                    if not content or not content.strip():
+                        log_debug(f"VALIDATION: Skipping empty message with role {role}")
+                        continue
+
+                    # Convert to LangChain messages
+                    if role == "user":
+                        sanitized_langchain_messages.append(HumanMessage(content=content.strip()))
+                    elif role == "assistant":
+                        sanitized_langchain_messages.append(AIMessage(content=content.strip()))
+                    else:
+                        log_debug(f"VALIDATION: Skipping message with unknown role: {role}")
+
+                # === MESSAGE MEMORY MANAGEMENT ===
+                # Trim conversation history to prevent context overflow
+                # This is especially important for long-running conversations
+                from agents.supervisor_agent import trim_message_history
+                sanitized_langchain_messages = trim_message_history(sanitized_langchain_messages, max_messages=8)
 
             # Add current raw message for security agent processing
             current_raw_message = HumanMessage(content=message)
@@ -113,9 +179,13 @@ class AgentService:
             # This state object will flow through all agents
             initial_state = {
                 # === CORE MESSAGE FLOW ===
-                "user_input": message,                          # Raw message (security agent only)
+                "user_input": message.strip(),                  # Raw message (security agent only) - trimmed
                 "messages": [current_raw_message],              # Security agent gets raw message
                 "final_response": "",
+
+                # === LAUNCHDARKLY TARGETING ===
+                "user_id": user_id,                             # Validated user ID
+                "user_context": user_context or {},             # Validated user context
 
                 # === WORKFLOW ORCHESTRATION ===
                 "current_agent": "",                            # Supervisor will determine first agent
@@ -128,11 +198,11 @@ class AgentService:
                 "support_tool_details": [],
 
                 # === PII SECURITY BOUNDARY ===
-                "sanitized_messages": sanitized_langchain_messages,  # SUPPORT AGENT ONLY gets these
+                "sanitized_messages": sanitized_langchain_messages,  # SUPPORT AGENT ONLY gets these (validated)
                 "processed_user_input": "",                     # Will be set by security agent
                 "pii_detected": False,                          # Will be set by security agent
                 "pii_types": [],                                # Will be set by security agent
-                "redacted_text": message,                       # Will be updated by security agent
+                "redacted_text": message.strip(),               # Will be updated by security agent
             }
             
             # =============================================
