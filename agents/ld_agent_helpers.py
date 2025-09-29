@@ -212,29 +212,31 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                 if agent_config:
                     try:
                         config_dict = agent_config.to_dict()
+                        log_student(f"DEBUG: LaunchDarkly config keys: {list(config_dict.keys())}")
+
                         if 'model' in config_dict and 'custom' in config_dict['model'] and config_dict['model']['custom']:
                             custom_params = config_dict['model']['custom']
+                            log_student(f"DEBUG: custom_params keys: {list(custom_params.keys())}")
+
                             if 'max_tool_calls' in custom_params:
                                 max_tool_calls = custom_params['max_tool_calls']
-                                pass  # Successfully extracted max_tool_calls
+                                log_student(f"DEBUG: Found max_tool_calls={max_tool_calls} in LaunchDarkly")
                             else:
-                                pass  # max_tool_calls not in custom params
+                                log_student(f"DEBUG: max_tool_calls not in custom params, using default={max_tool_calls}")
                         else:
-                            log_student(f"DEBUG: No model.custom found in config_dict")
+                            log_student(f"DEBUG: No model.custom found in config_dict, using default max_tool_calls={max_tool_calls}")
                     except Exception as e:
-                        log_student(f"DEBUG: Error extracting max_tool_calls: {e}")
-
-                # Execute agent with metrics tracking and recursion limit
-                # LangGraph formula: recursion_limit = 2 * max_tool_calls + 1
-                # Each tool call requires 2 steps: LLM -> Tool -> LLM
-                recursion_limit = 2 * max_tool_calls + 1
+                        log_student(f"DEBUG: Error extracting max_tool_calls: {e}, using default={max_tool_calls}")
 
                 # Apply rate limiting before LLM calls
                 _rate_limit_llm_call()
 
+                log_student(f"DEBUG: Executing agent with max_tool_calls={max_tool_calls}, tools={len(tools)}")
+
+                # Execute agent with metrics tracking - let LaunchDarkly handle tool limits naturally
                 response = track_langgraph_metrics(
                     tracker,
-                    lambda: agent.invoke(initial_state, config={"recursion_limit": recursion_limit})
+                    lambda: agent.invoke(initial_state)
                 )
 
                 # Extract final response and tool calls
