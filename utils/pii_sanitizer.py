@@ -48,7 +48,7 @@ def create_redacted_input(user_input: str, processed_input: str, pii_detected: b
         Safe text to pass to downstream agents
     """
     if pii_detected and pii_types:
-        log_debug(f"🔍 PII TYPES FOUND: {pii_types}")
+        log_debug(f"PII TYPES FOUND: {pii_types}")
         return processed_input
     return user_input
 
@@ -89,7 +89,7 @@ def prepare_safe_agent_input(state: Dict[str, Any], agent_type: str) -> Dict[str
         else:
             # Fallback: create clean message with only redacted text
             support_messages = [HumanMessage(content=processed_input)]
-            log_debug(f"⚠️ FALLBACK: No sanitized messages, using redacted text only")
+            log_debug(f"FALLBACK: No sanitized messages, using redacted text only")
         
         return {
             "user_input": processed_input,  # Use redacted text if PII was found
@@ -110,6 +110,6 @@ def log_pii_status(state: Dict[str, Any]) -> None:
     processed_input = state.get("processed_user_input", state["user_input"])
     
     log_debug(f"🔒 SUPERVISOR: Passing to support agent - PII detected: {pii_detected}")
-    log_debug(f"📝 SUPERVISOR: Input text: '{processed_input[:100]}...'")
+    log_debug(f"SUPERVISOR: Input text: '{processed_input[:100]}...'")
     if pii_types:
-        log_debug(f"🔍 SUPERVISOR: PII types found: {pii_types}")
+        log_debug(f"SUPERVISOR: PII types found: {pii_types}")

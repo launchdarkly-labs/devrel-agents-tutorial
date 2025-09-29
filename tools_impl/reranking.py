@@ -6,12 +6,12 @@ import re
 import json
 
 class RerankingInput(BaseModel):
-    query: str = Field(..., description="The search query to rerank results for")
-    results: Optional[List[Dict[str, Any]]] = Field(None, description="Optional: search results. If not provided, will look for recent search_v2 output")
+    query: str
+    results: Optional[List[Dict[str, Any]]] = None
 
 class RerankingTool(BaseTool):
     name: str = "reranking"
-    description: str = "Rerank search results using BM25 algorithm. Pass 'query' (str) and 'results' (the JSON items array from search_v2, not the human summary)."
+    description: str = "Reorders results by relevance using BM25 algorithm"
     args_schema: type[BaseModel] = RerankingInput
     
     def _tokenize(self, text: str) -> List[str]:
@@ -20,92 +20,55 @@ class RerankingTool(BaseTool):
         text = re.sub(r'[^\w\s]', ' ', text.lower())
         # Split on whitespace and filter empty strings
         return [token for token in text.split() if token.strip()]
-    
-    def _parse_search_v2_output(self, search_output: str) -> List[Dict[str, Any]]:
-        """Parse search_v2 text output format into structured results."""
+
+    def _parse_search_results_from_messages(self, kwargs) -> List[Dict[str, Any]]:
+        """Parse search_v2 results from ToolMessages when LLM doesn't extract them directly"""
         try:
-            # First try to extract JSON payload from search_v2 output
-            json_match = re.search(r'```json\s*({.*?})\s*```', search_output, re.DOTALL)
-            if json_match:
-                json_str = json_match.group(1)
-                data = json.loads(json_str)
-                if isinstance(data, dict) and 'items' in data:
-                    print(f"🔧 RERANKING: Successfully parsed JSON payload with {len(data['items'])} items")
-                    return data['items']
-            
-            # Fallback: Search_v2 returns format like: "Found N relevant document(s):\n[Relevance: 0.454] content..."
-            relevance_entries = re.findall(r'\[Relevance: ([\d.]+)\] (.+?)(?=\[Relevance:|$)', search_output, re.DOTALL)
-            
-            if relevance_entries:
-                search_results = []
-                for i, (score, content) in enumerate(relevance_entries):
-                    search_results.append({
-                        "text": content.strip(),
-                        "score": float(score),
-                        "metadata": {"source": "search_v2", "rank": i+1}
-                    })
-                print(f"🔧 RERANKING: Successfully parsed {len(search_results)} items from relevance format")
-                return search_results
-            else:
-                print(f"⚠️ RERANKING: Could not parse search_v2 format from: {search_output[:200]}...")
-                return []
-        except Exception as e:
-            print(f"⚠️ RERANKING: Error parsing search_v2 output: {e}")
+            # Try to get messages from various possible kwargs keys
+            messages = kwargs.get('messages', []) or kwargs.get('chat_history', [])
+
+            # Look for most recent search_v2 ToolMessage in reverse order
+            for message in reversed(messages):
+                if hasattr(message, 'content') and isinstance(message.content, str):
+                    content = message.content
+                    # Look for JSON block in search_v2 output
+                    if '```json' in content and 'items' in content:
+                        try:
+                            # Extract JSON from fenced code block
+                            json_start = content.find('```json') + 7
+                            json_end = content.find('```', json_start)
+                            if json_end > json_start:
+                                json_str = content[json_start:json_end].strip()
+                                search_data = json.loads(json_str)
+                                if isinstance(search_data, dict) and 'items' in search_data:
+                                    return search_data['items']
+                        except (json.JSONDecodeError, KeyError, IndexError):
+                            continue
+
             return []
+        except Exception:
+            return []
+    
 
-    def _extract_items_from_string(self, results_str: str) -> List[Dict[str, Any]]:
-        """Extract JSON items array from fenced JSON string if needed."""
-        try:
-            # Try to find fenced JSON block
-            import re
-            json_match = re.search(r'```json\s*(\{.*?\})\s*```', results_str, re.DOTALL)
-            if json_match:
-                json_str = json_match.group(1)
-                data = json.loads(json_str)
-                if isinstance(data, dict) and 'items' in data:
-                    return data['items']
-            # If no fenced JSON, maybe it's just a JSON string
-            data = json.loads(results_str)
-            if isinstance(data, dict) and 'items' in data:
-                return data['items']
-            elif isinstance(data, list):
-                return data
-        except (json.JSONDecodeError, AttributeError):
-            pass
-        return []
 
-    def _run(self, query: str, results: Optional[List[Dict[str, Any]]] = None, **kwargs) -> str:
-        # Handle different input formats for results
-        if results is None:
-            # No results provided, need to parse from conversation context
-            # Try to get state from kwargs or other context
-            print(f"🔧 RERANKING: No results provided, looking for recent search_v2 output...")
-            
-            # For now, return an error - we'll need to access the conversation state
-            # This would require the agent to pass the state or search results
-            return "ERROR: No search results provided. Please run search_v2 first to get results to rerank."
-            
-        elif isinstance(results, str):
-            print(f"🔧 RERANKING: Got string results, trying to parse...")
-            # First try search_v2 format (which includes JSON payload)
-            items = self._parse_search_v2_output(results)
+
+    def _run(self, query: str, results: List[Dict[str, Any]] = None, **kwargs) -> str:
+        # Handle LLM-mediated tool chaining: LLM should extract results from search_v2 ToolMessage
+        if results is None or not results:
+            # Fallback: parse recent messages to find search_v2 JSON results
+            items = self._parse_search_results_from_messages(kwargs)
             if not items:
-                # Fallback to JSON format
-                items = self._extract_items_from_string(results)
-            if not items:
-                print(f"⚠️ RERANKING: Failed to parse. Input preview: {results[:300]}...")
-                return f"ERROR: Could not parse search results from string format. Expected search_v2 output with [Relevance: X.XX] format or JSON payload."
+                return f"No search results found. Please run search_v2 with query '{query}' first."
         else:
+            # LLM successfully extracted and passed results directly
             items = results
-        
+
         # Validate inputs
         if not query:
             return "ERROR: `query` parameter is required."
-        
+
         if not isinstance(items, list) or not items:
             return "ERROR: `results` must be a non-empty list of search result items from search_v2."
-        
-        print(f"🔧 RERANKING: Query='{query}', Items={len(items)}")
         
         # Extract text content from each item
         docs = []
@@ -153,7 +116,6 @@ class RerankingTool(BaseTool):
                     reranked_results.append(f"{i}. [BM25: {score:.3f}] {item}")
             
             result = f"BM25 reranked results for '{query}':\n\n" + '\n\n'.join(reranked_results)
-            print(f"🔧 RERANKING COMPLETE: {len(item_scores)} items reranked")
             return result
             
         except Exception as e:

@@ -54,27 +54,27 @@ class FixedConfigManager:
     
     async def get_config(self, user_id: str, config_key: str = None, user_context: dict = None):
         """Get LaunchDarkly AI Config object directly - no wrapper"""
-        log_debug(f"🔧 CONFIG MANAGER: Getting config for user_id={user_id}, config_key={config_key}")
-        log_debug(f"🔧 CONFIG MANAGER: User context: {user_context}")
+        log_debug(f"CONFIG MANAGER: Getting config for user_id={user_id}, config_key={config_key}")
+        log_debug(f"CONFIG MANAGER: User context: {user_context}")
         
         context_builder = Context.builder(user_id).kind('user')
         
         if user_context:
             if 'country' in user_context:
                 context_builder.set('country', user_context['country'])
-                log_debug(f"🔧 CONFIG MANAGER: Set country={user_context['country']}")
+                log_debug(f"CONFIG MANAGER: Set country={user_context['country']}")
             if 'plan' in user_context:
                 context_builder.set('plan', user_context['plan'])
-                log_debug(f"🔧 CONFIG MANAGER: Set plan={user_context['plan']}")
+                log_debug(f"CONFIG MANAGER: Set plan={user_context['plan']}")
             if 'region' in user_context:
                 context_builder.set('region', user_context['region'])
-                log_debug(f"🔧 CONFIG MANAGER: Set region={user_context['region']}")
+                log_debug(f"CONFIG MANAGER: Set region={user_context['region']}")
         
         ld_user_context = context_builder.build()
-        log_debug(f"🔧 CONFIG MANAGER: Built LaunchDarkly context: {ld_user_context}")
+        log_debug(f"CONFIG MANAGER: Built LaunchDarkly context: {ld_user_context}")
         
         ai_config_key = config_key or os.getenv('LAUNCHDARKLY_AI_CONFIG_KEY', 'support-agent')
-        log_debug(f"🔧 CONFIG MANAGER: Using AI config key: {ai_config_key}")
+        log_debug(f"CONFIG MANAGER: Using AI config key: {ai_config_key}")
         
         agent_config = LDAIAgentConfig(
             key=ai_config_key,
@@ -88,22 +88,22 @@ class FixedConfigManager:
         try:
             # Return the AI Config object directly
             result = self.ai_client.agent(agent_config, ld_user_context)
-            log_debug(f"🔧 CONFIG MANAGER: Got result from LaunchDarkly")
+            log_debug(f"CONFIG MANAGER: Got result from LaunchDarkly")
             
             # Debug the actual configuration received (basic info only)
             try:
                 config_dict = result.to_dict()
-                log_debug(f"🔧 CONFIG MANAGER: Model: {config_dict.get('model', {}).get('name', 'unknown')}")
+                log_debug(f"CONFIG MANAGER: Model: {config_dict.get('model', {}).get('name', 'unknown')}")
                 if hasattr(result, 'tracker') and hasattr(result.tracker, '_variation_key'):
-                    log_debug(f"🔧 CONFIG MANAGER: Variation: {result.tracker._variation_key}")
+                    log_debug(f"CONFIG MANAGER: Variation: {result.tracker._variation_key}")
             except Exception as debug_e:
-                log_debug(f"🔧 CONFIG MANAGER: Could not debug result: {debug_e}")
+                log_debug(f"CONFIG MANAGER: Could not debug result: {debug_e}")
             
             return result
         except Exception as e:
-            log_student(f"🔧 CONFIG MANAGER ERROR: {e}")
+            log_student(f"CONFIG MANAGER ERROR: {e}")
             import traceback
-            log_debug(f"🔧 CONFIG MANAGER ERROR TRACEBACK: {traceback.format_exc()}")
+            log_debug(f"CONFIG MANAGER ERROR TRACEBACK: {traceback.format_exc()}")
             raise
     
     def track_metrics(self, tracker, func):

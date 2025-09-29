@@ -14,11 +14,11 @@ from data.enterprise_kb import get_knowledge_base
 load_dotenv()
 
 def main():
-    print("🚀 Initializing vector embeddings for knowledge base...")
+    print(" Initializing vector embeddings for knowledge base...")
     
     # Check required environment variables
     if not os.getenv('OPENAI_API_KEY'):
-        print("❌ Error: OPENAI_API_KEY environment variable is required")
+        print(" Error: OPENAI_API_KEY environment variable is required")
         sys.exit(1)
     
     try:
@@ -37,7 +37,7 @@ def main():
                 print("🔄 Force recreating embeddings...")
         
         # Load knowledge base
-        print("📚 Loading knowledge base...")
+        print(" Loading knowledge base...")
         documents = get_knowledge_base()
         print(f"   - Loaded {len(documents)} documents")
         
@@ -45,14 +45,14 @@ def main():
         metadata = [{"source": "enterprise_kb", "doc_id": i} for i in range(len(documents))]
         
         # Create embeddings
-        print("🔢 Creating vector embeddings...")
+        print(" Creating vector embeddings...")
         vector_store.create_index(documents, metadata)
         
         # Test the embeddings
         print("🧪 Testing search functionality...")
         test_results = vector_store.search("reinforcement learning", top_k=3)
         
-        print("✅ Test results:")
+        print(" Test results:")
         for i, (doc, score, meta) in enumerate(test_results):
             print(f"   {i+1}. Score: {score:.3f} - {doc[:100]}...")
         
@@ -61,7 +61,7 @@ def main():
         print("   - Search tools will now use persistent embeddings")
         
     except Exception as e:
-        print(f"❌ Error initializing embeddings: {e}")
+        print(f" Error initializing embeddings: {e}")
         sys.exit(1)
 
 if __name__ == "__main__":
