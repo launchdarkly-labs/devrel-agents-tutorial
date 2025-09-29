@@ -72,6 +72,60 @@
       "type": "research",
       "expected_tools": ["arxiv_search", "semantic_scholar"],
       "good_response_keywords": ["NLP", "language", "processing"]
+    },
+    {
+      "query": "Search for implementation guidance and best practices",
+      "type": "basic_ml",
+      "expected_tools": ["search_v2", "reranking"],
+      "good_response_keywords": ["implementation", "guidance", "best practices"]
+    },
+    {
+      "query": "Find papers on graph neural networks published in 2024",
+      "type": "research",
+      "expected_tools": ["arxiv_search", "semantic_scholar", "reranking"],
+      "good_response_keywords": ["graph", "neural", "networks", "2024"]
+    },
+    {
+      "query": "What are the best optimization techniques for deep learning?",
+      "type": "basic_ml",
+      "expected_tools": ["search_v2"],
+      "good_response_keywords": ["optimization", "techniques", "deep learning"]
+    },
+    {
+      "query": "Research recent breakthroughs in computer vision transformers",
+      "type": "research",
+      "expected_tools": ["arxiv_search", "semantic_scholar"],
+      "good_response_keywords": ["computer vision", "transformers", "breakthroughs"]
+    },
+    {
+      "query": "How to troubleshoot model training issues?",
+      "type": "faq",
+      "expected_tools": ["search_v2"],
+      "good_response_keywords": ["troubleshoot", "model", "training"]
+    },
+    {
+      "query": "Find research on federated learning and privacy",
+      "type": "research",
+      "expected_tools": ["arxiv_search", "semantic_scholar", "reranking"],
+      "good_response_keywords": ["federated", "learning", "privacy"]
+    },
+    {
+      "query": "Explain gradient descent algorithms",
+      "type": "basic_ml",
+      "expected_tools": ["search_v2"],
+      "good_response_keywords": ["gradient", "descent", "algorithms"]
+    },
+    {
+      "query": "Latest papers on large language model efficiency",
+      "type": "research",
+      "expected_tools": ["arxiv_search", "semantic_scholar"],
+      "good_response_keywords": ["large language model", "efficiency", "papers"]
+    },
+    {
+      "query": "Search for machine learning deployment strategies",
+      "type": "basic_ml",
+      "expected_tools": ["search_v2", "reranking"],
+      "good_response_keywords": ["machine learning", "deployment", "strategies"]
     }
   ],
   "notes": {
