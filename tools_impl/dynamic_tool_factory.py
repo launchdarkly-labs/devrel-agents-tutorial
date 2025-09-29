@@ -336,6 +336,62 @@ def _create_mcp_tool_wrapper(mcp_tool, ld_name: str):
     return MCPToolWrapper(mcp_tool, ld_name)
 
 
+def _create_research_fallback_tool(tool_name: str) -> Optional[BaseTool]:
+    """Create fallback research tool when MCP isn't available"""
+    from langchain.tools import BaseTool
+    from pydantic import BaseModel, Field
+
+    class ResearchInput(BaseModel):
+        """Input schema for research tools"""
+        query: str = Field(description="Research query for academic papers")
+        max_results: int = Field(default=5, description="Maximum number of results to return")
+
+    class ResearchFallbackTool(BaseTool):
+        name: str = tool_name
+        description: str = ""
+        args_schema: type = ResearchInput
+
+        def __init__(self, tool_name: str):
+            super().__init__()
+            if tool_name == "arxiv_search":
+                object.__setattr__(self, 'description', "Search ArXiv for academic papers (fallback: uses enhanced vector search)")
+            elif tool_name == "semantic_scholar":
+                object.__setattr__(self, 'description', "Search Semantic Scholar for academic papers (fallback: uses enhanced vector search)")
+            object.__setattr__(self, 'name', tool_name)
+
+        def _run(self, query: str, max_results: int = 5) -> str:
+            """Fallback research using enhanced vector search"""
+            try:
+                # Use the existing vector search tools as fallback
+                from tools_impl.search_v2 import SearchToolV2
+                from tools_impl.reranking import RerankingTool
+
+                # Enhanced search with reranking for better research results
+                search_tool = SearchToolV2()
+                rerank_tool = RerankingTool()
+
+                # Get initial results
+                search_results = search_tool.run(f"academic research papers {query}")
+
+                # Rerank for relevance
+                if search_results and "No relevant" not in search_results:
+                    reranked_results = rerank_tool.run(f"query:{query}\nresults:{search_results}")
+
+                    # Format as research paper results
+                    result = f"RESEARCH RESULTS for '{query}' (via enhanced vector search):\n\n"
+                    result += f"Note: Using fallback search due to MCP unavailability. Results are from internal documentation.\n\n"
+                    result += reranked_results
+
+                    return result
+                else:
+                    return f"No research papers found for query: {query}. Try different search terms."
+
+            except Exception as e:
+                return f"Research search error: {str(e)}"
+
+    return ResearchFallbackTool(tool_name)
+
+
 def create_dynamic_tools_from_launchdarkly(config) -> List[BaseTool]:
     """
     Main function to create all tools dynamically from LaunchDarkly configuration.
@@ -356,9 +412,14 @@ def create_dynamic_tools_from_launchdarkly(config) -> List[BaseTool]:
             available_tools.append(tool_instance)
             log_debug(f"DYNAMIC TOOL CREATED: {tool_name}")
         else:
-            # Only log MCP tool failures if they were actually requested
+            # Create fallback tools for MCP research when MCP isn't available
             if tool_name in ["arxiv_search", "semantic_scholar"]:
-                log_debug(f"MCP TOOL NOT AVAILABLE: {tool_name}")
+                fallback_tool = _create_research_fallback_tool(tool_name)
+                if fallback_tool:
+                    available_tools.append(fallback_tool)
+                    log_debug(f"MCP FALLBACK TOOL CREATED: {tool_name}")
+                else:
+                    log_debug(f"MCP TOOL NOT AVAILABLE: {tool_name}")
             else:
                 log_debug(f"DYNAMIC TOOL FAILED: {tool_name}")
 

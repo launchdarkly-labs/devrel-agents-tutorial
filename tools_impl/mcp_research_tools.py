@@ -24,11 +24,33 @@ class MCPResearchTools:
         self.client = None
         self.tools = {}
         self._initialized = False
+
+    def _is_ui_environment(self):
+        """Detect if we're in a UI environment that captures stderr"""
+        # Check if stderr is captured (UI environments like Streamlit)
+        if not hasattr(sys.stderr, 'fileno') or 'CapturingStdErr' in str(type(sys.stderr)):
+            return True
+
+        # Check for UI environment indicators
+        ui_indicators = [
+            'streamlit' in sys.modules,
+            'jupyter' in sys.modules,
+            'ipykernel' in sys.modules,
+            os.environ.get('STREAMLIT_RUNTIME_EXISTS'),
+        ]
+
+        return any(ui_indicators)
         
     async def initialize(self):
         """Initialize MCP client with research servers using process lifetime reuse"""
         global _MCP_SINGLETON
-        
+
+        # Check if we're in a problematic environment (UI/Streamlit)
+        if self._is_ui_environment():
+            print("MCP: Skipping initialization in UI environment (stderr capture detected)")
+            self._initialized = True
+            return
+
         async with _MCP_LOCK:
             if _MCP_SINGLETON is not None:
                 # Check if singleton has tools before reusing
@@ -43,9 +65,9 @@ class MCPResearchTools:
                     # Singleton exists but has no tools, clear it and reinitialize
                     print(f"MCP: Singleton has 0 tools, clearing and reinitializing...")
                     _MCP_SINGLETON = None
-                
+
             print("MCP: Initializing process-lifetime singleton...")
-        
+
         try:
             # Configure MCP servers for research
             # NOTE: MCP servers can cause initialization timeouts in some environments
