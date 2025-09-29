@@ -1,14 +1,13 @@
 """
 Support Agent with Dynamic Tool Loading from LaunchDarkly
 
-LANGGRAPH PATTERN: Agent Wrapper with Dynamic Configuration
+Agent Wrapper with Dynamic Configuration
 
 This agent demonstrates how to:
 1. Load tools dynamically from LaunchDarkly AI Config
 2. Create React agents with runtime-fetched configurations
 3. Implement simple agent wrapper pattern for LangGraph integration
 
-KEY EDUCATIONAL CONCEPT:
 Instead of hardcoded tools, this agent's capabilities are entirely controlled
 by LaunchDarkly configuration, enabling A/B testing of tool availability.
 """
@@ -32,7 +31,6 @@ def create_support_agent(config, config_manager):
     3. Create agent wrapper that fetches fresh config on each call
     4. Return wrapper with invoke() method for LangGraph compatibility
 
-    KEY EDUCATIONAL CONCEPTS:
     - Tools are NOT hardcoded - they come from LaunchDarkly configuration
     - Different users can get different tool sets based on targeting rules
     - A/B testing of tool availability is built into the agent design

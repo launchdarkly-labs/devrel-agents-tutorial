@@ -58,25 +58,25 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
     LANGGRAPH WORKFLOW OVERVIEW:
     ============================
 
-    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-    │   SUPERVISOR    │    │  PII PRESCREEN  │    │ SECURITY AGENT  │
-    │                 │───▶│                 │───▶│                 │
-    │ Routing Logic   │    │ Smart Analysis  │    │ PII Detection   │
-    └─────────────────┘    └─────────────────┘    └─────────────────┘
-                                      │                       │
-                                      ▼                       ▼
-                            ┌─────────────────┐    ┌─────────────────┐
-                            │ SUPPORT AGENT   │    │ SUPPORT AGENT   │
-                            │                 │.   │                 │
-                            │ Direct Route    │    │ Post-Security   │
-                            │ (No PII)        │    │ (Sanitized)     │
-                            └─────────────────┘    └─────────────────┘
-                                       │                      │
-                                       ▼                      ▼
-                            ┌─────────────────────────────────────────┐
-                            │           FORMAT FINAL                  │
-                            │      Combine Results & Respond          │
-                            └─────────────────────────────────────────┘
+┌─────────────────┐    ┌─────────────────┐
+│   SUPERVISOR    │    │ SECURITY AGENT  │
+│                 │───▶│                 │
+│ Smart Analysis  │    │ PII Detection   │
+└─────────────────┘    └─────────────────┘
+          │                       │
+          ▼                       ▼
+┌─────────────────┐    ┌─────────────────┐
+│ SUPPORT AGENT   │    │ SUPPORT AGENT   │
+│                 │.   │                 │
+│ Direct Route    │    │ Post-Security   │
+│ (No PII)        │    │ (Sanitized)     │
+└─────────────────┘    └─────────────────┘
+           │                      │
+           ▼                      ▼
+┌─────────────────────────────────────────┐
+│           FORMAT FINAL                  │
+│      Combine Results & Respond          │
+└─────────────────────────────────────────┘
 
     KEY LANGGRAPH PATTERNS DEMONSTRATED:
     - StateGraph with TypedDict state management
