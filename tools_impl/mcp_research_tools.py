@@ -10,6 +10,7 @@ import random
 import sys
 import os
 import subprocess
+import io
 
 logger = logging.getLogger(__name__)
 
@@ -27,19 +28,25 @@ class MCPResearchTools:
 
     def _is_ui_environment(self):
         """Detect if we're in a UI environment that captures stderr"""
-        # Check if stderr is captured (UI environments like Streamlit)
-        if not hasattr(sys.stderr, 'fileno') or 'CapturingStdErr' in str(type(sys.stderr)):
+        # Only skip MCP if stderr is actually captured or unusable
+        try:
+            # Test if stderr actually works
+            if not hasattr(sys.stderr, 'fileno'):
+                return True
+
+            # Try to call fileno() - this will fail in captured environments
+            sys.stderr.fileno()
+
+            # Check if stderr is a capturing object
+            if 'CapturingStdErr' in str(type(sys.stderr)):
+                return True
+
+            # If we get here, stderr works fine
+            return False
+
+        except (AttributeError, OSError, ValueError, io.UnsupportedOperation):
+            # stderr doesn't work properly
             return True
-
-        # Check for UI environment indicators
-        ui_indicators = [
-            'streamlit' in sys.modules,
-            'jupyter' in sys.modules,
-            'ipykernel' in sys.modules,
-            os.environ.get('STREAMLIT_RUNTIME_EXISTS'),
-        ]
-
-        return any(ui_indicators)
         
     async def initialize(self):
         """Initialize MCP client with research servers using process lifetime reuse"""
