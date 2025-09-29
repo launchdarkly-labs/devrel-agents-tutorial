@@ -10,9 +10,9 @@ from typing import Dict, Any
 
 def test_user_scenario(user_context: Dict[str, Any], expected_config: Dict[str, Any]) -> Dict[str, Any]:
     """Test a specific user scenario and validate the configuration"""
-    
-    # Test query for research capabilities
-    test_query = "Compare what you know from your internal documentation with recent academic research papers"
+
+    # Test query with PII to verify security agent behavior
+    test_query = "My name is John Doe, email: john.doe@example.com. I'm a VP at StarSystems and need help with documentation research"
     
     payload = {
         "message": test_query,
@@ -54,13 +54,36 @@ def test_user_scenario(user_context: Dict[str, Any], expected_config: Dict[str, 
         # Check for MCP tools specifically
         support_tools = actual_config.get("support-agent", {}).get("tools", [])
         has_mcp_tools = any(tool in support_tools for tool in ["arxiv_search", "semantic_scholar"])
-        
+
+        # Check security agent redaction behavior
+        response_text = result.get("response", "")
+        redacted_text = result.get("redacted_text", "")
+
+        # Check if PII was properly redacted (should not contain original PII in final response)
+        pii_properly_redacted = (
+            "John Doe" not in response_text and
+            "john.doe@example.com" not in response_text and
+            "[REDACTED]" in redacted_text  # Should have redacted text in workflow
+        )
+
+        # For EU users, check if job title and company were redacted (strict security)
+        strict_redaction_working = True
+        if user_context.get("country") in ["DE", "FR", "ES", "IT"]:  # EU countries
+            strict_redaction_working = (
+                "VP" not in redacted_text and
+                "StarSystems" not in redacted_text and
+                "[REDACTED]" in redacted_text
+            )
+
         return {
             "success": True,
             "user_context": user_context,
             "expected": expected_config,
             "actual": actual_config,
             "has_mcp_tools": has_mcp_tools,
+            "pii_properly_redacted": pii_properly_redacted,
+            "strict_redaction_working": strict_redaction_working,
+            "redacted_text": redacted_text,
             "response_length": len(result.get("response", "")),
             "tool_calls": result.get("tool_calls", []),
             "response": result.get("response", "")[:200] + "..." if len(result.get("response", "")) > 200 else result.get("response", "")

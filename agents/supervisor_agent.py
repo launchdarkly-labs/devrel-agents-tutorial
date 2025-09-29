@@ -59,6 +59,7 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             )
 
             # Create PII pre-screening model with structured output
+            from config_manager import map_provider_to_langchain
             langchain_provider = map_provider_to_langchain(supervisor_config.provider.name)
 
             base_model = init_chat_model(
@@ -142,7 +143,6 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             else:
                 # All workflow stages should be handled above - default to complete
                 next_agent = "complete"
-
             # Track successful supervisor decision
             config_manager.track_metrics(
                 supervisor_config.tracker,
@@ -306,6 +306,7 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             )
             
             support_response = result["response"]
+
             tool_details = result.get('tool_details', [])
 
             return {
@@ -325,7 +326,7 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             )
             raise
     
-    
+
     def route_decision(state: SupervisorState) -> Literal["pii_prescreen", "security_agent", "support_agent", "complete"]:
         """Route based on supervisor decision with intelligent pre-screening"""
         current_agent = state.get("current_agent", "pii_prescreen")
