@@ -12,10 +12,8 @@ The solution? **Rigorous A/B experiments** with specific hypotheses, statistical
 
 In the next 25 minutes, you'll design and execute experiments that answer two critical business questions:
 
-- **Tool Implementation ROI**: Does `search_v2 + reranking` improve user satisfaction by ≥20% vs basic `search_v1`?
-- **Model Efficiency Analysis**: Does Claude Sonnet use ≥25% fewer tool calls than GPT-4 while maintaining equivalent satisfaction?
-
-Each experiment includes rigorous hypotheses, statistical significance requirements, and clear success/failure thresholds for data-driven decisions.
+- **Tool Implementation ROI**: Which tool configuration delivers the best satisfaction-to-cost ratio while maintaining <2s response latency?
+- **Model Efficiency Analysis**: Does Claude 3.5 Sonnet use ≥25% fewer tool calls than GPT-4 while maintaining equivalent satisfaction?
 
 ## Prerequisites
 
@@ -30,59 +28,88 @@ You'll need:
 - **Completed Parts 1 & 2**: Working multi-agent system with segmentation
 - **Active LaunchDarkly Project**: With AI Configs and user segments from Part 2
 - **API Keys**: All keys from previous parts (Anthropic, OpenAI, LaunchDarkly, Mistral)
-- **Statistical Knowledge**: Basic understanding of statistical significance and sample sizes
 
 ## Experiment 1: Tool Implementation ROI (12 minutes)
 
 This experiment answers the fundamental question: "Do advanced search features justify their development cost?"
 
-### **Rigorous Hypothesis Framework**
+### **Multi-Variant Hypothesis Framework**
 
-**Primary Hypothesis**: Users with `search_v2 + reranking` will show ≥20% higher satisfaction rate compared to `search_v1` baseline
+**Primary Hypothesis**: Advanced tool configurations will improve satisfaction while maintaining acceptable cost and latency trade-offs
 
-**Counter-Hypothesis**: If satisfaction improvement is <10%, advanced search tools don't justify development cost
+**Test Variations** (25% traffic each):
+- **Control**: `search_v1` only (baseline cost and performance)
+- **Treatment A**: `search_v2 + reranking` (advanced internal tools)
+- **Treatment B**: `search_v2 + reranking + arxiv_search + semantic_scholar` (full stack)
+- **Treatment C**: `arxiv_search + semantic_scholar` only (external tools isolation test)
 
-**Success Criteria**:
-- ≥20% satisfaction improvement with statistical significance (p<0.05)
-- Minimum 100 interactions per variation
-- Test duration: 7 days minimum
+**Success Criteria** (all must be met):
+- ≥15% satisfaction improvement vs control with >90% posterior probability
+- Cost increase ≤20% per query with >90% posterior probability
+- Response latency ≤2.0 seconds (95th percentile) with >90% posterior probability
+- Minimum 100 interactions per variation (400+ total) for reliable Bayesian inference
 
-**Failure Criteria**:
-- <10% improvement or no statistical significance after 200+ interactions
-- If failed: Revert to `search_v1`, investigate why advanced search underperformed
+**Failure Criteria** (any triggers failure):
+- <10% satisfaction improvement or <70% posterior probability of improvement
+- >25% cost increase per query with >70% posterior probability
+- >2.5 seconds response latency (95th percentile) with >70% posterior probability
+- If failed: Maintain control configuration, analyze cost/performance bottlenecks
 
-### **Step 1: Create Metrics in LaunchDarkly (3 minutes)**
+### **Step 1: Create Multi-Metric Framework in LaunchDarkly (5 minutes)**
 
-Navigate to your LaunchDarkly project and create the satisfaction metric:
+Create three metrics to track satisfaction, cost, and latency:
 
+**Metric 1: User Satisfaction Rate**
 1. **Go to Metrics**: In your LaunchDarkly dashboard, click "Metrics" in the left sidebar
 2. **Create New Metric**: Click "Create metric"
-3. **Configure Metric**:
+3. **Configure Primary Metric**:
    - **Name**: "User Satisfaction Rate"
    - **Key**: "user_satisfaction"
    - **Event Key**: Use the feedback events from your `/feedback` API endpoint
    - **Measurement**: "Conversion rate" (percentage of positive feedback)
    - **Success Event**: When `feedback` field equals "positive"
 
-### **Step 2: Set Up Tool Comparison Experiment (4 minutes)**
+**Metric 2: Cost per Query**
+1. **Create Second Metric**: Click "Create metric"
+2. **Configure Cost Counter-Metric**:
+   - **Name**: "Average Cost per Query"
+   - **Key**: "query_cost"
+   - **Event Key**: Use cost tracking events from tool usage
+   - **Measurement**: "Average value" (average API cost per interaction)
+   - **Lower is Better**: Check this option
+
+**Metric 3: Response Latency**
+1. **Create Third Metric**: Click "Create metric"
+2. **Configure Latency Metric**:
+   - **Name**: "95th Percentile Response Time"
+   - **Key**: "response_latency"
+   - **Event Key**: Use timing events from your system
+   - **Measurement**: "95th percentile" (latency threshold)
+   - **Lower is Better**: Check this option
+
+### **Step 2: Set Up Multi-Variant Tool Comparison (6 minutes)**
 
 1. **Navigate to AI Configs**: Go to "AI Configs" → "support-agent"
 2. **Create Experiment**: Click "Create experiment"
 3. **Experiment Setup**:
-   - **Name**: "Tool Implementation ROI Test"
-   - **Type**: "Feature change experiment"
-   - **Hypothesis**: "search_v2 + reranking improves satisfaction by ≥20%"
-   - **Primary Metric**: "User Satisfaction Rate" (created above)
+   - **Name**: "Comprehensive Tool ROI Analysis"
+   - **Type**: "AI Config experiment"
+   - **Hypothesis**: "Advanced tool configurations improve satisfaction within cost/latency constraints"
+   - **Primary Metric**: "User Satisfaction Rate"
+   - **Counter-Metrics**: "Average Cost per Query", "95th Percentile Response Time"
 
-4. **Configure Variations**:
-   - **Control (50%)**: Tools = `["search_v1"]`
-   - **Treatment (50%)**: Tools = `["search_v2", "reranking"]`
-   - **Keep identical**: Same model, same instructions, same targeting
+4. **Configure Four Variations** (25% traffic each):
+   - **Control**: Tools = `["search_v1"]` (baseline)
+   - **Treatment A**: Tools = `["search_v2", "reranking"]` (advanced internal)
+   - **Treatment B**: Tools = `["search_v2", "reranking", "arxiv_search", "semantic_scholar"]` (full stack)
+   - **Treatment C**: Tools = `["arxiv_search", "semantic_scholar"]` (external only)
 
-5. **Set Success Thresholds**:
-   - **Minimum sample size**: 100 interactions per variation
-   - **Statistical significance**: p<0.05
-   - **Business threshold**: ≥20% satisfaction improvement
+5. **Set Multi-Criteria Success Thresholds**:
+   - **Primary**: ≥15% satisfaction improvement (any treatment vs control)
+   - **Cost Constraint**: ≤20% cost increase per query
+   - **Latency Constraint**: ≤2.0s response time (95th percentile)
+   - **Bayesian Confidence**: >90% posterior probability for success criteria
+   - **Sample Size**: 100 interactions minimum per variation (400+ total)
 
 ### **Step 3: Launch and Monitor (2 minutes)**
 
@@ -112,17 +139,18 @@ This experiment quantifies which model delivers better resource efficiency: "Doe
 
 ### **Rigorous Hypothesis Framework**
 
-**Primary Hypothesis**: Claude Sonnet will use ≥25% fewer tool calls than GPT-4 to achieve equivalent satisfaction rates
+**Primary Hypothesis**: Claude 3.5 Sonnet will use ≥25% fewer tool calls than GPT-4 to achieve equivalent satisfaction rates
 
 **Counter-Hypothesis**: If Claude uses >90% of GPT-4's tool calls, efficiency gains don't justify model switching costs
 
 **Success Criteria**:
-- ≥25% reduction in tool calls with maintained satisfaction (within 5% of GPT-4)
-- Statistical significance on both metrics (p<0.05)
-- Minimum 100 interactions per model
+- ≥25% reduction in tool calls with >90% posterior probability
+- Maintained satisfaction (within 5% of GPT-4) with >90% posterior probability
+- Minimum 100 interactions per model for reliable Bayesian inference
 
 **Failure Criteria**:
-- <15% tool call reduction or >10% satisfaction drop
+- <15% tool call reduction with >70% posterior probability
+- >10% satisfaction drop with >70% posterior probability
 - If failed: Stick with current model allocation, investigate Claude's tool-calling patterns
 
 ### **Step 1: Create Tool Efficiency Metric (3 minutes)**
@@ -147,21 +175,21 @@ This experiment quantifies which model delivers better resource efficiency: "Doe
 
 3. **Configure Model Variations**:
    - **Control (50%)**: Model = "gpt-4", Tools = `["search_v2", "reranking", "arxiv_search", "semantic_scholar"]`
-   - **Treatment (50%)**: Model = "claude-3-sonnet-20240229", Tools = `["search_v2", "reranking", "arxiv_search", "semantic_scholar"]`
+   - **Treatment (50%)**: Model = "claude-3-5-sonnet-20241022", Tools = `["search_v2", "reranking", "arxiv_search", "semantic_scholar"]`
    - **Keep identical**: Same instructions, same user targeting, same tool access
 
 4. **Set Dual Success Criteria**:
    - **Efficiency Target**: ≥25% fewer tool calls by Claude
    - **Quality Maintenance**: Satisfaction within 5% of GPT-4 levels
 
-### **Step 3: Statistical Design (2 minutes)**
+### **Step 3: Bayesian Design Configuration (2 minutes)**
 
 Configure advanced experiment settings:
 
-1. **Sample Size Calculation**: 100 interactions minimum per model for 80% statistical power
+1. **Sample Size**: 100 interactions minimum per model for reliable Bayesian inference
 2. **Test Duration**: 7 days minimum to account for usage patterns
-3. **Significance Level**: p<0.05 for both primary and secondary metrics
-4. **Multiple Comparison Correction**: Bonferroni correction for dual metrics
+3. **Confidence Threshold**: >90% posterior probability for both efficiency and quality metrics
+4. **Decision Framework**: LaunchDarkly's Bayesian analysis will provide probability distributions for each metric
 
 ### **Step 4: Launch Dual-Metric Experiment (3 minutes)**
 
@@ -192,22 +220,36 @@ uv run python tools/traffic_generator.py --queries 150 --delay 1.5
 
 ### **Statistical Analysis Framework**
 
-**For Tool Implementation Experiment**:
-- **Primary Analysis**: Chi-square test on satisfaction rates between variations
-- **Effect Size**: Calculate Cohen's h for practical significance
-- **Confidence Intervals**: 95% CI on satisfaction rate difference
+**LaunchDarkly Bayesian Analysis**:
+- **Multi-Variant Comparison**: Bayesian posterior distributions for each variation
+- **Probability of Success**: LaunchDarkly calculates probability each treatment beats control
+- **Credible Intervals**: 95% credible intervals for satisfaction, cost, and latency metrics
+- **Expected Value**: Posterior mean estimates for each metric across variations
+- **Decision Confidence**: LaunchDarkly provides confidence scores for variant selection
+
+**For Multi-Variant Tool Implementation**:
+- **Satisfaction Analysis**: Probability each variant improves satisfaction >15% vs control
+- **Cost Constraint**: Probability cost increase stays <20% vs control
+- **Latency Threshold**: Probability 95th percentile latency stays <2.0s
+- **Combined Decision**: Select variant with highest probability of meeting all criteria
 
 **For Model Efficiency Experiment**:
-- **Efficiency Analysis**: Two-sample t-test on tool calls per query
-- **Quality Analysis**: Chi-square test on satisfaction rates
-- **Combined Decision**: Both criteria must meet thresholds for success
+- **Efficiency Analysis**: Bayesian comparison of tool call distributions
+- **Quality Maintenance**: Posterior probability satisfaction stays within 5% of GPT-4
+- **Resource Optimization**: Expected value of cost savings from tool reduction
 
 ### **Business Impact Calculation**
 
-**Tool Implementation ROI**:
+**Multi-Variant Tool Implementation ROI**:
 ```
-Satisfaction Improvement × User Base × Retention Value = ROI
-Example: 25% × 10,000 users × $50 retention = $125,000 annual value
+Net ROI = (Satisfaction Gain × User Base × Retention Value) - (Cost Increase × Query Volume)
+Example: (20% × 10,000 × $50) - (15% × $0.50 × 100,000/year) = $100,000 - $7,500 = $92,500 net
+```
+
+**Latency Impact Assessment**:
+```
+User Retention Impact = Latency Increase × Bounce Rate Factor × User Base
+Example: 0.5s increase × 2% bounce rate × 10,000 users = 200 users lost annually
 ```
 
 **Model Efficiency Savings**:
