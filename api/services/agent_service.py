@@ -86,13 +86,7 @@ class AgentService:
             log_debug(f"🔒 PII PROTECTION: Enhanced supervisor will decide routing path")
             result = await supervisor_agent.ainvoke(initial_state)
             
-            # Get actual tool calls used during the workflow
-            actual_tool_calls = result.get("actual_tool_calls", [])
-            if not actual_tool_calls:
-                # Fallback to support_tool_calls if actual_tool_calls is not present
-                actual_tool_calls = result.get("support_tool_calls", [])
-            
-            # Get detailed tool information with search queries from support agent
+            actual_tool_calls = result.get("support_tool_calls", [])
             tool_details = result.get("support_tool_details", [])
             
             # Get security agent PII detection results and tool details
@@ -101,14 +95,7 @@ class AgentService:
             security_redacted = result.get("redacted_text", message)
             security_tool_details = result.get("security_tool_details", [])
             
-            # Create consolidated workflow summary for students
-            tools_summary = f"{len(actual_tool_calls)} tools used" if actual_tool_calls else "No tools used"
-            pii_status = f"PII detected: {security_detected}"
-            response_length = len(result['final_response'])
-            
-            log_student(f"WORKFLOW COMPLETE: {tools_summary}, {pii_status}, Response: {response_length} chars")
-            
-            log_debug(f"WORKFLOW: Tools={len(actual_tool_calls)}, Details={len(tool_details)}, Response={len(result['final_response'])}chars, PII={security_detected}")
+            log_student(f"WORKFLOW COMPLETE: PII detected: {security_detected}")
             
             # Create agent configuration metadata showing actual usage
             # Extract actual variation key from LaunchDarkly AI config
