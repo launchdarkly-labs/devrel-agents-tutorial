@@ -86,20 +86,32 @@ class RerankingTool(BaseTool):
         try:
             # Tokenize all documents for BM25
             tokenized_docs = [self._tokenize(doc) for doc in docs]
-            
+
             # Create BM25 model
             bm25 = BM25Okapi(tokenized_docs)
-            
+
             # Tokenize query
             query_tokens = self._tokenize(query)
-            
+
             # Get BM25 scores for all documents
             scores = bm25.get_scores(query_tokens)
-            
-            # Pair items with their BM25 scores
+
+            # Handle small corpus issue: if all scores are 0, use simple term frequency scoring
+            if all(score == 0.0 for score in scores):
+                # Fallback: simple term frequency scoring for small corpora
+                scores = []
+                for doc_tokens in tokenized_docs:
+                    # Count query token matches in document
+                    term_freq_score = sum(1 for token in query_tokens if token in doc_tokens)
+                    # Normalize by document length to favor more focused documents
+                    normalized_score = term_freq_score / len(doc_tokens) if doc_tokens else 0
+                    scores.append(normalized_score)
+                scores = [float(s) for s in scores]  # Ensure float type
+
+            # Pair items with their scores
             item_scores = list(zip(items, scores))
-            
-            # Sort by BM25 score (descending)
+
+            # Sort by score (descending)
             item_scores.sort(key=lambda x: x[1], reverse=True)
             
             # Format results with scores
