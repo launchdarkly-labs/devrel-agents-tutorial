@@ -26,37 +26,11 @@ class MCPResearchTools:
         self.tools = {}
         self._initialized = False
 
-    def _is_ui_environment(self):
-        """Detect if we're in a UI environment that captures stderr"""
-        # Only skip MCP if stderr is actually captured or unusable
-        try:
-            # Test if stderr actually works
-            if not hasattr(sys.stderr, 'fileno'):
-                return True
-
-            # Try to call fileno() - this will fail in captured environments
-            sys.stderr.fileno()
-
-            # Check if stderr is a capturing object
-            if 'CapturingStdErr' in str(type(sys.stderr)):
-                return True
-
-            # If we get here, stderr works fine
-            return False
-
-        except (AttributeError, OSError, ValueError, io.UnsupportedOperation):
-            # stderr doesn't work properly
-            return True
         
     async def initialize(self):
         """Initialize MCP client with research servers using process lifetime reuse"""
         global _MCP_SINGLETON
 
-        # Check if we're in a problematic environment (UI/Streamlit)
-        if self._is_ui_environment():
-            print("MCP: Skipping initialization in UI environment (stderr capture detected)")
-            self._initialized = True
-            return
 
         async with _MCP_LOCK:
             if _MCP_SINGLETON is not None:
@@ -115,26 +89,15 @@ class MCPResearchTools:
                         }
                         connection = StdioConnection(connection_config)
                         
-                        # Load tools from this server with stderr handling
-                        # Fix for CapturingStdErr issue in UI environments
-                        original_stderr = sys.stderr
-                        try:
-                            # If stderr doesn't have fileno, temporarily replace it
-                            if not hasattr(sys.stderr, 'fileno') or 'CapturingStdErr' in str(type(sys.stderr)):
-                                import io
-                                sys.stderr = io.StringIO()
-
-                            server_tools = await load_mcp_tools(None, connection=connection)
-                        finally:
-                            # Restore original stderr
-                            sys.stderr = original_stderr
+                        # Load tools from this server
+                        server_tools = await load_mcp_tools(None, connection=connection)
                         langchain_tools.extend(server_tools)
                         # print(f"DEBUG: Loaded {len(server_tools)} tools from {server_name} MCP server")
                         
                     except Exception as e:
-                        print(f" ERROR: Failed to load tools from {server_name}: {e}")
+                        print(f"ERROR: Failed to load tools from {server_name}: {e}")
                         import traceback
-                        print(f" TRACEBACK: {traceback.format_exc()}")
+                        print(f"TRACEBACK: {traceback.format_exc()}")
                         continue
                 
                 # Organize tools by type - map actual MCP tools to our expected names

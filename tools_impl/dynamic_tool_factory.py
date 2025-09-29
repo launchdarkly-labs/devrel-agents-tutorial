@@ -254,7 +254,7 @@ def _create_dynamic_mcp_tool(tool_name: str, tool_config: Dict[str, Any]) -> Opt
 
 
 def _create_mcp_tool_wrapper(mcp_tool, ld_name: str):
-    """Create wrapper for MCP tool using the working pattern from old version"""
+    """Create wrapper for MCP tool using the working pattern from commit 82db2c5"""
     from langchain.tools import BaseTool
     from typing import Any
     import json
@@ -287,48 +287,38 @@ def _create_mcp_tool_wrapper(mcp_tool, ld_name: str):
                     result = await self.wrapped_tool.ainvoke(invoke_args)
                 elif hasattr(self.wrapped_tool, 'invoke'):
                     # Some tools might be sync, run in executor
-                    import asyncio
-                    import concurrent.futures
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        result = await asyncio.get_event_loop().run_in_executor(
-                            executor, lambda: self.wrapped_tool.invoke(actual_kwargs)
-                        )
+                    invoke_args = dict(actual_kwargs)
+                    invoke_args['config'] = config
+                    loop = asyncio.get_event_loop()
+                    result = await loop.run_in_executor(None, self.wrapped_tool.invoke, invoke_args)
                 else:
-                    raise ValueError(f"MCP tool {self.name} has no callable method")
+                    # Fallback, attempt to run in default executor
+                    loop = asyncio.get_event_loop()
+                    result = await loop.run_in_executor(None, self.wrapped_tool, config, **actual_kwargs)
 
-                return str(result)
-
+                # Format result
+                if isinstance(result, dict):
+                    return json.dumps(result, indent=2)
+                elif isinstance(result, list):
+                    return json.dumps(result, indent=2)
+                else:
+                    return str(result)
             except Exception as e:
                 log_debug(f"MCP TOOL ASYNC ERROR: {e}")
                 return f"MCP tool error: {str(e)}"
 
-        def _run(self, **kwargs) -> str:
-            """Execute the wrapped MCP tool synchronously."""
+        def _run(self, config=None, **kwargs) -> str:
+            """Synchronous fallback - run async version in new event loop."""
             try:
-                # Handle nested kwargs structure
-                if 'kwargs' in kwargs and isinstance(kwargs['kwargs'], dict):
-                    actual_kwargs = kwargs['kwargs']
-                else:
-                    actual_kwargs = kwargs
-
-                # MCP tools are async-only, so always use async execution
+                # Create new event loop for sync execution
                 import asyncio
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
                 try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        # Create new loop for sync execution in thread
-                        import concurrent.futures
-                        with concurrent.futures.ThreadPoolExecutor() as executor:
-                            future = executor.submit(asyncio.run, self._arun(**actual_kwargs))
-                            result = future.result(timeout=30)
-                    else:
-                        result = loop.run_until_complete(self._arun(**actual_kwargs))
-                except RuntimeError:
-                    # No event loop, create one
-                    result = asyncio.run(self._arun(**actual_kwargs))
-
-                return str(result)
-
+                    result = loop.run_until_complete(self._arun(config=config, **kwargs))
+                    return result
+                finally:
+                    loop.close()
             except Exception as e:
                 log_debug(f"MCP TOOL SYNC ERROR: {e}")
                 return f"MCP tool error: {str(e)}"
