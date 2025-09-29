@@ -1,11 +1,54 @@
 from typing import TypedDict, List, Annotated, Literal
 from langgraph.graph import StateGraph, add_messages
-from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
+from langchain_core.messages import HumanMessage, AIMessage, BaseMessage, SystemMessage
 from .support_agent import create_support_agent
 from .security_agent import create_security_agent
 from config_manager import FixedConfigManager as ConfigManager
 from utils.logger import log_student
 from pydantic import BaseModel
+
+def trim_message_history(messages: List[BaseMessage], max_messages: int = 10) -> List[BaseMessage]:
+    """
+    Trim message history to prevent context window overflow
+
+    MEMORY MANAGEMENT STRATEGY:
+    - Keep system messages (always preserve instructions)
+    - Keep the most recent messages up to max_messages limit
+    - Maintain conversation flow by preserving user-assistant pairs
+
+    Args:
+        messages: List of LangChain messages
+        max_messages: Maximum number of messages to keep (excluding system messages)
+
+    Returns:
+        Trimmed message list with system messages + recent conversation
+    """
+    if not messages:
+        return messages
+
+    # Separate system messages from conversation messages
+    system_messages = [msg for msg in messages if isinstance(msg, SystemMessage)]
+    conversation_messages = [msg for msg in messages if not isinstance(msg, SystemMessage)]
+
+    # If we're under the limit, return all messages
+    if len(conversation_messages) <= max_messages:
+        return system_messages + conversation_messages
+
+    # Handle zero limit case
+    if max_messages <= 0:
+        if conversation_messages:
+            log_student(f"💭 MEMORY MANAGEMENT: Trimmed all {len(conversation_messages)} conversation messages, keeping only {len(system_messages)} system messages")
+        return system_messages
+
+    # Keep the most recent messages, ensuring we end with assistant response if possible
+    recent_messages = conversation_messages[-max_messages:]
+
+    # Log that we're trimming for educational purposes
+    trimmed_count = len(conversation_messages) - len(recent_messages)
+    if trimmed_count > 0:
+        log_student(f"💭 MEMORY MANAGEMENT: Trimmed {trimmed_count} old messages, keeping {len(recent_messages)} recent + {len(system_messages)} system messages")
+
+    return system_messages + recent_messages
 
 class PIIPreScreening(BaseModel):
     """Structured response for PII pre-screening"""
@@ -385,9 +428,14 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             # Only sanitized/redacted messages are passed through this boundary
             if sanitized_messages:
                 # Include conversation history + current redacted message
-                support_messages = sanitized_messages + [HumanMessage(content=processed_input)]
+                full_messages = sanitized_messages + [HumanMessage(content=processed_input)]
             else:
-                support_messages = [HumanMessage(content=processed_input)]  # Fallback to redacted current message only
+                full_messages = [HumanMessage(content=processed_input)]  # Fallback to redacted current message only
+
+            # === MESSAGE MEMORY MANAGEMENT ===
+            # Trim message history to prevent context window overflow
+            # This is critical for long conversations that could exceed model limits
+            support_messages = trim_message_history(full_messages, max_messages=10)
 
             # Safety check: Ensure all messages have non-empty content
             valid_messages = []
