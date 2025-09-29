@@ -47,6 +47,46 @@ class AgentService:
             print(f" METRICS FLUSH ERROR: {e}")
             raise
         
+    def _validate_inputs(self, message: str, user_id: str, user_context: dict, sanitized_conversation_history: list) -> tuple[str, dict, list]:
+        """Validate and sanitize all inputs"""
+        # Validate message content
+        if not message or not message.strip():
+            raise ValueError("Please provide a message to process.")
+
+        # Validate message length (prevent extremely long inputs)
+        max_message_length = 5000
+        if len(message) > max_message_length:
+            raise ValueError(f"Message too long ({len(message)} characters). Please limit to {max_message_length} characters.")
+
+        # Validate and sanitize user_id
+        clean_user_id = user_id.strip() if user_id and user_id.strip() else "anonymous_user"
+        if clean_user_id != user_id:
+            log_debug("VALIDATION: Empty user_id provided, using 'anonymous_user'")
+
+        # Validate user_context structure
+        clean_user_context = user_context if isinstance(user_context, dict) else {}
+        if user_context is not None and not isinstance(user_context, dict):
+            log_debug("VALIDATION: Invalid user_context type, using empty dict")
+
+        # Validate sanitized_conversation_history
+        clean_history = sanitized_conversation_history if isinstance(sanitized_conversation_history, list) else None
+        if sanitized_conversation_history is not None and not isinstance(sanitized_conversation_history, list):
+            log_debug("VALIDATION: Invalid conversation history type, ignoring")
+
+        log_debug("✅ INPUT VALIDATION: All inputs validated successfully")
+        return clean_user_id, clean_user_context, clean_history
+
+    def _create_error_response(self, error_message: str, error_type: str = "validation_error") -> ChatResponse:
+        """Create standardized error response"""
+        return ChatResponse(
+            id=str(uuid.uuid4()),
+            response=error_message,
+            tool_calls=[],
+            variation_key=error_type,
+            model=error_type,
+            agent_configurations=[]
+        )
+
     async def process_message(self, user_id: str, message: str, user_context: dict = None, sanitized_conversation_history: list = None) -> ChatResponse:
         """
         Process Message through Multi-Agent LangGraph Workflow
@@ -71,49 +111,13 @@ class AgentService:
         try:
             log_debug(f"AGENT SERVICE: Processing message for {user_id}")
 
-            # =============================================
-            # INPUT VALIDATION & SAFETY CHECKS
-            # =============================================
-
-            # Validate message content
-            if not message or not message.strip():
-                return ChatResponse(
-                    id=str(uuid.uuid4()),
-                    response="Please provide a message to process.",
-                    tool_calls=[],
-                    variation_key="validation_error",
-                    model="validation",
-                    agent_configurations=[]
+            # Validate inputs
+            try:
+                user_id, user_context, sanitized_conversation_history = self._validate_inputs(
+                    message, user_id, user_context, sanitized_conversation_history
                 )
-
-            # Validate message length (prevent extremely long inputs)
-            max_message_length = 5000  # Reasonable limit for tutorial use
-            if len(message) > max_message_length:
-                return ChatResponse(
-                    id=str(uuid.uuid4()),
-                    response=f"Message too long ({len(message)} characters). Please limit to {max_message_length} characters.",
-                    tool_calls=[],
-                    variation_key="validation_error",
-                    model="validation",
-                    agent_configurations=[]
-                )
-
-            # Validate user_id
-            if not user_id or not user_id.strip():
-                user_id = "anonymous_user"  # Provide safe default
-                log_debug("VALIDATION: Empty user_id provided, using 'anonymous_user'")
-
-            # Validate user_context structure
-            if user_context is not None and not isinstance(user_context, dict):
-                log_debug("VALIDATION: Invalid user_context type, using empty dict")
-                user_context = {}  # Safe fallback
-
-            # Validate sanitized_conversation_history
-            if sanitized_conversation_history is not None and not isinstance(sanitized_conversation_history, list):
-                log_debug("VALIDATION: Invalid conversation history type, ignoring")
-                sanitized_conversation_history = None  # Safe fallback
-
-            log_debug("✅ INPUT VALIDATION: All inputs validated successfully")
+            except ValueError as e:
+                return self._create_error_response(str(e))
 
             # Get LaunchDarkly LDAI configurations for all agents
             log_debug(" AGENT SERVICE: Loading agent configurations...")

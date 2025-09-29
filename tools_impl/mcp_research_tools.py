@@ -7,6 +7,9 @@ from typing import List, Optional
 import logging
 import time
 import random
+import sys
+import os
+import subprocess
 
 logger = logging.getLogger(__name__)
 
@@ -28,14 +31,20 @@ class MCPResearchTools:
         
         async with _MCP_LOCK:
             if _MCP_SINGLETON is not None:
-                # Reuse existing singleton
-                self.client = _MCP_SINGLETON.client
-                self.tools = _MCP_SINGLETON.tools
-                self._initialized = True
-                print(f"🔄 MCP: Reusing singleton with {len(self.tools)} tools")
-                return
+                # Check if singleton has tools before reusing
+                if hasattr(_MCP_SINGLETON, 'tools') and _MCP_SINGLETON.tools:
+                    # Reuse existing singleton with tools
+                    self.client = _MCP_SINGLETON.client
+                    self.tools = _MCP_SINGLETON.tools
+                    self._initialized = True
+                    print(f"MCP: Reusing singleton with {len(self.tools)} tools")
+                    return
+                else:
+                    # Singleton exists but has no tools, clear it and reinitialize
+                    print(f"MCP: Singleton has 0 tools, clearing and reinitializing...")
+                    _MCP_SINGLETON = None
                 
-            print("  MCP: Initializing process-lifetime singleton...")
+            print("MCP: Initializing process-lifetime singleton...")
         
         try:
             # Configure MCP servers for research
@@ -77,8 +86,19 @@ class MCPResearchTools:
                         }
                         connection = StdioConnection(connection_config)
                         
-                        # Load tools from this server
-                        server_tools = await load_mcp_tools(None, connection=connection)
+                        # Load tools from this server with stderr handling
+                        # Fix for CapturingStdErr issue in UI environments
+                        original_stderr = sys.stderr
+                        try:
+                            # If stderr doesn't have fileno, temporarily replace it
+                            if not hasattr(sys.stderr, 'fileno') or 'CapturingStdErr' in str(type(sys.stderr)):
+                                import io
+                                sys.stderr = io.StringIO()
+
+                            server_tools = await load_mcp_tools(None, connection=connection)
+                        finally:
+                            # Restore original stderr
+                            sys.stderr = original_stderr
                         langchain_tools.extend(server_tools)
                         # print(f"DEBUG: Loaded {len(server_tools)} tools from {server_name} MCP server")
                         
@@ -111,7 +131,7 @@ class MCPResearchTools:
                 async with _MCP_LOCK:
                     if _MCP_SINGLETON is None:
                         _MCP_SINGLETON = self
-                        print(" MCP: Singleton initialized for process lifetime")
+                        print("MCP: Singleton initialized for process lifetime")
                 
         except Exception as e:
             # print(f"DEBUG: Failed to initialize MCP client: {e}")
@@ -160,17 +180,17 @@ async def get_research_tools() -> List[BaseTool]:
         # Only return real MCP tools - no fallbacks
         if "arxiv_search" in available_tools:
             tools.append(mcp_tools.get_tool("arxiv_search"))
-            print(" Added ArXiv MCP tool")
+            print("Added ArXiv MCP tool")
             
         if "semantic_scholar" in available_tools:
             tools.append(mcp_tools.get_tool("semantic_scholar"))
-            print(" Added Semantic Scholar MCP tool")
+            print("Added Semantic Scholar MCP tool")
         
         if not tools:
             print("No MCP research tools available. Install MCP servers: npm install -g @michaellatman/mcp-server-arxiv")
             
     except Exception as e:
-        print(f" MCP tools initialization failed: {e}")
+        print(f"MCP tools initialization failed: {e}")
         print("Install MCP servers to enable research tools: npm install -g @michaellatman/mcp-server-arxiv")
     
     # print(f"DEBUG: Returning {len(tools)} MCP tools")
