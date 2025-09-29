@@ -159,55 +159,55 @@ def print_detailed_results(test_result: Dict[str, Any], validations: Dict[str, b
     print(f"{'='*60}")
     
     if not test_result.get("success"):
-        print(f"❌ TEST FAILED: {test_result.get('error', 'Unknown error')}")
+        print(f" TEST FAILED: {test_result.get('error', 'Unknown error')}")
         return
     
     expected = test_result["expected"]
     actual = test_result["actual"]
     
     # Support Agent Results
-    print(f"📊 SUPPORT AGENT:")
+    print(f" SUPPORT AGENT:")
     support_actual = actual.get("support-agent", {})
     support_expected = expected.get("support_agent", {})
     
     # Model comparison
     actual_model = support_actual.get("model", "unknown")
     expected_model = support_expected.get("model", "unknown")
-    model_status = "✅" if validations.get("model_match") else "❌"
+    model_status = "" if validations.get("model_match") else ""
     print(f"   Model: {actual_model} (expected: {expected_model}) {model_status}")
     
     # Variation comparison
     actual_variation = support_actual.get("variation_key", "unknown")
     expected_variation = support_expected.get("variation_key", "unknown")
-    variation_status = "✅" if validations.get("variation_match") else "❌"
+    variation_status = "" if validations.get("variation_match") else ""
     print(f"   Variation: {actual_variation} (expected: {expected_variation}) {variation_status}")
     
     # Tools comparison
     actual_tools = support_actual.get("tools", [])
     expected_tools = support_expected.get("tools", [])
-    tools_status = "✅" if validations.get("tools_match") else "❌"
+    tools_status = "" if validations.get("tools_match") else ""
     print(f"   Tools: {actual_tools} {tools_status}")
     print(f"   Expected: {expected_tools}")
     
     # MCP tools check
     has_mcp = test_result.get("has_mcp_tools", False)
     should_have_mcp = user_ctx.get("plan") == "paid"
-    mcp_status = "✅" if validations.get("mcp_tools_correct") else "❌"
+    mcp_status = "" if validations.get("mcp_tools_correct") else ""
     print(f"   MCP Tools: {'Yes' if has_mcp else 'No'} (should be: {'Yes' if should_have_mcp else 'No'}) {mcp_status}")
     
     # Response info
-    print(f"📝 RESPONSE:")
+    print(f" RESPONSE:")
     print(f"   Length: {test_result.get('response_length', 0)} chars")
     print(f"   Tools Called: {test_result.get('tool_calls', [])}")
     print(f"   Preview: {test_result.get('response', 'No response')[:100]}...")
     
     # Overall result
-    overall_status = "✅ PASSED" if validations.get("overall") else "❌ FAILED"
-    print(f"\n🎯 RESULT: {overall_status}")
+    overall_status = " PASSED" if validations.get("overall") else " FAILED"
+    print(f"\n RESULT: {overall_status}")
 
 def main():
     """Run all segmentation tests"""
-    print("🚀 COMPREHENSIVE TUTORIAL 2 SEGMENTATION TESTS")
+    print(" COMPREHENSIVE TUTORIAL 2 SEGMENTATION TESTS")
     print("Testing Geographic + Business Tier Targeting Matrix")
     print("=" * 70)
     
@@ -280,10 +280,10 @@ def main():
     
     # Final Summary
     print("\n" + "=" * 70)
-    print(f"📊 FINAL RESULTS")
+    print(f" FINAL RESULTS")
     print(f"=" * 70)
-    print(f"✅ PASSED: {passed_tests}/{total_tests}")
-    print(f"❌ FAILED: {failed_tests}/{total_tests}")
+    print(f" PASSED: {passed_tests}/{total_tests}")
+    print(f" FAILED: {failed_tests}/{total_tests}")
     
     if passed_tests == total_tests:
         print(f"\n🎉 ALL TESTS PASSED! LaunchDarkly targeting is working correctly.")
@@ -293,7 +293,7 @@ def main():
         print(f"   • Tool configuration: Working")
         print(f"   • MCP integration: Working")
     else:
-        print(f"\n⚠️  {failed_tests} TEST(S) FAILED - LaunchDarkly configuration needs attention.")
+        print(f"\n  {failed_tests} TEST(S) FAILED - LaunchDarkly configuration needs attention.")
         print(f"   1. Check segment rules in LaunchDarkly dashboard")
         print(f"   2. Verify targeting rules for support-agent AI config")
         print(f"   3. Ensure segments are properly matching user contexts")

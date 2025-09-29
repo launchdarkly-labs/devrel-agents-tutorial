@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional
 from pydantic import BaseModel, Field, field_validator
 from functools import lru_cache
 
@@ -10,19 +10,10 @@ from langchain_core.tools import BaseTool
 from data.vector_store import VectorStore
 
 
-# ---------- Input schema ----------
+# ---------- Minimal Input schema (LaunchDarkly provides full schema) ----------
 class SearchV2Input(BaseModel):
-    query: str = Field(..., description="Natural language search query")
-    top_k: int = Field(3, ge=1, le=20, description="Max results to return")
-    min_score: float = Field(0.20, ge=0.0, le=1.0, description="Minimum similarity score (0-1)")
-
-    @field_validator("query")
-    @classmethod
-    def _strip_query(cls, v: str) -> str:
-        v = (v or "").strip()
-        if not v:
-            raise ValueError("Query must be a non-empty string.")
-        return v
+    query: str
+    top_k: Optional[int] = 3
 
 
 # ---------- Vector store singleton ----------
@@ -57,12 +48,7 @@ def _cached_search(query: str, top_k: int, min_score: float) -> List[Tuple[str, 
 class SearchToolV2(BaseTool):
     """Advanced vector-based semantic search through enterprise documentation."""
     name: str = "search_v2"
-    description: str = (
-        "Advanced vector semantic search over enterprise documentation. "
-        "Args: query (str), top_k (int, default 3, max 20), min_score (float, default 0.20). "
-        "Returns a short human summary and a JSON payload with items=[{text, score, metadata}]."
-    )
-    # LC v0.2 way to define inputs:
+    description: str = "Semantic search using vector embeddings"
     args_schema: type[BaseModel] = SearchV2Input
 
     # exclude heavy objects from Pydantic serialization
@@ -73,11 +59,11 @@ class SearchToolV2(BaseTool):
         # Lazy init; will raise a clean error on first use if uninitialized
         self.vector_store = None
 
-    def _run(self, query: str, top_k: int = 3, min_score: float = 0.20) -> str:
+    def _run(self, query: str, top_k: int = 3, **kwargs) -> str:
         try:
             # clamp for safety (in case someone bypasses args_schema)
             top_k = max(1, min(int(top_k), 20))
-            min_score = max(0.0, min(float(min_score), 1.0))
+            min_score = 0.20  # Default minimum similarity score
 
             results = _cached_search(query, top_k, min_score)
 

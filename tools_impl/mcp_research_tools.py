@@ -35,7 +35,7 @@ class MCPResearchTools:
                 print(f"🔄 MCP: Reusing singleton with {len(self.tools)} tools")
                 return
                 
-            print("🏗️  MCP: Initializing process-lifetime singleton...")
+            print("  MCP: Initializing process-lifetime singleton...")
         
         try:
             # Configure MCP servers for research
@@ -83,9 +83,9 @@ class MCPResearchTools:
                         # print(f"DEBUG: Loaded {len(server_tools)} tools from {server_name} MCP server")
                         
                     except Exception as e:
-                        print(f"❌ ERROR: Failed to load tools from {server_name}: {e}")
+                        print(f" ERROR: Failed to load tools from {server_name}: {e}")
                         import traceback
-                        print(f"❌ TRACEBACK: {traceback.format_exc()}")
+                        print(f" TRACEBACK: {traceback.format_exc()}")
                         continue
                 
                 # Organize tools by type - map actual MCP tools to our expected names
@@ -111,7 +111,7 @@ class MCPResearchTools:
                 async with _MCP_LOCK:
                     if _MCP_SINGLETON is None:
                         _MCP_SINGLETON = self
-                        print("✅ MCP: Singleton initialized for process lifetime")
+                        print(" MCP: Singleton initialized for process lifetime")
                 
         except Exception as e:
             # print(f"DEBUG: Failed to initialize MCP client: {e}")
@@ -160,17 +160,17 @@ async def get_research_tools() -> List[BaseTool]:
         # Only return real MCP tools - no fallbacks
         if "arxiv_search" in available_tools:
             tools.append(mcp_tools.get_tool("arxiv_search"))
-            print("✅ Added ArXiv MCP tool")
+            print(" Added ArXiv MCP tool")
             
         if "semantic_scholar" in available_tools:
             tools.append(mcp_tools.get_tool("semantic_scholar"))
-            print("✅ Added Semantic Scholar MCP tool")
+            print(" Added Semantic Scholar MCP tool")
         
         if not tools:
             print("No MCP research tools available. Install MCP servers: npm install -g @michaellatman/mcp-server-arxiv")
             
     except Exception as e:
-        print(f"❌ MCP tools initialization failed: {e}")
+        print(f" MCP tools initialization failed: {e}")
         print("Install MCP servers to enable research tools: npm install -g @michaellatman/mcp-server-arxiv")
     
     # print(f"DEBUG: Returning {len(tools)} MCP tools")

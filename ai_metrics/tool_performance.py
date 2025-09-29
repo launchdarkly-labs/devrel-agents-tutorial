@@ -69,7 +69,7 @@ class ToolPerformanceTracker:
         # Tool recommendations
         self.tool_recommendations: Dict[str, List[str]] = defaultdict(list)
         
-        print(f"✅ Tool Performance Tracker initialized (TTL: {cache_ttl}s, Cache: {max_cache_size})")
+        print(f" Tool Performance Tracker initialized (TTL: {cache_ttl}s, Cache: {max_cache_size})")
     
     def _generate_cache_key(self, tool_name: str, **kwargs) -> str:
         """Generate a cache key for tool inputs"""
@@ -114,7 +114,7 @@ class ToolPerformanceTracker:
             
             if cache_key in self.cache and self._is_cache_valid(cache_key):
                 result = self.cache[cache_key]
-                print(f"🎯 CACHE HIT: {tool_name} ({cache_key[:8]}...)")
+                print(f" CACHE HIT: {tool_name} ({cache_key[:8]}...)")
                 return result
             
             return None
