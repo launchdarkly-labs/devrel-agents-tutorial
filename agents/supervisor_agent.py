@@ -15,25 +15,76 @@ class PIIPreScreening(BaseModel):
     recommended_route: str  # "security_agent" or "support_agent"
 
 class SupervisorState(TypedDict):
-    messages: Annotated[List[BaseMessage], add_messages]
-    user_input: str
-    user_id: str  # User ID for LaunchDarkly context
-    user_context: dict  # User context for LaunchDarkly targeting
-    current_agent: str
-    security_cleared: bool
-    support_response: str
-    support_tool_calls: List[str]
-    support_tool_details: List[dict]
-    final_response: str
-    workflow_stage: str
-    processed_user_input: str  # Redacted text from security agent
-    pii_detected: bool  # PII schema field from security agent
-    pii_types: List[str]  # PII schema field from security agent
-    redacted_text: str  # PII schema field from security agent
-    sanitized_messages: List[BaseMessage]  # Clean message history without PII
+    """
+    LangGraph State for Multi-Agent Supervisor Workflow
+
+    This TypedDict defines the state object that flows through the entire workflow.
+    Each field tracks specific aspects of the multi-agent conversation process.
+
+    WORKFLOW STAGES: pii_prescreen → security_processing → post_security_support → complete
+    """
+
+    # === CORE MESSAGE FLOW ===
+    messages: Annotated[List[BaseMessage], add_messages]  # LangGraph message history with automatic merging
+    user_input: str  # Original user query (raw, may contain PII)
+    final_response: str  # Final response sent back to user
+
+    # === LAUNCHDARKLY TARGETING ===
+    user_id: str  # User ID for LaunchDarkly context and configuration targeting
+    user_context: dict  # User attributes (country, plan, etc.) for LaunchDarkly targeting rules
+
+    # === WORKFLOW ORCHESTRATION ===
+    current_agent: str  # Which agent should process next: "pii_prescreen", "security_agent", "support_agent", "complete"
+    workflow_stage: str  # Current stage: "pii_prescreen", "security_processing", "direct_support", "post_security_support", "complete"
+    security_cleared: bool  # Has security agent processed and cleared the request?
+
+    # === SUPPORT AGENT RESULTS ===
+    support_response: str  # Response from support agent (tools + reasoning)
+    support_tool_calls: List[str]  # List of tool names actually used by support agent
+    support_tool_details: List[dict]  # Detailed info about tool calls (queries, results, etc.)
+
+    # === PII SECURITY BOUNDARY ===
+    # CRITICAL: These fields manage the security isolation between raw and sanitized data
+    processed_user_input: str  # Redacted/sanitized version of user_input (safe for support agent)
+    pii_detected: bool  # True if security agent found PII in user_input
+    pii_types: List[str]  # Types of PII found: ["email", "phone", "ssn", etc.]
+    redacted_text: str  # User input with PII replaced by placeholders like [EMAIL_REDACTED]
+    sanitized_messages: List[BaseMessage]  # Message history with all PII removed (support agent only sees this)
 
 def create_supervisor_agent(supervisor_config, support_config, security_config, config_manager: ConfigManager):
-    """Create supervisor agent using LDAI SDK pattern"""
+    """
+    Create supervisor agent using LDAI SDK pattern
+
+    LANGGRAPH WORKFLOW OVERVIEW:
+    ============================
+
+┌─────────────────┐    ┌─────────────────┐
+│   SUPERVISOR    │    │ SECURITY AGENT  │
+│                 │───▶│                 │
+│ Smart Analysis  │    │ PII Detection   │
+└─────────────────┘    └─────────────────┘
+          │                       │
+          ▼                       ▼
+┌─────────────────┐    ┌─────────────────┐
+│ SUPPORT AGENT   │    │ SUPPORT AGENT   │
+│                 │.   │                 │
+│ Direct Route    │    │ Post-Security   │
+│ (No PII)        │    │ (Sanitized)     │
+└─────────────────┘    └─────────────────┘
+           │                      │
+           ▼                      ▼
+┌─────────────────────────────────────────┐
+│           FORMAT FINAL                  │
+│      Combine Results & Respond          │
+└─────────────────────────────────────────┘
+
+    KEY LANGGRAPH PATTERNS DEMONSTRATED:
+    - StateGraph with TypedDict state management
+    - Conditional routing based on state fields
+    - Multi-agent orchestration with state isolation
+    - Security boundaries through state field management
+    - Dynamic configuration via LaunchDarkly integration
+    """
     
     # Import needed modules for model creation
     from langchain.chat_models import init_chat_model
@@ -46,7 +97,23 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
     log_student(f"SUPERVISOR INSTRUCTIONS: {supervisor_config.instructions}")
 
     def pii_prescreen_node(state: SupervisorState):
-        """Intelligent PII pre-screening to route requests efficiently"""
+        """
+        LANGGRAPH NODE: Intelligent PII Pre-screening
+
+        PURPOSE: Analyze user input to determine optimal routing without full PII detection
+
+        WORKFLOW:
+        1. Extract user input from state
+        2. Use structured LLM output (Pydantic) to get routing decision
+        3. Update state with routing decision and reasoning
+        4. Return updated state for supervisor to process
+
+        LANGGRAPH PATTERNS:
+        - Node function receives and returns state dict
+        - Uses structured output for reliable parsing
+        - Updates specific state fields for downstream processing
+        - Handles errors gracefully with fallback routing
+        """
         try:
             user_input = state["user_input"]
             user_id = state.get("user_id", "supervisor_user")
@@ -114,7 +181,24 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             }
 
     def supervisor_node(state: SupervisorState):
-        """Supervisor decides next step in workflow with LDAI metrics tracking"""
+        """
+        LANGGRAPH NODE: Central Supervisor Router
+
+        PURPOSE: Orchestrate workflow by deciding which agent should process next
+
+        WORKFLOW DECISION LOGIC:
+        - pii_prescreen: Initial smart routing analysis
+        - security_processing: Route to security agent for PII detection
+        - direct_support: Route directly to support agent (bypass security)
+        - post_security_support: Route to support with sanitized data
+        - complete: All processing done, format final response
+
+        LANGGRAPH PATTERNS:
+        - Central orchestration node that doesn't do LLM processing
+        - Uses state fields to make routing decisions
+        - Returns minimal state updates (just routing info)
+        - Tracks metrics for LaunchDarkly optimization
+        """
         try:
             messages = state["messages"]
             workflow_stage = state.get("workflow_stage", "pii_prescreen")  # Start with intelligent pre-screening
@@ -162,7 +246,27 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             # Fallback to security agent for safety
             return {"current_agent": "security_agent"}
     def security_node(state: SupervisorState):
-        """Route to security agent with LDAI metrics tracking"""
+        """
+        LANGGRAPH NODE: Security Agent Orchestration
+
+        PURPOSE: Execute security agent and manage PII isolation boundaries
+
+        SECURITY ISOLATION WORKFLOW:
+        1. Prepare security agent input with raw user data
+        2. Execute security agent to detect and redact PII
+        3. Create sanitized message history for support agent
+        4. Update state with security results and sanitized data
+
+        CRITICAL PII BOUNDARY:
+        - Input: Raw user data (may contain PII)
+        - Output: Sanitized data + PII metadata
+        - Support agent will ONLY see sanitized data from this point forward
+
+        LANGGRAPH PATTERNS:
+        - Node orchestrates child agent execution
+        - Manages state transformation (raw → sanitized)
+        - Implements security boundaries through state field management
+        """
         try:
             
             # Track supervisor orchestration start for security agent
@@ -236,7 +340,27 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             raise
     
     def support_node(state: SupervisorState):
-        """Route to support agent with LDAI metrics tracking"""
+        """
+        LANGGRAPH NODE: Support Agent Orchestration
+
+        PURPOSE: Execute support agent with proper PII isolation
+
+        PII PROTECTION WORKFLOW:
+        1. Use processed/redacted user input (never raw input)
+        2. Use sanitized message history (never raw messages)
+        3. Execute support agent in PII-free environment
+        4. Return tool results and response
+
+        CRITICAL SECURITY BOUNDARY ENFORCEMENT:
+        - Support agent NEVER sees raw user input containing PII
+        - All message history is pre-sanitized by security agent
+        - Support agent operates in completely PII-isolated environment
+
+        LANGGRAPH PATTERNS:
+        - Node enforces security boundaries through state field selection
+        - Orchestrates child agent with controlled input
+        - Manages tool execution and result aggregation
+        """
         try:
             
             # Track supervisor orchestration start for support agent
@@ -328,7 +452,23 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
     
 
     def route_decision(state: SupervisorState) -> Literal["pii_prescreen", "security_agent", "support_agent", "complete"]:
-        """Route based on supervisor decision with intelligent pre-screening"""
+        """
+        LANGGRAPH CONDITIONAL ROUTING FUNCTION
+
+        PURPOSE: Determine next node based on current state
+
+        ROUTING LOGIC:
+        - "pii_prescreen": Route to intelligent pre-screening
+        - "security_agent": Route to security agent for PII detection
+        - "support_agent": Route to support agent (direct or post-security)
+        - "complete": Workflow finished, route to final formatting
+
+        LANGGRAPH PATTERNS:
+        - Conditional routing function returns string node names
+        - Uses state fields to make routing decisions
+        - Must return one of the defined edge targets
+        - Simple logic based on current_agent state field
+        """
         current_agent = state.get("current_agent", "pii_prescreen")
 
         if "pii_prescreen" in current_agent:
@@ -385,39 +525,46 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
                 "workflow_stage": "error"
             }
     
-    # Build intelligent supervisor workflow
+    # =============================================
+    # LANGGRAPH WORKFLOW CONSTRUCTION
+    # =============================================
+
+    # Build intelligent supervisor workflow using LangGraph StateGraph
     workflow = StateGraph(SupervisorState)
 
-    # Add nodes including new PII pre-screening
-    workflow.add_node("supervisor", supervisor_node)
-    workflow.add_node("pii_prescreen", pii_prescreen_node)  # New intelligent pre-screening node
-    workflow.add_node("security_agent", security_node)
-    workflow.add_node("support_agent", support_node)
-    workflow.add_node("format_final", format_final)
-    
-    # Set entry point
+    # === ADD NODES ===
+    # Each node is a function that receives and returns state
+    workflow.add_node("supervisor", supervisor_node)       # Central orchestrator
+    workflow.add_node("pii_prescreen", pii_prescreen_node) # Intelligent pre-screening
+    workflow.add_node("security_agent", security_node)     # PII detection & redaction
+    workflow.add_node("support_agent", support_node)       # Tool execution & response
+    workflow.add_node("format_final", format_final)        # Final response formatting
+
+    # === SET ENTRY POINT ===
+    # Workflow always starts with supervisor for routing
     workflow.set_entry_point("supervisor")
-    
-    # Add intelligent routing with PII pre-screening
+
+    # === CONDITIONAL ROUTING ===
+    # Supervisor routes to different nodes based on state
     workflow.add_conditional_edges(
-        "supervisor",
-        route_decision,
-        {
-            "pii_prescreen": "pii_prescreen",      # New intelligent pre-screening route
-            "security_agent": "security_agent",    # Traditional security route
-            "support_agent": "support_agent",      # Direct bypass route (new!)
-            "complete": "format_final"
+        "supervisor",                # From supervisor node
+        route_decision,             # Using this routing function
+        {                           # Route to these nodes:
+            "pii_prescreen": "pii_prescreen",      # Smart pre-screening
+            "security_agent": "security_agent",    # PII detection
+            "support_agent": "support_agent",      # Tool execution
+            "complete": "format_final"             # Final formatting
         }
     )
 
-    # After PII pre-screening, return to supervisor for routing decision
-    workflow.add_edge("pii_prescreen", "supervisor")
+    # === LINEAR EDGES ===
+    # After processing, agents return to supervisor for next routing decision
+    workflow.add_edge("pii_prescreen", "supervisor")  # Pre-screening → supervisor
+    workflow.add_edge("security_agent", "supervisor") # Security → supervisor
+    workflow.add_edge("support_agent", "supervisor")  # Support → supervisor
 
-    # After each agent, return to supervisor
-    workflow.add_edge("security_agent", "supervisor")
-    workflow.add_edge("support_agent", "supervisor")
-    
-    # Final node
+    # === SET FINISH POINT ===
+    # Workflow ends at format_final node
     workflow.set_finish_point("format_final")
     
     return workflow.compile()
