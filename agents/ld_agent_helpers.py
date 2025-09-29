@@ -231,13 +231,54 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                 # Apply rate limiting before LLM calls
                 _rate_limit_llm_call()
 
-                log_student(f"DEBUG: Executing agent with max_tool_calls={max_tool_calls}, tools={len(tools)}")
+                # Create shared tool call counter for both limit enforcement and LaunchDarkly metrics
+                tool_counter = {"calls": 0, "names": []}
 
-                # Execute agent with metrics tracking - let LaunchDarkly handle tool limits naturally
+                def create_limited_tool(tool):
+                    """Create a tool that respects LaunchDarkly max_tool_calls limit"""
+                    original_run = tool._run
+
+                    def limited_run(*args, **kwargs):
+                        if tool_counter["calls"] >= max_tool_calls:
+                            log_student(f"DEBUG: Tool '{tool.name}' blocked - LaunchDarkly max_tool_calls limit ({max_tool_calls}) reached")
+                            return f"Tool usage limit reached ({max_tool_calls} calls). Please provide your best answer based on available information."
+
+                        tool_counter["calls"] += 1
+                        tool_counter["names"].append(tool.name)
+                        log_student(f"DEBUG: Tool call {tool_counter['calls']}/{max_tool_calls}: {tool.name}")
+                        return original_run(*args, **kwargs)
+
+                    tool._run = limited_run
+                    return tool
+
+                # Create tools with LaunchDarkly limit enforcement
+                limited_tools = [create_limited_tool(tool) for tool in tools]
+
+                # Create agent with limited tools and natural recursion
+                from langchain.chat_models import init_chat_model
+                langchain_provider = map_provider_to_langchain(agent_config.provider.name)
+                llm = init_chat_model(
+                    model=agent_config.model.name,
+                    model_provider=langchain_provider,
+                )
+
+                agent = create_react_agent(
+                    model=llm,
+                    tools=limited_tools,
+                    prompt=agent_config.instructions
+                )
+
+                log_student(f"DEBUG: Executing agent with LaunchDarkly max_tool_calls={max_tool_calls}, tools={len(tools)}")
+
+                # Execute agent with natural recursion limits
                 response = track_langgraph_metrics(
                     tracker,
                     lambda: agent.invoke(initial_state)
                 )
+
+                # Update the response with our accurate tool count for LaunchDarkly metrics
+                actual_tool_count = tool_counter["calls"]
+                log_student(f"DEBUG: Agent completed - LaunchDarkly tool count: {actual_tool_count}/{max_tool_calls}")
 
                 # Extract final response and tool calls
                 final_response = response["messages"][-1].content if response["messages"] else ""
