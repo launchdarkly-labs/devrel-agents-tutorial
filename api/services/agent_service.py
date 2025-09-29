@@ -13,7 +13,26 @@ from utils.logger import log_student, log_debug, log_info
 load_dotenv()
 
 class AgentService:
+    """
+    Multi-Agent Orchestration Service
+
+    LANGGRAPH INTEGRATION PATTERN:
+    This service creates and executes the supervisor agent workflow,
+    which internally manages multiple specialized agents using LangGraph.
+
+    WORKFLOW ARCHITECTURE:
+    1. AgentService receives HTTP requests
+    2. Creates supervisor agent (LangGraph workflow)
+    3. Supervisor orchestrates security and support agents
+    4. Returns unified response with all agent results
+
+    PII SECURITY ISOLATION:
+    - Raw user input goes to security agent first
+    - Support agent only receives sanitized data
+    - Security boundaries are enforced at the state level
+    """
     def __init__(self):
+        # Initialize LaunchDarkly configuration manager
         self.config_manager = ConfigManager()
         # Clear LaunchDarkly cache on startup to get latest configs
         self.config_manager.clear_cache()
@@ -29,7 +48,26 @@ class AgentService:
             raise
         
     async def process_message(self, user_id: str, message: str, user_context: dict = None, sanitized_conversation_history: list = None) -> ChatResponse:
-        """Process message using refactored LDAI SDK pattern"""
+        """
+        Process Message through Multi-Agent LangGraph Workflow
+
+        WORKFLOW OVERVIEW:
+        1. Fetch LaunchDarkly AI Configs for all 3 agents
+        2. Create supervisor agent (LangGraph workflow)
+        3. Execute workflow with PII security isolation
+        4. Return structured response with agent details
+
+        STATE FLOW:
+        - Initial state contains raw user input
+        - Security agent processes and sanitizes data
+        - Support agent operates on sanitized data only
+        - Final state contains responses from both agents
+
+        LANGGRAPH INTEGRATION:
+        - Uses supervisor.ainvoke() to execute workflow
+        - State flows through multiple agents automatically
+        - PII isolation enforced through state field management
+        """
         try:
             log_debug(f"AGENT SERVICE: Processing message for {user_id}")
             
@@ -50,7 +88,10 @@ class AgentService:
                 self.config_manager
             )
             
-            # ===== SECURITY BOUNDARY: PII ISOLATION SETUP =====
+            # =============================================
+            # PII SECURITY BOUNDARY SETUP
+            # =============================================
+
             # Convert sanitized conversation history to LangChain messages
             # CRITICAL: Support agent will ONLY see these sanitized messages
             sanitized_langchain_messages = []
@@ -60,30 +101,49 @@ class AgentService:
                         sanitized_langchain_messages.append(HumanMessage(content=msg["content"]))
                     elif msg.get("role") == "assistant":
                         sanitized_langchain_messages.append(AIMessage(content=msg["content"]))
-            
+
             # Add current raw message for security agent processing
             current_raw_message = HumanMessage(content=message)
             
-            # Process message with supervisor state format
+            # =============================================
+            # LANGGRAPH INITIAL STATE CONSTRUCTION
+            # =============================================
+
+            # Create initial state for LangGraph workflow
+            # This state object will flow through all agents
             initial_state = {
-                "user_input": message,  # Raw message (security agent only)
-                "current_agent": "",
-                "security_cleared": False,
-                "support_response": "",
+                # === CORE MESSAGE FLOW ===
+                "user_input": message,                          # Raw message (security agent only)
+                "messages": [current_raw_message],              # Security agent gets raw message
                 "final_response": "",
-                "workflow_stage": "pii_prescreen",  # Start with intelligent PII pre-screening
-                "messages": [current_raw_message],  # Security agent gets raw message
-                "sanitized_messages": sanitized_langchain_messages,  # SUPPORT AGENT ONLY gets these
-                "processed_user_input": "",
-                "pii_detected": False,
-                "pii_types": [],
-                "redacted_text": message,
+
+                # === WORKFLOW ORCHESTRATION ===
+                "current_agent": "",                            # Supervisor will determine first agent
+                "workflow_stage": "pii_prescreen",              # Start with intelligent PII pre-screening
+                "security_cleared": False,
+
+                # === SUPPORT AGENT RESULTS ===
+                "support_response": "",
                 "support_tool_calls": [],
-                "support_tool_details": []
+                "support_tool_details": [],
+
+                # === PII SECURITY BOUNDARY ===
+                "sanitized_messages": sanitized_langchain_messages,  # SUPPORT AGENT ONLY gets these
+                "processed_user_input": "",                     # Will be set by security agent
+                "pii_detected": False,                          # Will be set by security agent
+                "pii_types": [],                                # Will be set by security agent
+                "redacted_text": message,                       # Will be updated by security agent
             }
             
+            # =============================================
+            # LANGGRAPH WORKFLOW EXECUTION
+            # =============================================
+
             log_student(f"INTELLIGENT ROUTING: Starting PII pre-screening analysis")
             log_debug(f"🔒 PII PROTECTION: Enhanced supervisor will decide routing path")
+
+            # Execute the LangGraph workflow
+            # The supervisor will orchestrate security and support agents automatically
             result = await supervisor_agent.ainvoke(initial_state)
             
             actual_tool_calls = result.get("support_tool_calls", [])
