@@ -39,7 +39,7 @@ class MCPRuntime:
     def __init__(self):
         from tools_impl.mcp_research_tools import MCPResearchTools  # local import
 
-        logger.info("🏗️ Initializing process-wide MCP runtime...")
+        logger.info(" Initializing process-wide MCP runtime...")
         self.loop_runner = _LoopRunner()
 
         # Optional shared HTTP client to pass into MCPResearchTools if supported.
@@ -51,9 +51,9 @@ class MCPRuntime:
                     limits=httpx.Limits(max_keepalive_connections=16, max_connections=64),
                     timeout=httpx.Timeout(30.0, connect=10.0),
                 )
-                logger.info("✅ Created shared HTTP client for connection pooling")
+                logger.info(" Created shared HTTP client for connection pooling")
             except Exception as e:
-                logger.warning("⚠️ Could not create shared HTTP client: %s", e)
+                logger.warning(" Could not create shared HTTP client: %s", e)
                 shared_http = None
 
         async def _init():
@@ -66,18 +66,18 @@ class MCPRuntime:
                     client = MCPResearchTools()
                 
                 await client.initialize()
-                logger.info("✅ MCP client initialized successfully")
+                logger.info(" MCP client initialized successfully")
                 return client
             except Exception as e:
-                logger.error("❌ Failed to initialize MCP client: %s", e)
+                logger.error(" Failed to initialize MCP client: %s", e)
                 raise
 
         try:
             self.client = self.loop_runner.call(_init(), timeout=60)
             self.tools: Dict[str, Any] = getattr(self.client, "tools", {}) or {}
-            logger.info("🚀 MCPRuntime initialized with %d tools: %s", len(self.tools), list(self.tools.keys()))
+            logger.info(" MCPRuntime initialized with %d tools: %s", len(self.tools), list(self.tools.keys()))
         except Exception as e:
-            logger.error("❌ MCPRuntime initialization failed: %s", e)
+            logger.error(" MCPRuntime initialization failed: %s", e)
             self.client = None
             self.tools = {}
 

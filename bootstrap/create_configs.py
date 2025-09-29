@@ -36,7 +36,7 @@ class MultiAgentBootstrap:
         response = requests.post(url, headers=self.headers, json=payload, timeout=30)
         
         if response.status_code in [200, 201]:
-            print(f"✅ Empty segment '{segment_data['key']}' created")
+            print(f" Empty segment '{segment_data['key']}' created")
             time.sleep(0.5)
             
             # Step 2: Add rules via semantic patch
@@ -44,7 +44,7 @@ class MultiAgentBootstrap:
             
         elif response.status_code == 409:
             if self.overwrite:
-                print(f"⚠️  Segment '{segment_data['key']}' already exists, deleting and recreating...")
+                print(f"  Segment '{segment_data['key']}' already exists, deleting and recreating...")
                 # Delete existing segment
                 delete_url = f"{self.base_url}/api/v2/segments/{project_key}/production/{segment_data['key']}"
                 delete_response = requests.delete(delete_url, headers=self.headers, timeout=30)
@@ -55,21 +55,21 @@ class MultiAgentBootstrap:
                     # Retry creation
                     retry_response = requests.post(url, headers=self.headers, json=payload, timeout=30)
                     if retry_response.status_code in [200, 201]:
-                        print(f"✅ Empty segment '{segment_data['key']}' recreated")
+                        print(f" Empty segment '{segment_data['key']}' recreated")
                         time.sleep(0.5)
                         # Step 2: Add rules via semantic patch
                         return self.add_segment_rules(project_key, segment_data)
                     else:
-                        print(f"❌ Failed to recreate segment: {retry_response.text}")
+                        print(f" Failed to recreate segment: {retry_response.text}")
                         return None
                 else:
-                    print(f"❌ Failed to delete existing segment: {delete_response.text}")
+                    print(f" Failed to delete existing segment: {delete_response.text}")
                     return None
             else:
-                print(f"⚠️  Segment '{segment_data['key']}' already exists, adding rules...")
+                print(f"  Segment '{segment_data['key']}' already exists, adding rules...")
                 return self.add_segment_rules(project_key, segment_data)
         else:
-            print(f"❌ Failed to create segment: {response.text}")
+            print(f" Failed to create segment: {response.text}")
             return None
     
     def add_segment_rules(self, project_key, segment_data):
@@ -102,7 +102,7 @@ class MultiAgentBootstrap:
             "instructions": instructions
         }
         
-        print(f"  🔧 Adding {len(instructions)} rules to segment '{segment_key}'")
+        print(f"   Adding {len(instructions)} rules to segment '{segment_key}'")
         
         # Use semantic patch headers for segment rule updates
         patch_headers = self.headers.copy()
@@ -113,11 +113,11 @@ class MultiAgentBootstrap:
         if response.status_code == 200:
             result = response.json()
             rules_count = len(result.get("rules", []))
-            print(f"  ✅ Rules added to segment '{segment_key}' (final count: {rules_count})")
+            print(f"   Rules added to segment '{segment_key}' (final count: {rules_count})")
             time.sleep(0.5)
             return result
         else:
-            print(f"  ❌ Failed to add rules to segment '{segment_key}': {response.text}")
+            print(f"   Failed to add rules to segment '{segment_key}': {response.text}")
             return None
     
     def create_ai_config(self, project_key, config_data):
@@ -129,10 +129,10 @@ class MultiAgentBootstrap:
         check_response = requests.get(check_url, headers=self.headers, timeout=30)
         
         if check_response.status_code == 200:
-            print(f"✅ AI Config '{config_key}' exists, adding variations")
+            print(f" AI Config '{config_key}' exists, adding variations")
             config_exists = True
         else:
-            print(f"⚠️  AI Config '{config_key}' not found, skipping creation")
+            print(f"  AI Config '{config_key}' not found, skipping creation")
             return None
         
         # If overwrite mode, clear all targeting rules first to allow variation deletion/recreation
@@ -155,7 +155,7 @@ class MultiAgentBootstrap:
         variations = self.list_variations(project_key, config_key)
         # Debug: Show all available variation keys
         available_keys = [v.get("key") or v.get("variationKey", "unknown") for v in variations]
-        print(f"    🔍 Debug: Looking for '{variation_key}' in available variations: {available_keys}")
+        print(f"     Debug: Looking for '{variation_key}' in available variations: {available_keys}")
         
         # Find the variation by key
         variation_id = None
@@ -178,7 +178,7 @@ class MultiAgentBootstrap:
             time.sleep(0.5)  # Rate limiting delay
             return True
         else:
-            print(f"    ⚠️  Failed to delete variation '{variation_key}': {delete_response.status_code}")
+            print(f"      Failed to delete variation '{variation_key}': {delete_response.status_code}")
             return False
     
     def create_variation(self, project_key, config_key, variation_data):
@@ -207,7 +207,7 @@ class MultiAgentBootstrap:
         
         model_config_key = model_config_key_map.get(model_id)
         if not model_config_key:
-            print(f"  ⚠️  Unknown model ID '{model_id}', using fallback approach")
+            print(f"    Unknown model ID '{model_id}', using fallback approach")
             # Fallback to original approach
             model_config_key = None
         
@@ -222,17 +222,17 @@ class MultiAgentBootstrap:
         # Use modelConfigKey if we have it, otherwise fallback to modelName/provider
         if model_config_key:
             payload["modelConfigKey"] = model_config_key
-            print(f"  🔧 Using modelConfigKey: {model_config_key}")
+            print(f"   Using modelConfigKey: {model_config_key}")
         else:
             payload["modelName"] = model_id
             payload["provider"] = {"name": model_config["provider"].title()}
-            print(f"  🔧 Using modelName/provider fallback: {model_id}/{provider}")
+            print(f"   Using modelName/provider fallback: {model_id}/{provider}")
         
         print(f"DEBUG: Sending payload: {json.dumps(payload, indent=2)}")
         response = requests.post(url, headers=self.headers, json=payload, timeout=30)
         
         if response.status_code in [200, 201]:
-            print(f"  ✅ Variation '{variation_data['key']}' created")
+            print(f"   Variation '{variation_data['key']}' created")
             time.sleep(0.5)
             return response.json()
         elif response.status_code == 409:
@@ -241,7 +241,7 @@ class MultiAgentBootstrap:
             else:
                 return None
         else:
-            print(f"  ❌ Failed to create variation: {response.text}")
+            print(f"   Failed to create variation: {response.text}")
             return None
     
     def update_variation(self, project_key, config_key, variation_data):
@@ -256,7 +256,7 @@ class MultiAgentBootstrap:
                 break
         
         if not variation_id:
-            print(f"    ❌ Could not resolve variation ID for '{variation_key}' via variations endpoint")
+            print(f"     Could not resolve variation ID for '{variation_key}' via variations endpoint")
             return None
         
         # Use the AI config variation ID with the regular AI config variations endpoint
@@ -285,20 +285,20 @@ class MultiAgentBootstrap:
         # Use modelConfigKey if we have it, otherwise fallback to modelName/provider
         if model_config_key:
             payload["modelConfigKey"] = model_config_key
-            print(f"    🔧 Updating with modelConfigKey: {model_config_key}")
+            print(f"     Updating with modelConfigKey: {model_config_key}")
         else:
             payload["modelName"] = model_id
             payload["provider"] = {"name": model_config["provider"].title()}
-            print(f"    🔧 Updating with modelName/provider fallback: {model_id}")
+            print(f"     Updating with modelName/provider fallback: {model_id}")
         
         response = requests.patch(url, headers=self.headers, json=payload, timeout=30)
         
         if response.status_code == 200:
-            print(f"    ✅ Variation '{variation_data['key']}' updated")
+            print(f"     Variation '{variation_data['key']}' updated")
             time.sleep(0.5)
             return response.json()
         else:
-            print(f"    ❌ Failed to update variation: {response.text}")
+            print(f"     Failed to update variation: {response.text}")
             return None
     
     def create_tool(self, project_key, tool_data):
@@ -408,17 +408,17 @@ class MultiAgentBootstrap:
         else:
             payload["type"] = "function"
         
-        print(f"  🔧 Creating tool with payload: {json.dumps(payload, indent=2)}")
+        print(f"   Creating tool with payload: {json.dumps(payload, indent=2)}")
         response = requests.post(url, headers=self.headers, json=payload, timeout=30)
         
         if response.status_code in [200, 201]:
-            print(f"  ✅ Tool '{tool_data['key']}' created")
+            print(f"   Tool '{tool_data['key']}' created")
             time.sleep(0.5)
             return response.json()
         elif response.status_code == 409:
             return None
         else:
-            print(f"  ❌ Failed to create tool: {response.text}")
+            print(f"   Failed to create tool: {response.text}")
             try:
                 error_detail = response.json()
                 print(f"      Error details: {json.dumps(error_detail, indent=2)}")
@@ -440,7 +440,7 @@ class MultiAgentBootstrap:
             print(f"  ℹ️  Tool '{tool_key}' not found (may already be deleted)")
             return True
         else:
-            print(f"  ❌ Failed to delete tool '{tool_key}': {response.text}")
+            print(f"   Failed to delete tool '{tool_key}': {response.text}")
             return False
     
     def delete_all_targeting_rules(self, project_key, config_key):
@@ -450,7 +450,7 @@ class MultiAgentBootstrap:
         # Get current targeting to understand existing rules and find disabled variation
         response = requests.get(url, headers=self.headers, timeout=30)
         if response.status_code != 200:
-            print(f"  ⚠️  Could not fetch targeting for '{config_key}'")
+            print(f"    Could not fetch targeting for '{config_key}'")
             return False
             
         targeting_data = response.json()
@@ -458,7 +458,7 @@ class MultiAgentBootstrap:
         variations = targeting_data.get("variations", [])
         
         # Debug: Print current targeting state
-        print(f"  🔍 Debug: '{config_key}' has {len(rules)} rules and {len(variations)} variations")
+        print(f"   Debug: '{config_key}' has {len(rules)} rules and {len(variations)} variations")
         if rules:
             rule_info = [f'rule-{i}: segments={rule.get("clauses", [])}' for i, rule in enumerate(rules)]
             print(f"      Rules: {rule_info}")
@@ -471,7 +471,7 @@ class MultiAgentBootstrap:
                 break
                 
         if not disabled_variation_id:
-            print(f"  ⚠️  Could not find 'disabled' variation for '{config_key}'")
+            print(f"    Could not find 'disabled' variation for '{config_key}'")
             print(f"      Available variations: {[v.get('name', 'unknown') for v in variations]}")
             return False
         
@@ -500,7 +500,7 @@ class MultiAgentBootstrap:
             "instructions": instructions
         }
         
-        print(f"  🔧 Debug: Sending {len(instructions)} instructions to clear targeting")
+        print(f"   Debug: Sending {len(instructions)} instructions to clear targeting")
         response = requests.patch(url, headers=self.headers, json=payload, timeout=30)
         
         if response.status_code == 200:
@@ -508,7 +508,7 @@ class MultiAgentBootstrap:
             time.sleep(0.5)
             return True
         else:
-            print(f"  ❌ Failed to clear targeting rules: {response.text}")
+            print(f"   Failed to clear targeting rules: {response.text}")
             return False
 
     def get_targeting_variation_map(self, project_key, config_key):
@@ -536,7 +536,7 @@ class MultiAgentBootstrap:
                     
             return variation_map
         else:
-            print(f"❌ Failed to fetch targeting data: {response.text}")
+            print(f" Failed to fetch targeting data: {response.text}")
             return {}
 
     def get_ai_config_variation_id_map(self, project_key, config_key):
@@ -545,7 +545,7 @@ class MultiAgentBootstrap:
         response = requests.get(url, headers=self.headers, timeout=30)
 
         if response.status_code != 200:
-            print(f"❌ Failed to fetch AI config variations for '{config_key}': {response.text}")
+            print(f" Failed to fetch AI config variations for '{config_key}': {response.text}")
             return {}
 
         config_data = response.json()
@@ -557,12 +557,12 @@ class MultiAgentBootstrap:
         url = f"{self.base_url}/api/v2/projects/{project_key}/ai-configs/{config_key}/variations"
         response = requests.get(url, headers=self.headers, timeout=30)
         if response.status_code != 200:
-            print(f"    ⚠️  Could not list variations for '{config_key}': {response.text}")
+            print(f"      Could not list variations for '{config_key}': {response.text}")
             return []
         try:
             data = response.json()
         except Exception:
-            print("    ⚠️  Invalid JSON from variations list")
+            print("      Invalid JSON from variations list")
             return []
         if isinstance(data, list):
             return data
@@ -575,7 +575,7 @@ class MultiAgentBootstrap:
         variation_id_map = self.get_ai_config_variation_id_map(project_key, config_key)
         variation_id = variation_id_map.get(variation_key)
         if not variation_id:
-            print(f"    ⚠️  Could not find variation id for '{variation_key}' while updating tools")
+            print(f"      Could not find variation id for '{variation_key}' while updating tools")
             return False
 
         url = f"{self.base_url}/api/v2/projects/{project_key}/ai-configs/{config_key}/variations/{variation_id}"
@@ -585,11 +585,11 @@ class MultiAgentBootstrap:
 
         response = requests.patch(url, headers=self.headers, json=payload, timeout=30)
         if response.status_code == 200:
-            print(f"    ✅ Updated tools for variation '{variation_key}' → {tools_list or []}")
+            print(f"     Updated tools for variation '{variation_key}' → {tools_list or []}")
             time.sleep(0.2)
             return True
         else:
-            print(f"    ❌ Failed updating tools for '{variation_key}': {response.text}")
+            print(f"     Failed updating tools for '{variation_key}': {response.text}")
             return False
 
     def ensure_ai_config_exists(self, project_key, config_data):
@@ -598,11 +598,11 @@ class MultiAgentBootstrap:
         url = f"{self.base_url}/api/v2/projects/{project_key}/ai-configs/{config_key}"
         response = requests.get(url, headers=self.headers, timeout=30)
         if response.status_code == 200:
-            print(f"✅ AI Config '{config_key}' exists")
+            print(f" AI Config '{config_key}' exists")
             return True
         else:
             # For safety, we won't attempt to create brand-new configs here without a stable schema.
-            print(f"⚠️  AI Config '{config_key}' not found. Skipping creation.")
+            print(f"  AI Config '{config_key}' not found. Skipping creation.")
             return False
 
     # Removed detachment logic per new overwrite deletion order requirements
@@ -612,10 +612,10 @@ class MultiAgentBootstrap:
         # First get the targeting variation IDs
         targeting_variation_map = self.get_targeting_variation_map(project_key, config_key)
         if not targeting_variation_map:
-            print(f"❌ Could not get targeting variation map for '{config_key}'")
+            print(f" Could not get targeting variation map for '{config_key}'")
             return None
             
-        print(f"📊 Available targeting variations for '{config_key}': {list(targeting_variation_map.keys())}")
+        print(f" Available targeting variations for '{config_key}': {list(targeting_variation_map.keys())}")
         
         url = f"{self.base_url}/api/v2/projects/{project_key}/ai-configs/{config_key}/targeting"
         
@@ -627,7 +627,7 @@ class MultiAgentBootstrap:
             targeting_variation_id = targeting_variation_map.get(variation_key)
             
             if not targeting_variation_id:
-                print(f"⚠️  Variation '{variation_key}' not found in targeting variations")
+                print(f"  Variation '{variation_key}' not found in targeting variations")
                 continue
                 
             # Create add rule instruction for each segment
@@ -645,7 +645,7 @@ class MultiAgentBootstrap:
                     "variationId": targeting_variation_id
                 }
                 instructions.append(instruction)
-                print(f"  ✅ Added rule: segment '{segment}' -> variation '{variation_key}'")
+                print(f"   Added rule: segment '{segment}' -> variation '{variation_key}'")
         
         # Set fallthrough variation
         fallthrough_variation_key = targeting_data["defaultVariation"]
@@ -656,9 +656,9 @@ class MultiAgentBootstrap:
                 "kind": "updateFallthroughVariationOrRollout",
                 "variationId": fallthrough_variation_id
             })
-            print(f"  ✅ Set fallthrough to variation '{fallthrough_variation_key}'")
+            print(f"   Set fallthrough to variation '{fallthrough_variation_key}'")
         else:
-            print(f"⚠️  Fallthrough variation '{fallthrough_variation_key}' not found")
+            print(f"  Fallthrough variation '{fallthrough_variation_key}' not found")
         
         payload = {
             "environmentKey": "production",
@@ -668,19 +668,19 @@ class MultiAgentBootstrap:
         response = requests.patch(url, headers=self.headers, json=payload, timeout=30)
         
         if response.status_code == 200:
-            print(f"✅ Targeting rules updated for '{config_key}'")
+            print(f" Targeting rules updated for '{config_key}'")
             return response.json()
         else:
-            print(f"❌ Failed to update targeting: {response.text}")
+            print(f" Failed to update targeting: {response.text}")
             return None
 
 def main():
     load_dotenv()
     
-    print("🚀 LaunchDarkly AI Config Bootstrap")
+    print(" LaunchDarkly AI Config Bootstrap")
     print("=" * 50)
-    print("⚠️  IMPORTANT: This script is for INITIAL SETUP ONLY")
-    print("📝 After bootstrap completes:")
+    print("  IMPORTANT: This script is for INITIAL SETUP ONLY")
+    print(" After bootstrap completes:")
     print("   • Make ALL configuration changes in LaunchDarkly UI")
     print("   • Do NOT modify ai_config_manifest.yaml")
     print("   • LaunchDarkly is your single source of truth")
@@ -689,14 +689,14 @@ def main():
     
     api_key = os.getenv("LD_API_KEY")
     if not api_key:
-        print("❌ LD_API_KEY environment variable not set")
+        print(" LD_API_KEY environment variable not set")
         print("   Get your API key from: https://app.launchdarkly.com/settings/authorization")
         return
     
     # Load manifest
     manifest_path = Path("ai_config_manifest.yaml")
     if not manifest_path.exists():
-        print("❌ ai_config_manifest.yaml not found")
+        print(" ai_config_manifest.yaml not found")
         print("   Make sure you're running this from the bootstrap/ directory")
         return
     
@@ -706,7 +706,7 @@ def main():
     project_key = manifest["project"]["key"]
     bootstrap = MultiAgentBootstrap(api_key)
     
-    print("🚀 Starting multi-agent system bootstrap (add-only)...")
+    print(" Starting multi-agent system bootstrap (add-only)...")
     print(f"📦 Project: {project_key}")
     print()
     print("📋 Creation order: tools → ai configs → variations → segments → targeting")
@@ -714,7 +714,7 @@ def main():
 
     # 1) Tools
     if "tool" in manifest["project"]:
-        print("🔧 Creating tools...")
+        print(" Creating tools...")
         part1_tool_keys = {"search_v2", "reranking"}
         for tool in manifest["project"]["tool"]:
             if tool.get("key") in part1_tool_keys:
@@ -729,7 +729,7 @@ def main():
         if bootstrap.ensure_ai_config_exists(project_key, ai_config):
             existing_config_keys.add(ai_config["key"])
     if not existing_config_keys:
-        print("⚠️  No existing AI configs found. This script assumes Part 1 created base configs. Skipping variations/targeting.")
+        print("  No existing AI configs found. This script assumes Part 1 created base configs. Skipping variations/targeting.")
     print()
 
     # 3) Variations (add-only; skip if exists)
@@ -753,7 +753,7 @@ def main():
         print()
 
     # 5) Targeting (idempotent updates; skip duplicate rules)
-    print("🎯 Updating targeting rules...")
+    print(" Updating targeting rules...")
     for ai_config in manifest["project"]["ai_config"]:
         config_key = ai_config["key"]
         if config_key not in existing_config_keys:
@@ -766,7 +766,7 @@ def main():
 
     print("✨ Bootstrap complete!")
     print()
-    print("🎯 Next steps:")
+    print(" Next steps:")
     print("   1. Check your LaunchDarkly dashboard to verify configurations")
     print("   2. Test different user contexts with the demo")
     print("   3. Monitor usage patterns and adjust targeting rules")

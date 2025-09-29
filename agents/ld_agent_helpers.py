@@ -2,11 +2,29 @@
 Shared helper functions for LaunchDarkly AI agents following the proper pattern
 """
 import asyncio
+import time
 from typing import List, Any, Tuple, Optional
 from langchain.chat_models import init_chat_model
 from langgraph.prebuilt import create_react_agent
 from ldai.tracker import TokenUsage
 from utils.logger import log_student
+
+# Simple rate limiter to prevent hitting API limits
+_last_llm_call_time = 0
+_min_call_interval = 1.0  # 1 second between LLM calls
+
+def _rate_limit_llm_call():
+    """Simple rate limiter for LLM calls"""
+    global _last_llm_call_time
+    current_time = time.time()
+    time_since_last_call = current_time - _last_llm_call_time
+
+    if time_since_last_call < _min_call_interval:
+        sleep_time = _min_call_interval - time_since_last_call
+        log_student(f"Rate limiting: waiting {sleep_time:.2f}s")
+        time.sleep(sleep_time)
+
+    _last_llm_call_time = time.time()
 
 
 def map_provider_to_langchain(provider_name):
@@ -19,6 +37,8 @@ def map_provider_to_langchain(provider_name):
     }
     lower_provider = provider_name.lower()
     return provider_mapping.get(lower_provider, lower_provider)
+
+
 
 
 def track_langgraph_metrics(tracker, func):
@@ -93,7 +113,20 @@ async def create_agent_with_fresh_config(
             model_provider=langchain_provider,
         )
 
+        # Extract max_tool_calls from LaunchDarkly config
+        max_tool_calls = 15  # Default value
+        try:
+            config_dict = agent_config.to_dict()
+            if 'model' in config_dict and 'custom' in config_dict['model'] and config_dict['model']['custom']:
+                custom_params = config_dict['model']['custom']
+                if 'max_tool_calls' in custom_params:
+                    max_tool_calls = custom_params['max_tool_calls']
+        except Exception as e:
+            log_student(f"DEBUG: Error extracting max_tool_calls in create_agent_with_fresh_config: {e}")
+
+
         # Create React agent with instructions
+        # Note: LangGraph's create_react_agent handles max iterations internally
         agent = create_react_agent(
             model=llm,
             tools=tools,
@@ -120,6 +153,9 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
         tools = []
 
     class LaunchDarklyAgent:
+        def __init__(self):
+            self.max_tool_calls = 15  # Default value
+
         def invoke(self, request_data: dict) -> dict:
             """
             Main agent invocation - fetches config and executes
@@ -141,6 +177,7 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                 ))
 
                 if disabled:
+                    log_student(f"{config_key}: AI Config is disabled")
                     return {
                         "user_input": user_input,
                         "response": f"AI Config {config_key} is disabled",
@@ -156,10 +193,48 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                     from langchain_core.messages import HumanMessage
                     agent_messages = [HumanMessage(content=user_input)]
 
-                # Execute agent with metrics tracking
+                # Prepare initial state for agent
+                initial_state = {
+                    "messages": agent_messages
+                }
+
+                # Get max_tool_calls from LaunchDarkly config by fetching it fresh
+                agent_config = asyncio.run(config_manager.get_config(
+                    user_id=user_id,
+                    config_key=config_key,
+                    user_context=user_context
+                ))
+
+                max_tool_calls = 15  # Default
+
+                # Extract max_tool_calls from LaunchDarkly config
+                # Based on SDK test: max_tool_calls is in config_dict['model']['custom']['max_tool_calls']
+                if agent_config:
+                    try:
+                        config_dict = agent_config.to_dict()
+                        if 'model' in config_dict and 'custom' in config_dict['model'] and config_dict['model']['custom']:
+                            custom_params = config_dict['model']['custom']
+                            if 'max_tool_calls' in custom_params:
+                                max_tool_calls = custom_params['max_tool_calls']
+                                pass  # Successfully extracted max_tool_calls
+                            else:
+                                pass  # max_tool_calls not in custom params
+                        else:
+                            log_student(f"DEBUG: No model.custom found in config_dict")
+                    except Exception as e:
+                        log_student(f"DEBUG: Error extracting max_tool_calls: {e}")
+
+                # Execute agent with metrics tracking and recursion limit
+                # LangGraph formula: recursion_limit = 2 * max_tool_calls + 1
+                # Each tool call requires 2 steps: LLM -> Tool -> LLM
+                recursion_limit = 2 * max_tool_calls + 1
+
+                # Apply rate limiting before LLM calls
+                _rate_limit_llm_call()
+
                 response = track_langgraph_metrics(
                     tracker,
-                    lambda: agent.invoke({"messages": agent_messages})
+                    lambda: agent.invoke(initial_state, config={"recursion_limit": recursion_limit})
                 )
 
                 # Extract final response and tool calls
