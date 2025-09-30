@@ -28,6 +28,10 @@ def capture_console_output():
             
             def flush(self):
                 original_stdout.flush()
+            
+            def fileno(self):
+                # Delegate to original stdout for subprocess compatibility
+                return original_stdout.fileno()
         
         # Replace stdout with our capturing writer
         sys.stdout = CapturingWriter()
@@ -42,6 +46,10 @@ def capture_console_output():
             
             def flush(self):
                 original_stderr.flush()
+            
+            def fileno(self):
+                # Delegate to original stderr for subprocess compatibility
+                return original_stderr.fileno()
         
         sys.stderr = CapturingStdErr()
         
