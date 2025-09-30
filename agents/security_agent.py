@@ -199,9 +199,9 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
         
         if pii_detected:
             pii_summary = f"Found {', '.join(pii_types)}" if pii_types else "Sensitive data detected"
-            log_student(f"🔒 SECURITY: {pii_summary} → Sanitized")
+            log_student(f"SECURITY: {pii_summary} → Sanitized")
         else:
-            log_student(f"🔒 SECURITY: Clean - No PII detected")
+            log_student(f"SECURITY: Clean - No PII detected")
         
         return {
             "user_input": state["user_input"],

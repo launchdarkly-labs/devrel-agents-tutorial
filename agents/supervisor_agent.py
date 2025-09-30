@@ -9,19 +9,8 @@ from pydantic import BaseModel
 
 def trim_message_history(messages: List[BaseMessage], max_messages: int = 10) -> List[BaseMessage]:
     """
-    Trim message history to prevent context window overflow
-
-    MEMORY MANAGEMENT STRATEGY:
-    - Keep system messages (always preserve instructions)
-    - Keep the most recent messages up to max_messages limit
-    - Maintain conversation flow by preserving user-assistant pairs
-
-    Args:
-        messages: List of LangChain messages
-        max_messages: Maximum number of messages to keep (excluding system messages)
-
-    Returns:
-        Trimmed message list with system messages + recent conversation
+    Trim message history to prevent context window overflow.
+    Preserves system messages and keeps the most recent conversation messages.
     """
     if not messages:
         return messages
@@ -37,7 +26,7 @@ def trim_message_history(messages: List[BaseMessage], max_messages: int = 10) ->
     # Handle zero limit case
     if max_messages <= 0:
         if conversation_messages:
-            log_student(f"💭 MEMORY MANAGEMENT: Trimmed all {len(conversation_messages)} conversation messages, keeping only {len(system_messages)} system messages")
+            log_student(f"MEMORY MANAGEMENT: Trimmed all {len(conversation_messages)} conversation messages, keeping only {len(system_messages)} system messages")
         return system_messages
 
     # Keep the most recent messages, ensuring we end with assistant response if possible
@@ -46,7 +35,7 @@ def trim_message_history(messages: List[BaseMessage], max_messages: int = 10) ->
     # Log that we're trimming for educational purposes
     trimmed_count = len(conversation_messages) - len(recent_messages)
     if trimmed_count > 0:
-        log_student(f"💭 MEMORY MANAGEMENT: Trimmed {trimmed_count} old messages, keeping {len(recent_messages)} recent + {len(system_messages)} system messages")
+        log_student(f"MEMORY MANAGEMENT: Trimmed {trimmed_count} old messages, keeping {len(recent_messages)} recent + {len(system_messages)} system messages")
 
     return system_messages + recent_messages
 
@@ -68,31 +57,30 @@ class SupervisorState(TypedDict):
     """
 
     # === CORE MESSAGE FLOW ===
-    messages: Annotated[List[BaseMessage], add_messages]  # LangGraph message history with automatic merging
-    user_input: str  # Original user query (raw, may contain PII)
-    final_response: str  # Final response sent back to user
+    messages: Annotated[List[BaseMessage], add_messages]
+    user_input: str
+    final_response: str
 
-    # === LAUNCHDARKLY TARGETING ===
-    user_id: str  # User ID for LaunchDarkly context and configuration targeting
-    user_context: dict  # User attributes (country, plan, etc.) for LaunchDarkly targeting rules
+    # LaunchDarkly targeting
+    user_id: str
+    user_context: dict
 
-    # === WORKFLOW ORCHESTRATION ===
-    current_agent: str  # Which agent should process next: "pii_prescreen", "security_agent", "support_agent", "complete"
-    workflow_stage: str  # Current stage: "pii_prescreen", "security_processing", "direct_support", "post_security_support", "complete"
-    security_cleared: bool  # Has security agent processed and cleared the request?
+    # Workflow orchestration
+    current_agent: str
+    workflow_stage: str
+    security_cleared: bool
 
-    # === SUPPORT AGENT RESULTS ===
-    support_response: str  # Response from support agent (tools + reasoning)
-    support_tool_calls: List[str]  # List of tool names actually used by support agent
-    support_tool_details: List[dict]  # Detailed info about tool calls (queries, results, etc.)
+    # Support agent results
+    support_response: str
+    support_tool_calls: List[str]
+    support_tool_details: List[dict]
 
-    # === PII SECURITY BOUNDARY ===
-    # CRITICAL: These fields manage the security isolation between raw and sanitized data
-    processed_user_input: str  # Redacted/sanitized version of user_input (safe for support agent)
-    pii_detected: bool  # True if security agent found PII in user_input
-    pii_types: List[str]  # Types of PII found: ["email", "phone", "ssn", etc.]
-    redacted_text: str  # User input with PII replaced by placeholders like [EMAIL_REDACTED]
-    sanitized_messages: List[BaseMessage]  # Message history with all PII removed (support agent only sees this)
+    # PII security boundary
+    processed_user_input: str
+    pii_detected: bool
+    pii_types: List[str]
+    redacted_text: str
+    sanitized_messages: List[BaseMessage]
 
 def create_supervisor_agent(supervisor_config, support_config, security_config, config_manager: ConfigManager):
     """
@@ -141,21 +129,8 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
 
     def pii_prescreen_node(state: SupervisorState):
         """
-        LANGGRAPH NODE: Intelligent PII Pre-screening
-
-        PURPOSE: Analyze user input to determine optimal routing without full PII detection
-
-        WORKFLOW:
-        1. Extract user input from state
-        2. Use structured LLM output (Pydantic) to get routing decision
-        3. Update state with routing decision and reasoning
-        4. Return updated state for supervisor to process
-
-        LANGGRAPH PATTERNS:
-        - Node function receives and returns state dict
-        - Uses structured output for reliable parsing
-        - Updates specific state fields for downstream processing
-        - Handles errors gracefully with fallback routing
+        Analyze user input to determine if it likely contains PII.
+        Routes to security agent if PII suspected, otherwise direct to support.
         """
         try:
             user_input = state["user_input"]

@@ -1,10 +1,16 @@
 from langchain.tools import BaseTool
 from data.vector_store import VectorStore
 from typing import Any
+from pydantic import BaseModel, Field
+
+class SearchV1Input(BaseModel):
+    """Input schema for search_v1 tool"""
+    query: str = Field(description="Search query to find relevant documentation")
 
 class SearchToolV1(BaseTool):
     name: str = "search_v1"
     description: str = "Basic keyword-based search through enterprise documentation"
+    args_schema: Any = SearchV1Input
     vector_store: Any = None
     
     def __init__(self):
