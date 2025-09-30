@@ -7,10 +7,6 @@ from typing import List, Optional
 import logging
 import time
 import random
-import sys
-import os
-import subprocess
-import io
 
 logger = logging.getLogger(__name__)
 
@@ -25,45 +21,45 @@ class MCPResearchTools:
         self.client = None
         self.tools = {}
         self._initialized = False
-
         
     async def initialize(self):
         """Initialize MCP client with research servers using process lifetime reuse"""
         global _MCP_SINGLETON
-
-
+        
         async with _MCP_LOCK:
             if _MCP_SINGLETON is not None:
-                # Check if singleton has tools before reusing
-                if hasattr(_MCP_SINGLETON, 'tools') and _MCP_SINGLETON.tools:
-                    # Reuse existing singleton with tools
-                    self.client = _MCP_SINGLETON.client
-                    self.tools = _MCP_SINGLETON.tools
-                    self._initialized = True
-                    print(f"MCP: Reusing singleton with {len(self.tools)} tools")
-                    return
-                else:
-                    # Singleton exists but has no tools, clear it and reinitialize
-                    print(f"MCP: Singleton has 0 tools, clearing and reinitializing...")
-                    _MCP_SINGLETON = None
-
-            print("MCP: Initializing process-lifetime singleton...")
-
+                # Reuse existing singleton
+                self.client = _MCP_SINGLETON.client
+                self.tools = _MCP_SINGLETON.tools
+                self._initialized = True
+                print(f"🔄 MCP: Reusing singleton with {len(self.tools)} tools")
+                return
+                
+            print("  MCP: Initializing process-lifetime singleton...")
+        
         try:
-            # Configure MCP servers for research
-            # NOTE: MCP servers can cause initialization timeouts in some environments
-            server_configs = {
-                # ArXiv MCP Server (Python-based) - RE-ENABLED
-                "arxiv": {
-                    "command": "/Users/ld_scarlett/.local/bin/arxiv-mcp-server", 
+            # Configure MCP servers for research using environment variables
+            import os
+            
+            server_configs = {}
+            
+            # ArXiv MCP Server - only add if path is configured
+            arxiv_path = os.getenv('ARXIV_MCP_SERVER_PATH')
+            if arxiv_path and os.path.exists(arxiv_path):
+                server_configs["arxiv"] = {
+                    "command": arxiv_path,
                     "args": ["--storage-path", "/tmp/arxiv-papers"]
-                },
-                # Semantic Scholar MCP Server (Python-based)
-                "semanticscholar": {
-                    "command": "python",
-                    "args": ["semanticscholar-MCP-Server/semantic_scholar_server.py"]
                 }
-            }
+                print(f"  MCP: ArXiv server configured at {arxiv_path}")
+            
+            # Semantic Scholar MCP Server - only add if path is configured
+            semantic_path = os.getenv('SEMANTIC_SCHOLAR_SERVER_PATH')
+            if semantic_path and os.path.exists(semantic_path):
+                server_configs["semanticscholar"] = {
+                    "command": "python",
+                    "args": [semantic_path]
+                }
+                print(f"  MCP: Semantic Scholar server configured at {semantic_path}")
             
             # Try to initialize with available servers
             available_configs = {}
@@ -95,9 +91,9 @@ class MCPResearchTools:
                         # print(f"DEBUG: Loaded {len(server_tools)} tools from {server_name} MCP server")
                         
                     except Exception as e:
-                        print(f"ERROR: Failed to load tools from {server_name}: {e}")
+                        print(f" ERROR: Failed to load tools from {server_name}: {e}")
                         import traceback
-                        print(f"TRACEBACK: {traceback.format_exc()}")
+                        print(f" TRACEBACK: {traceback.format_exc()}")
                         continue
                 
                 # Organize tools by type - map actual MCP tools to our expected names
@@ -123,7 +119,7 @@ class MCPResearchTools:
                 async with _MCP_LOCK:
                     if _MCP_SINGLETON is None:
                         _MCP_SINGLETON = self
-                        print("MCP: Singleton initialized for process lifetime")
+                        print(" MCP: Singleton initialized for process lifetime")
                 
         except Exception as e:
             # print(f"DEBUG: Failed to initialize MCP client: {e}")
@@ -172,17 +168,17 @@ async def get_research_tools() -> List[BaseTool]:
         # Only return real MCP tools - no fallbacks
         if "arxiv_search" in available_tools:
             tools.append(mcp_tools.get_tool("arxiv_search"))
-            print("Added ArXiv MCP tool")
+            print(" Added ArXiv MCP tool")
             
         if "semantic_scholar" in available_tools:
             tools.append(mcp_tools.get_tool("semantic_scholar"))
-            print("Added Semantic Scholar MCP tool")
+            print(" Added Semantic Scholar MCP tool")
         
         if not tools:
             print("No MCP research tools available. Install MCP servers: npm install -g @michaellatman/mcp-server-arxiv")
             
     except Exception as e:
-        print(f"MCP tools initialization failed: {e}")
+        print(f" MCP tools initialization failed: {e}")
         print("Install MCP servers to enable research tools: npm install -g @michaellatman/mcp-server-arxiv")
     
     # print(f"DEBUG: Returning {len(tools)} MCP tools")

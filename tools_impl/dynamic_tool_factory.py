@@ -189,10 +189,107 @@ def _create_dynamic_reranking_tool(tool_config: Dict[str, Any]) -> BaseTool:
     return DynamicRerankingTool()
 
 
+def _create_mcp_tool_wrapper(mcp_tool, ld_name: str):
+    """Create wrapper for MCP tool that properly handles async/sync execution"""
+    from langchain.tools import BaseTool
+    from typing import Any
+    import asyncio
+    import concurrent.futures
+
+    class MCPToolWrapper(BaseTool):
+        name: str = ld_name  # Use LaunchDarkly name
+        description: str = mcp_tool.description
+        wrapped_tool: Any = None  # Declare as Pydantic field
+        args_schema: Any = None  # Will be set to wrapped tool's schema
+
+        def __init__(self, mcp_tool, ld_name):
+            super().__init__()
+            object.__setattr__(self, 'wrapped_tool', mcp_tool)
+            object.__setattr__(self, 'name', ld_name)
+            # Copy the args_schema from the wrapped MCP tool
+            if hasattr(mcp_tool, 'args_schema'):
+                object.__setattr__(self, 'args_schema', mcp_tool.args_schema)
+
+        async def _arun(self, config=None, **kwargs) -> str:
+            """Execute the wrapped MCP tool asynchronously."""
+            try:
+                # Handle nested kwargs structure from MCP tools
+                if 'kwargs' in kwargs and isinstance(kwargs['kwargs'], dict):
+                    actual_kwargs = kwargs['kwargs']
+                else:
+                    actual_kwargs = kwargs
+                
+                print(f"🔍 MCP TOOL {self.name} received args: {actual_kwargs}")
+                log_debug(f"MCP TOOL {self.name} received args: {actual_kwargs}")
+
+                # Use await to call the async tool method
+                if hasattr(self.wrapped_tool, '_arun'):
+                    result = await self.wrapped_tool._arun(config=config, **actual_kwargs)
+                elif hasattr(self.wrapped_tool, 'ainvoke'):
+                    # MCP tools expect flat kwargs, not nested in config
+                    result = await self.wrapped_tool.ainvoke(actual_kwargs)
+                elif hasattr(self.wrapped_tool, 'invoke'):
+                    # Some tools might be sync, run in executor
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        result = await asyncio.get_event_loop().run_in_executor(
+                            executor, lambda: self.wrapped_tool.invoke(actual_kwargs)
+                        )
+                else:
+                    raise ValueError(f"MCP tool {self.name} has no callable method")
+
+                return str(result)
+
+            except Exception as e:
+                import traceback
+                error_details = traceback.format_exc()
+                log_debug(f"MCP TOOL ASYNC ERROR in {self.name}: {e}")
+                log_debug(f"MCP TOOL TRACEBACK: {error_details}")
+                print(f"⚠️ MCP TOOL ERROR ({self.name}): {e}")
+                return f"MCP tool error: {str(e)}"
+
+        def _run(self, **kwargs) -> str:
+            """Execute the wrapped MCP tool synchronously."""
+            try:
+                # Handle nested kwargs structure
+                if 'kwargs' in kwargs and isinstance(kwargs['kwargs'], dict):
+                    actual_kwargs = kwargs['kwargs']
+                else:
+                    actual_kwargs = kwargs
+                
+                print(f"🔍 MCP TOOL {self.name} SYNC received args: {actual_kwargs}")
+                log_debug(f"MCP TOOL {self.name} SYNC received args: {actual_kwargs}")
+
+                # MCP tools are async-only, so always use async execution
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        # Create new loop for sync execution in thread
+                        with concurrent.futures.ThreadPoolExecutor() as executor:
+                            future = executor.submit(asyncio.run, self._arun(**actual_kwargs))
+                            result = future.result(timeout=30)
+                    else:
+                        result = loop.run_until_complete(self._arun(**actual_kwargs))
+                except RuntimeError:
+                    # No event loop, create one
+                    result = asyncio.run(self._arun(**actual_kwargs))
+
+                return str(result)
+
+            except Exception as e:
+                import traceback
+                error_details = traceback.format_exc()
+                log_debug(f"MCP TOOL SYNC ERROR in {self.name}: {e}")
+                log_debug(f"MCP TOOL TRACEBACK: {error_details}")
+                print(f"⚠️ MCP TOOL ERROR ({self.name}): {e}")
+                return f"MCP tool error: {str(e)}"
+
+    return MCPToolWrapper(mcp_tool, ld_name)
+
+
 def _create_dynamic_mcp_tool(tool_name: str, tool_config: Dict[str, Any]) -> Optional[BaseTool]:
     """Create MCP tool with LaunchDarkly configuration using working wrapper pattern"""
     try:
-        from tools_impl.mcp_research_tools import get_research_tools
+        from tools_impl.mcp_research_tools import MCPResearchTools
         import asyncio
         import concurrent.futures
 
@@ -202,7 +299,6 @@ def _create_dynamic_mcp_tool(tool_name: str, tool_config: Dict[str, Any]) -> Opt
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
 
-                from tools_impl.mcp_research_tools import MCPResearchTools
                 mcp_client = MCPResearchTools()
                 result = loop.run_until_complete(mcp_client.initialize())
 
@@ -239,7 +335,7 @@ def _create_dynamic_mcp_tool(tool_name: str, tool_config: Dict[str, Any]) -> Opt
                     # Find matching MCP tool
                     for mcp_tool in mcp_tools:
                         if hasattr(mcp_tool, 'name') and mcp_tool_name in mcp_tool.name.lower():
-                            # Create wrapper like in working version
+                            # Create wrapper to handle async execution properly
                             wrapped_tool = _create_mcp_tool_wrapper(mcp_tool, tool_name)
                             log_debug(f"MCP TOOL CREATED: {tool_name} -> {mcp_tool_name}")
                             return wrapped_tool
@@ -253,144 +349,12 @@ def _create_dynamic_mcp_tool(tool_name: str, tool_config: Dict[str, Any]) -> Opt
     return None
 
 
-def _create_mcp_tool_wrapper(mcp_tool, ld_name: str):
-    """Create wrapper for MCP tool using the working pattern from commit 82db2c5"""
-    from langchain.tools import BaseTool
-    from typing import Any
-    import json
-
-    class MCPToolWrapper(BaseTool):
-        name: str = ld_name  # Use LaunchDarkly name
-        description: str = mcp_tool.description
-        wrapped_tool: Any = None  # Declare as Pydantic field
-
-        def __init__(self, mcp_tool, ld_name):
-            super().__init__()
-            object.__setattr__(self, 'wrapped_tool', mcp_tool)
-            object.__setattr__(self, 'name', ld_name)
-
-        async def _arun(self, config=None, **kwargs) -> str:
-            """Execute the wrapped MCP tool asynchronously."""
-            try:
-                # Handle nested kwargs structure from MCP tools
-                if 'kwargs' in kwargs and isinstance(kwargs['kwargs'], dict):
-                    actual_kwargs = kwargs['kwargs']
-                else:
-                    actual_kwargs = kwargs
-
-                # Use await to call the async tool method
-                if hasattr(self.wrapped_tool, '_arun'):
-                    result = await self.wrapped_tool._arun(config=config, **actual_kwargs)
-                elif hasattr(self.wrapped_tool, 'ainvoke'):
-                    invoke_args = dict(actual_kwargs)
-                    invoke_args['config'] = config
-                    result = await self.wrapped_tool.ainvoke(invoke_args)
-                elif hasattr(self.wrapped_tool, 'invoke'):
-                    # Some tools might be sync, run in executor
-                    invoke_args = dict(actual_kwargs)
-                    invoke_args['config'] = config
-                    loop = asyncio.get_event_loop()
-                    result = await loop.run_in_executor(None, self.wrapped_tool.invoke, invoke_args)
-                else:
-                    # Fallback, attempt to run in default executor
-                    loop = asyncio.get_event_loop()
-                    result = await loop.run_in_executor(None, self.wrapped_tool, config, **actual_kwargs)
-
-                # Format result
-                if isinstance(result, dict):
-                    return json.dumps(result, indent=2)
-                elif isinstance(result, list):
-                    return json.dumps(result, indent=2)
-                else:
-                    return str(result)
-            except Exception as e:
-                log_debug(f"MCP TOOL ASYNC ERROR: {e}")
-                return f"MCP tool error: {str(e)}"
-
-        def _run(self, config=None, **kwargs) -> str:
-            """Synchronous fallback - run async version in new event loop."""
-            try:
-                # Create new event loop for sync execution
-                import asyncio
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    result = loop.run_until_complete(self._arun(config=config, **kwargs))
-                    return result
-                finally:
-                    loop.close()
-            except Exception as e:
-                log_debug(f"MCP TOOL SYNC ERROR: {e}")
-                return f"MCP tool error: {str(e)}"
-
-    return MCPToolWrapper(mcp_tool, ld_name)
-
-
-def _create_research_fallback_tool(tool_name: str) -> Optional[BaseTool]:
-    """Create fallback research tool when MCP isn't available"""
-    from langchain.tools import BaseTool
-    from pydantic import BaseModel, Field
-
-    class ResearchInput(BaseModel):
-        """Input schema for research tools"""
-        query: str = Field(description="Research query for academic papers")
-        max_results: int = Field(default=5, description="Maximum number of results to return")
-
-    class ResearchFallbackTool(BaseTool):
-        name: str = tool_name
-        description: str = ""
-        args_schema: type = ResearchInput
-
-        def __init__(self, tool_name: str):
-            super().__init__()
-            if tool_name == "arxiv_search":
-                object.__setattr__(self, 'description', "Search ArXiv for academic papers (fallback: uses enhanced vector search)")
-            elif tool_name == "semantic_scholar":
-                object.__setattr__(self, 'description', "Search Semantic Scholar for academic papers (fallback: uses enhanced vector search)")
-            object.__setattr__(self, 'name', tool_name)
-
-        def _run(self, query: str, max_results: int = 5) -> str:
-            """Fallback research using enhanced vector search"""
-            try:
-                # Use the existing vector search tools as fallback
-                from tools_impl.search_v2 import SearchToolV2
-                from tools_impl.reranking import RerankingTool
-
-                # Enhanced search with reranking for better research results
-                search_tool = SearchToolV2()
-                rerank_tool = RerankingTool()
-
-                # Get initial results
-                search_results = search_tool.run(f"academic research papers {query}")
-
-                # Rerank for relevance
-                if search_results and "No relevant" not in search_results:
-                    reranked_results = rerank_tool.run(f"query:{query}\nresults:{search_results}")
-
-                    # Format as research paper results
-                    result = f"RESEARCH RESULTS for '{query}' (via enhanced vector search):\n\n"
-                    result += f"Note: Using fallback search due to MCP unavailability. Results are from internal documentation.\n\n"
-                    result += reranked_results
-
-                    return result
-                else:
-                    return f"No research papers found for query: {query}. Try different search terms."
-
-            except Exception as e:
-                return f"Research search error: {str(e)}"
-
-    return ResearchFallbackTool(tool_name)
-
-
 def create_dynamic_tools_from_launchdarkly(config) -> List[BaseTool]:
     """
     Main function to create all tools dynamically from LaunchDarkly configuration.
     This replaces the hardcoded tool instantiation.
     """
     tools_list, tool_configs = extract_tool_configs_from_launchdarkly(config)
-
-    # Debug: Show what tools LaunchDarkly is configured with
-    log_debug(f"TOOLS FROM LAUNCHDARKLY CONFIG: {tools_list}")
 
     available_tools = []
 
@@ -402,25 +366,8 @@ def create_dynamic_tools_from_launchdarkly(config) -> List[BaseTool]:
             available_tools.append(tool_instance)
             log_debug(f"DYNAMIC TOOL CREATED: {tool_name}")
         else:
-            # Create fallback tools for MCP research when MCP isn't available
-            if tool_name in ["arxiv_search", "semantic_scholar"]:
-                fallback_tool = _create_research_fallback_tool(tool_name)
-                if fallback_tool:
-                    available_tools.append(fallback_tool)
-                    log_debug(f"MCP FALLBACK TOOL CREATED: {tool_name}")
-                else:
-                    log_debug(f"MCP TOOL NOT AVAILABLE: {tool_name}")
-            else:
-                log_debug(f"DYNAMIC TOOL FAILED: {tool_name}")
+            log_debug(f"DYNAMIC TOOL FAILED: {tool_name}")
 
-    # Show final loaded tools (suppress MCP tool absence for variations that don't include them)
-    loaded_tool_names = [tool.name for tool in available_tools]
-    mcp_tools_in_config = any(name in tools_list for name in ["arxiv_search", "semantic_scholar"])
-    mcp_tools_loaded = any(name in loaded_tool_names for name in ["arxiv_search", "semantic_scholar"])
-
-    if mcp_tools_in_config and not mcp_tools_loaded:
-        log_student(f"TOOLS LOADED: {loaded_tool_names} (MCP tools unavailable)")
-    else:
-        log_student(f"TOOLS LOADED: {loaded_tool_names}")
+    log_student(f"DYNAMIC TOOLS LOADED: {[tool.name for tool in available_tools]}")
 
     return available_tools

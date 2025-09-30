@@ -3,6 +3,7 @@ Shared helper functions for LaunchDarkly AI agents following the proper pattern
 """
 import asyncio
 import time
+import json
 from typing import List, Any, Tuple, Optional
 from langchain.chat_models import init_chat_model
 from langgraph.prebuilt import create_react_agent
@@ -154,7 +155,7 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
 
     class LaunchDarklyAgent:
         def __init__(self):
-            self.max_tool_calls = 5  # Default value
+            self.max_tool_calls = 15  # Default value
 
         def invoke(self, request_data: dict) -> dict:
             """
@@ -208,50 +209,30 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                 max_tool_calls = 5  # Default
 
                 # Extract max_tool_calls from LaunchDarkly config
+                # Use same path as get_tools_list: model.parameters.custom
                 if agent_config:
                     try:
                         config_dict = agent_config.to_dict()
-                        log_student(f"DEBUG: LaunchDarkly config structure: {config_dict}")
-
-                        # Try multiple possible locations for max_tool_calls
-                        custom_found = False
-
-                        # Check model.custom
-                        if 'model' in config_dict and 'custom' in config_dict['model'] and config_dict['model']['custom']:
-                            custom_params = config_dict['model']['custom']
-                            if 'max_tool_calls' in custom_params:
-                                max_tool_calls = custom_params['max_tool_calls']
-                                log_student(f"Found max_tool_calls={max_tool_calls} in model.custom")
-                                custom_found = True
-
-                        # Check model.parameters.custom
-                        if not custom_found and 'model' in config_dict and 'parameters' in config_dict['model']:
+                        log_student(f"DEBUG: LaunchDarkly config keys: {list(config_dict.keys())}")
+                        
+                        # Check model.parameters.custom (same structure as tools)
+                        if 'model' in config_dict and 'parameters' in config_dict['model']:
                             params = config_dict['model']['parameters']
-                            if 'custom' in params and params['custom'] and 'max_tool_calls' in params['custom']:
-                                max_tool_calls = params['custom']['max_tool_calls']
-                                log_student(f"Found max_tool_calls={max_tool_calls} in model.parameters.custom")
-                                custom_found = True
-
-                        # Check direct model.parameters
-                        if not custom_found and 'model' in config_dict and 'parameters' in config_dict['model']:
-                            params = config_dict['model']['parameters']
-                            if 'max_tool_calls' in params:
-                                max_tool_calls = params['max_tool_calls']
-                                log_student(f"Found max_tool_calls={max_tool_calls} in model.parameters")
-                                custom_found = True
-
-                        # Check top-level custom
-                        if not custom_found and 'custom' in config_dict and config_dict['custom']:
-                            if 'max_tool_calls' in config_dict['custom']:
-                                max_tool_calls = config_dict['custom']['max_tool_calls']
-                                log_student(f"Found max_tool_calls={max_tool_calls} in top-level custom")
-                                custom_found = True
-
-                        if not custom_found:
-                            log_student(f"max_tool_calls not found in LaunchDarkly config, using default={max_tool_calls}")
-
+                            
+                            # Custom parameters are at the same level as tools
+                            if 'custom' in params and params['custom']:
+                                custom_params = params['custom']
+                                log_student(f"DEBUG: Found custom params: {list(custom_params.keys())}")
+                                
+                                if 'max_tool_calls' in custom_params:
+                                    max_tool_calls = custom_params['max_tool_calls']
+                                    log_student(f"DEBUG: Found max_tool_calls={max_tool_calls} in LaunchDarkly")
+                            else:
+                                log_student(f"DEBUG: No custom params in model.parameters, using default={max_tool_calls}")
+                        else:
+                            log_student(f"DEBUG: No model.parameters found, using default max_tool_calls={max_tool_calls}")
                     except Exception as e:
-                        log_student(f"Error extracting max_tool_calls: {e}, using default={max_tool_calls}")
+                        log_student(f"DEBUG: Error extracting max_tool_calls: {e}, using default={max_tool_calls}")
 
                 # Apply rate limiting before LLM calls
                 _rate_limit_llm_call()
@@ -317,13 +298,28 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                             tool_args = tool_call.get('args', {})
                             tool_calls.append(tool_name)
 
-                            # Extract search query from tool arguments (multiple possible field names)
-                            search_query = (
-                                tool_args.get('query', '') or
-                                tool_args.get('search_query', '') or
-                                tool_args.get('q', '') or
-                                str(tool_args) if len(str(tool_args)) < 100 else ''
-                            )
+                            # Extract search query from tool arguments
+                            search_query = ""
+                            
+                            # Try direct query fields first
+                            if 'query' in tool_args:
+                                search_query = tool_args['query']
+                            elif 'search_query' in tool_args:
+                                search_query = tool_args['search_query']
+                            elif 'q' in tool_args:
+                                search_query = tool_args['q']
+                            # Handle MCP tools with 'args' array containing dict with 'query'
+                            elif 'args' in tool_args and isinstance(tool_args['args'], list) and len(tool_args['args']) > 0:
+                                first_arg = tool_args['args'][0]
+                                if isinstance(first_arg, dict) and 'query' in first_arg:
+                                    search_query = first_arg['query']
+                            # Handle nested kwargs structure
+                            elif 'kwargs' in tool_args and isinstance(tool_args['kwargs'], dict):
+                                search_query = tool_args['kwargs'].get('query', '')
+                            
+                            # Convert to string if needed
+                            if search_query and not isinstance(search_query, str):
+                                search_query = str(search_query)
 
                             tool_details.append({
                                 "name": tool_name,
