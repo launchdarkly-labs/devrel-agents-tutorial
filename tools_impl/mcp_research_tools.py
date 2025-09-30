@@ -38,20 +38,28 @@ class MCPResearchTools:
             print("  MCP: Initializing process-lifetime singleton...")
         
         try:
-            # Configure MCP servers for research
-            # NOTE: MCP servers can cause initialization timeouts in some environments
-            server_configs = {
-                # ArXiv MCP Server (Python-based) - RE-ENABLED
-                "arxiv": {
-                    "command": "/Users/ld_scarlett/.local/bin/arxiv-mcp-server", 
+            # Configure MCP servers for research using environment variables
+            import os
+            
+            server_configs = {}
+            
+            # ArXiv MCP Server - only add if path is configured
+            arxiv_path = os.getenv('ARXIV_MCP_SERVER_PATH')
+            if arxiv_path and os.path.exists(arxiv_path):
+                server_configs["arxiv"] = {
+                    "command": arxiv_path,
                     "args": ["--storage-path", "/tmp/arxiv-papers"]
-                },
-                # Semantic Scholar MCP Server (Python-based)
-                "semanticscholar": {
-                    "command": "python",
-                    "args": ["semanticscholar-MCP-Server/semantic_scholar_server.py"]
                 }
-            }
+                print(f"  MCP: ArXiv server configured at {arxiv_path}")
+            
+            # Semantic Scholar MCP Server - only add if path is configured
+            semantic_path = os.getenv('SEMANTIC_SCHOLAR_SERVER_PATH')
+            if semantic_path and os.path.exists(semantic_path):
+                server_configs["semanticscholar"] = {
+                    "command": "python",
+                    "args": [semantic_path]
+                }
+                print(f"  MCP: Semantic Scholar server configured at {semantic_path}")
             
             # Try to initialize with available servers
             available_configs = {}
