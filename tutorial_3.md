@@ -12,22 +12,33 @@ The solution? **Rigorous A/B experiments** with specific hypotheses, statistical
 
 In the next 25 minutes, you'll design and execute experiments that answer two critical business questions:
 
-- **Tool Implementation ROI**: Which tool configuration delivers the best satisfaction-to-cost ratio while maintaining <2s response latency?
+- **Tool Implementation ROI**: Which tool configuration delivers the best satisfaction-to-cost ratio while maintaining less than 2s response latency?
 - **Model Efficiency Analysis**: Does Claude 3.5 Sonnet use ≥25% fewer tool calls than GPT-4 while maintaining equivalent satisfaction?
 
 ## Prerequisites
 
 > **⚠️ CRITICAL: Required Previous Steps**
->
-> This tutorial builds directly on Parts 1 and 2. You **MUST** have completed:
-> - **Part 1**: Basic multi-agent system with LaunchDarkly AI Configs
-> - **Part 2**: Smart targeting with user segments and external research tools
-> - **Working System**: All agents, tools, and targeting rules functioning correctly
 
 You'll need:
 - **Completed Parts 1 & 2**: Working multi-agent system with segmentation
 - **Active LaunchDarkly Project**: With AI Configs and user segments from Part 2
 - **API Keys**: All keys from previous parts (Anthropic, OpenAI, LaunchDarkly, Mistral)
+
+## Data Foundation for Statistical Rigor
+
+Before running experiments, we need sufficient data for reliable results. Your system includes:
+
+**Current Synthetic Data**:
+- **22 diverse users** across 10 countries with 4 plan types (free, paid, enterprise, academic)
+- **28 strategic queries** across 7 categories (basic ML, research, edge cases, premium features)
+- **616 unique combinations** (22 × 28) providing robust statistical foundation
+
+**Why This Matters**:
+Statistical significance requires **500+ data points** for reliable A/B testing. Your expanded dataset enables:
+- **Geographic targeting** experiments (US vs EU privacy compliance)
+- **Plan-based segmentation** testing (free vs paid vs enterprise features)
+- **Query complexity analysis** (simple vs research vs premium feature requests)
+- **Bayesian inference** with greater than 90% posterior probability confidence
 
 ## Experiment 1: Tool Implementation ROI (12 minutes)
 
@@ -44,15 +55,15 @@ This experiment answers the fundamental question: "Do advanced search features j
 - **Treatment C**: `arxiv_search + semantic_scholar` only (external tools isolation test)
 
 **Success Criteria** (all must be met):
-- ≥15% satisfaction improvement vs control with >90% posterior probability
-- Cost increase ≤20% per query with >90% posterior probability
-- Response latency ≤2.0 seconds (95th percentile) with >90% posterior probability
+- greater than or equal to 15% satisfaction improvement vs control with greater than 90% posterior probability
+- Cost increase less than or equal to 20% per query with greater than 90% posterior probability
+- Response latency less than or equal to 2.0 seconds (95th percentile) with greater than 90% posterior probability
 - Minimum 100 interactions per variation (400+ total) for reliable Bayesian inference
 
 **Failure Criteria** (any triggers failure):
-- <10% satisfaction improvement or <70% posterior probability of improvement
-- >25% cost increase per query with >70% posterior probability
-- >2.5 seconds response latency (95th percentile) with >70% posterior probability
+- less than 10% satisfaction improvement or less than 70% posterior probability of improvement
+- greater than 25% cost increase per query with greater than 70% posterior probability
+- greater than 2.5 seconds response latency (95th percentile) with greater than 70% posterior probability
 - If failed: Maintain control configuration, analyze cost/performance bottlenecks
 
 ### **Step 1: Create Multi-Metric Framework in LaunchDarkly (5 minutes)**
@@ -108,7 +119,7 @@ Create three metrics to track satisfaction, cost, and latency:
    - **Primary**: ≥15% satisfaction improvement (any treatment vs control)
    - **Cost Constraint**: ≤20% cost increase per query
    - **Latency Constraint**: ≤2.0s response time (95th percentile)
-   - **Bayesian Confidence**: >90% posterior probability for success criteria
+   - **Bayesian Confidence**: greater than 90% posterior probability for success criteria
    - **Sample Size**: 100 interactions minimum per variation (400+ total)
 
 ### **Step 3: Launch and Monitor (2 minutes)**
@@ -121,11 +132,11 @@ Create three metrics to track satisfaction, cost, and latency:
 
 After reaching statistical significance:
 
-**If SUCCESS (≥20% improvement, p<0.05)**:
+**If SUCCESS (greater than or equal to 20% improvement, p less than 0.05)**:
 - **Action**: Roll out `search_v2 + reranking` to all users
 - **Business Impact**: Calculate satisfaction improvement × user base × retention value
 
-**If FAILURE (<10% improvement or p>0.05)**:
+**If FAILURE (less than 10% improvement or p greater than 0.05)**:
 - **Action**: Keep `search_v1`, investigate search quality issues
 - **Business Impact**: Avoid wasted resources on ineffective advanced search
 
@@ -141,16 +152,16 @@ This experiment quantifies which model delivers better resource efficiency: "Doe
 
 **Primary Hypothesis**: Claude 3.5 Sonnet will use ≥25% fewer tool calls than GPT-4 to achieve equivalent satisfaction rates
 
-**Counter-Hypothesis**: If Claude uses >90% of GPT-4's tool calls, efficiency gains don't justify model switching costs
+**Counter-Hypothesis**: If Claude uses greater than 90% of GPT-4's tool calls, efficiency gains don't justify model switching costs
 
 **Success Criteria**:
-- ≥25% reduction in tool calls with >90% posterior probability
-- Maintained satisfaction (within 5% of GPT-4) with >90% posterior probability
+- greater than or equal to 25% reduction in tool calls with greater than 90% posterior probability
+- Maintained satisfaction (within 5% of GPT-4) with greater than 90% posterior probability
 - Minimum 100 interactions per model for reliable Bayesian inference
 
 **Failure Criteria**:
-- <15% tool call reduction with >70% posterior probability
-- >10% satisfaction drop with >70% posterior probability
+- less than 15% tool call reduction with greater than 70% posterior probability
+- greater than 10% satisfaction drop with greater than 70% posterior probability
 - If failed: Stick with current model allocation, investigate Claude's tool-calling patterns
 
 ### **Step 1: Create Tool Efficiency Metric (3 minutes)**
@@ -188,7 +199,7 @@ Configure advanced experiment settings:
 
 1. **Sample Size**: 100 interactions minimum per model for reliable Bayesian inference
 2. **Test Duration**: 7 days minimum to account for usage patterns
-3. **Confidence Threshold**: >90% posterior probability for both efficiency and quality metrics
+3. **Confidence Threshold**: greater than 90% posterior probability for both efficiency and quality metrics
 4. **Decision Framework**: LaunchDarkly's Bayesian analysis will provide probability distributions for each metric
 
 ### **Step 4: Launch Dual-Metric Experiment (3 minutes)**
@@ -202,19 +213,48 @@ Configure advanced experiment settings:
 2. **Start Experiment**: Launch with dual success criteria
 3. **Monitor Both Metrics**: Track tool efficiency AND satisfaction rates
 
-## Generate Realistic Test Traffic
+## Unified Data Generation Strategy
 
-Create authentic experiment data with your traffic generator:
+Now that both experiments are configured, generate data that feeds into **both experiments simultaneously**. Your traffic generator will create realistic interactions that LaunchDarkly automatically routes to different experiment variations.
 
+### **Strategic Data Generation Approach**
+
+**Phase 1: Comprehensive Coverage (300 queries)**
 ```bash
-# Generate realistic traffic for statistical significance
-uv run python tools/traffic_generator.py --queries 200 --delay 1
-
-# Focus on research queries to test tool efficiency
-uv run python tools/traffic_generator.py --queries 150 --delay 1.5
+# Generate broad coverage across all user types and query categories
+uv run python tools/traffic_generator.py --queries 300 --delay 1
 ```
 
-**Important**: The traffic generator now uses realistic feedback patterns based on actual response quality, not artificial hypothesis validation.
+**Phase 2: Research-Focused Testing (200 queries)**
+```bash
+# Focus on research queries to test tool efficiency and advanced features
+uv run python tools/traffic_generator.py --queries 200 --delay 1.5
+```
+
+**Phase 3: Edge Case & Performance Testing (100 queries)**
+```bash
+# Test edge cases and performance scenarios
+uv run python tools/traffic_generator.py --queries 100 --delay 0.8
+```
+
+### **Why This Unified Approach Works**
+
+**Simultaneous Experiment Data**: Each traffic generator run creates data for **both experiments**:
+- **Tool Implementation ROI**: Users get different tool configurations based on experiment variations
+- **Model Efficiency Analysis**: Users get different models (GPT-4 vs Claude) based on experiment variations
+- **Same Interaction**: One user query can contribute to both experiments simultaneously
+
+**Realistic Data Quality**:
+- **Authentic feedback patterns** based on actual response quality indicators
+- **Geographic and plan-based targeting** automatically handled by LaunchDarkly
+- **Natural variation** in user satisfaction based on response length, tool usage, and keyword relevance
+- **No hypothesis bias**: Feedback determined by response quality, not experiment expectations
+
+**Statistical Foundation**:
+- **600+ total interactions** across both experiments
+- **22 diverse user profiles** with realistic geographic and plan distributions
+- **28 strategic queries** testing various scenarios and complexity levels
+- **Bayesian confidence**: Sufficient data for greater than 90% posterior probability calculations
 
 ## Analyzing Results with Scientific Rigor
 
@@ -228,9 +268,9 @@ uv run python tools/traffic_generator.py --queries 150 --delay 1.5
 - **Decision Confidence**: LaunchDarkly provides confidence scores for variant selection
 
 **For Multi-Variant Tool Implementation**:
-- **Satisfaction Analysis**: Probability each variant improves satisfaction >15% vs control
-- **Cost Constraint**: Probability cost increase stays <20% vs control
-- **Latency Threshold**: Probability 95th percentile latency stays <2.0s
+- **Satisfaction Analysis**: Probability each variant improves satisfaction greater than 15% vs control
+- **Cost Constraint**: Probability cost increase stays less than 20% vs control
+- **Latency Threshold**: Probability 95th percentile latency stays less than 2.0s
 - **Combined Decision**: Select variant with highest probability of meeting all criteria
 
 **For Model Efficiency Experiment**:
@@ -264,7 +304,7 @@ Example: 30% × $0.02 × 50,000 calls/month = $300/month savings
 
 **Tool Implementation - DEPLOY** if:
 - ✓ ≥20% satisfaction improvement
-- ✓ Statistical significance (p<0.05)
+- ✓ Statistical significance (p less than 0.05)
 - ✓ Minimum 100 samples per variation
 - **Action**: Roll out advanced search to all users
 
@@ -277,13 +317,13 @@ Example: 30% × $0.02 × 50,000 calls/month = $300/month savings
 ### **Clear Failure Criteria**
 
 **Tool Implementation - REJECT** if:
-- ✗ <10% satisfaction improvement
+- ✗ less than 10% satisfaction improvement
 - ✗ No statistical significance
 - **Action**: Maintain `search_v1`, investigate search quality issues
 
 **Model Efficiency - MAINTAIN STATUS QUO** if:
-- ✗ <15% tool call reduction
-- ✗ >10% satisfaction drop
+- ✗ less than 15% tool call reduction
+- ✗ greater than 10% satisfaction drop
 - **Action**: Keep current model allocation
 
 ## What You've Accomplished
