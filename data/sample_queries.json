@@ -126,14 +126,61 @@
       "type": "basic_ml",
       "expected_tools": ["search_v2", "reranking"],
       "good_response_keywords": ["machine learning", "deployment", "strategies"]
+    },
+    {
+      "query": "I need a comprehensive research report on quantum machine learning: find recent papers, compare different approaches, and identify implementation gaps",
+      "type": "complex_research",
+      "expected_tools": ["arxiv_search", "semantic_scholar", "search_v2", "reranking"],
+      "good_response_keywords": ["quantum", "machine learning", "papers", "approaches", "implementation"]
+    },
+    {
+      "query": "Cross-reference papers on multimodal transformers with computer vision advances, then analyze emerging trends in 2024",
+      "type": "complex_research",
+      "expected_tools": ["arxiv_search", "semantic_scholar", "reranking"],
+      "good_response_keywords": ["multimodal", "transformers", "computer vision", "trends", "2024"]
+    },
+    {
+      "query": "What happens if I train a model with negative learning rates and backwards gradients?",
+      "type": "edge_case",
+      "expected_tools": ["search_v2"],
+      "good_response_keywords": ["learning rate", "gradients", "training"]
+    },
+    {
+      "query": "How do I implement a machine learning algorithm that predicts itself recursively using quantum entanglement?",
+      "type": "edge_case",
+      "expected_tools": ["search_v2"],
+      "good_response_keywords": ["machine learning", "recursive", "quantum"]
+    },
+    {
+      "query": "Provide enterprise-grade scalability analysis and ROI calculations for implementing transformer models in production",
+      "type": "premium_feature",
+      "expected_tools": ["search_v2", "reranking"],
+      "good_response_keywords": ["enterprise", "scalability", "ROI", "transformer", "production"]
+    },
+    {
+      "query": "Generate a detailed technical architecture document for deploying multi-agent AI systems with compliance requirements",
+      "type": "premium_feature",
+      "expected_tools": ["search_v2", "reranking"],
+      "good_response_keywords": ["architecture", "multi-agent", "AI systems", "compliance"]
+    },
+    {
+      "query": "Quick answer: What is AI?",
+      "type": "performance_test",
+      "expected_tools": [],
+      "good_response_keywords": ["AI", "artificial intelligence"]
     }
   ],
   "notes": {
     "for_students": "This format is easy to understand and modify. Just add more queries or change the keywords!",
     "query_types": {
       "basic_ml": "Simple ML questions that should use internal knowledge",
-      "research": "Academic questions that benefit from MCP research tools", 
-      "faq": "Common questions that should have quick answers"
-    }
+      "research": "Academic questions that benefit from MCP research tools",
+      "faq": "Common questions that should have quick answers",
+      "complex_research": "Multi-step research requiring multiple tools and cross-referencing",
+      "edge_case": "Unusual or potentially confusing queries to test agent robustness",
+      "premium_feature": "Enterprise-focused queries testing advanced capabilities",
+      "performance_test": "Simple queries designed to test response speed and efficiency"
+    },
+    "total_queries": "28 queries across 7 categories for comprehensive testing coverage"
   }
 }
