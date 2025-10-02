@@ -51,6 +51,38 @@ class ConcurrentTrafficGenerator:
             self.user_counter += 1
             return f"user_{self.session_id}_{self.user_counter}"
 
+    def evaluate_response(self, query, response):
+        """Ask Claude to evaluate if user would give feedback"""
+        prompt = f"""Based on this Q&A, would a user give feedback?
+
+Question: {query[:200]}
+Answer: {response[:500]}
+
+Reply with ONLY one of these:
+- positive (good answer, user would thumbs up)
+- negative (poor answer, user would thumbs down)
+- none (okay answer, user wouldn't bother rating)
+
+Most users don't give feedback unless the answer is notably good or bad."""
+
+        try:
+            ai_response = self.anthropic.messages.create(
+                model="claude-3-haiku-20240307",
+                max_tokens=10,
+                messages=[{"role": "user", "content": prompt}]
+            )
+
+            feedback = ai_response.content[0].text.strip().lower()
+            if "positive" in feedback:
+                return "positive"
+            elif "negative" in feedback:
+                return "negative"
+            else:
+                return "none"
+
+        except:
+            return "none"  # Default to no feedback on error
+
     def analyze_knowledge_base(self):
         """Ask Claude to analyze KB and return topics"""
         print("Analyzing knowledge base...")
@@ -112,28 +144,31 @@ class ConcurrentTrafficGenerator:
             
             if response.status_code == 200:
                 data = response.json()
-                
-                # Send feedback (positive 80% of the time)
-                feedback = "positive" if random.random() < 0.8 else "negative"
-                try:
-                    requests.post(
-                        f"{self.api_base_url}/feedback",
-                        json={
-                            "user_id": user_id,
-                            "message_id": data["id"],
-                            "user_query": query[:100],  # Truncate for efficiency
-                            "ai_response": data.get("response", "")[:100],
-                            "feedback": feedback,
-                            "variation_key": data.get("variation_key", "unknown"),
-                            "model": data.get("model", "unknown"),
-                            "tool_calls": data.get("tool_calls", []),
-                            "source": "simulated",
-                            "user_context": full_context  # Critical: includes country, region, plan
-                        },
-                        timeout=10
-                    )
-                except:
-                    pass  # Feedback is optional
+
+                # Use AI to evaluate response quality
+                feedback = self.evaluate_response(query, data.get("response", ""))
+
+                # Only send feedback if it's positive or negative (not "none")
+                if feedback in ["positive", "negative"]:
+                    try:
+                        requests.post(
+                            f"{self.api_base_url}/feedback",
+                            json={
+                                "user_id": user_id,
+                                "message_id": data["id"],
+                                "user_query": query,
+                                "ai_response": data.get("response", ""),
+                                "feedback": feedback,
+                                "variation_key": data.get("variation_key", "unknown"),
+                                "model": data.get("model", "unknown"),
+                                "tool_calls": data.get("tool_calls", []),
+                                "source": "simulated",
+                                "user_context": full_context  # Critical: includes country, region, plan
+                            },
+                            timeout=10
+                        )
+                    except:
+                        pass  # Feedback is optional
                 
                 with self.lock:
                     self.successful += 1
