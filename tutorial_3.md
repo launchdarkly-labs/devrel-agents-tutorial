@@ -411,24 +411,11 @@ Check if Claude Opus 4 beats GPT-4o control using per-user metrics:
 - Claude Opus 4 cost per user: $0.45 average (from tracked `ai_cost_per_request` events)
 - Cost increase: 200%, Satisfaction gain: 20%, Ratio: 20%/200% = 0.1 → **Failed** (needs ≥0.6)
 
-**Note**: The `ai_cost_per_request` custom metric automatically calculates real dollar costs using:
-- GPT-4o: $2.50 input / $10 output per 1M tokens
-- Claude Opus 4: $15 input / $75 output per 1M tokens
-- Claude Sonnet 3.5: $3 input / $15 output per 1M tokens
-
 **Decision**: Keep GPT-4o - Claude Opus 4 doesn't justify cost per user.
 
 ## What You've Accomplished
 
-You've built a **data-driven optimization engine** with:
-- **Statistical rigor**: Falsifiable hypotheses with confidence thresholds
-- **Clear decisions**: Predefined success criteria prevent post-hoc rationalization
-- **ROI justification**: Quantified business impact for feature investments
-- **Continuous optimization**: Framework for ongoing measurable experimentation
-
-**Typical Results**:
-- **Advanced tools**: 15-30% satisfaction improvement, most pronounced on complex queries
-- **Premium models**: 15-25% satisfaction improvement when cost-value ratio ≥ 0.6
+You've built a **data-driven optimization engine** with statistical rigor through falsifiable hypotheses and confidence thresholds. Your predefined success criteria ensure clear decisions and prevent post-hoc rationalization. Every feature investment now has quantified business impact for ROI justification, and you have a framework for continuous optimization through ongoing measurable experimentation.
 
 ## Troubleshooting
 
@@ -451,15 +438,11 @@ If `ai_cost_per_request` events aren't showing in LaunchDarkly:
 
 ## Beyond This Tutorial
 
-**Next Steps**:
-- **New tools**: Require statistical proof before production deployment
-- **Prompt engineering**: A/B test instruction variations with measurable outcomes
-- **Model updates**: Compare versions with confidence intervals
-- **Advanced designs**: Multi-armed bandits, sequential analysis, interaction effects
+**Next Steps**: Moving forward, require statistical proof before deploying any new tools to production. A/B test your prompt engineering changes to measure instruction variations with concrete outcomes. When model updates become available, compare versions using confidence intervals to ensure improvements are real. Consider exploring advanced experimental designs like multi-armed bandits, sequential analysis, and interaction effects as your experimentation maturity grows.
 
 ## From Chaos to Clarity
 
-Across this three-part series, you've transformed from hardcoded AI configurations to a scientifically rigorous, data-driven optimization engine. **Part 1** established your foundation with a dynamic multi-agent LangGraph system controlled by LaunchDarkly AI Configs, eliminating the need for code deployments when adjusting AI behavior. **Part 2** added sophisticated targeting with geographic privacy rules, user segmentation by plan tiers, and MCP tool integration for real academic research capabilities. **Part 3** completed your journey with statistical experimentation that proves ROI and guides optimization decisions with mathematical confidence rather than intuition.
+Across this three-part series, you've transformed from hardcoded AI configurations to a scientifically rigorous, data-driven optimization engine. **[Part 1](tutorial_1.md)** established your foundation with a dynamic multi-agent LangGraph system controlled by LaunchDarkly AI Configs, eliminating the need for code deployments when adjusting AI behavior. **[Part 2](tutorial_2.md)** added sophisticated targeting with geographic privacy rules, user segmentation by plan tiers, and MCP tool integration for real academic research capabilities. **[Part 3](tutorial_3.md)** completed your journey with statistical experimentation that proves ROI and guides optimization decisions with mathematical confidence rather than intuition.
 
 You now possess a defensible AI system that adapts to changing requirements, scales across user segments, and continuously improves through measured experimentation. Your stakeholders receive concrete evidence for AI investments, your engineering team deploys features with statistical backing, and your users benefit from optimized experiences driven by real data rather than assumptions. The chaos of ad-hoc AI development has given way to clarity through systematic, scientific product development.
 
