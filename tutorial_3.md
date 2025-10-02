@@ -12,7 +12,7 @@ The solution? **Rigorous A/B experiments** with specific hypotheses and clear su
 
 In the next 25 minutes, you'll design and execute experiments that answer two critical business questions:
 
-- **Tool Implementation ROI**: Which tool configuration delivers the best satisfaction-to-cost ratio while maintaining less than 2s response latency?
+- **Security Agent Analysis**: Does enhanced security improve safety without significantly impacting user satisfaction?
 - **Premium Model Value Analysis**: Does Claude Opus 4 justify its premium cost with superior user satisfaction for paid users?
 
 ## Prerequisites
@@ -26,23 +26,22 @@ You'll need:
 
 ## Data Foundation
 
-**Realistic Experiment Data**: We'll target other-paid users (non-EU countries, paid tier) with queries randomly selected from YOUR knowledge base topics. The system uses 3-option feedback simulation (thumbs_up/thumbs_down/no_feedback) matching real user patterns, tracking both engagement rate and satisfaction rate for robust analysis.
+**Realistic Experiment Data**: We'll target other-paid users (non-EU countries, paid tier) with queries randomly selected from YOUR knowledge base topics. The system uses 3-option feedback simulation (thumbs_up/thumbs_down/no_feedback) matching real user patterns, sending feedback data to LaunchDarkly for experiment analysis.
 
 ## Understanding Your Two Experiments
 
-### **Experiment 1: Tool Implementation ROI**
+### **Experiment 1: Security Agent Analysis**
 
-**Question**: Do advanced search features justify their development cost?
+**Question**: Does strict security cause a loss of context and reduce user satisfaction?
 
-**Variations** (33% each):
-- **Control**: `search_v1` only
-- **Treatment A**: `search_v2 + reranking`
-- **Treatment C**: `arxiv_search + semantic_scholar` only
+**Variations** (50% each):
+- **Control**: Baseline security agent (existing baseline variation)
+- **Treatment**: Enhanced security agent (existing enhanced variation)
 
-**Success Criteria**:
-1. ≥15% satisfaction improvement vs control
-2. ≤20% cost increase per query
-3. ≤2.0s response latency (95th percentile)
+**Success Criteria** (measured per user):
+1. ≥10% improvement in safety compliance (positive feedback rate per user)
+2. ≤5% cost increase per user (calculated from token usage × cost per token)
+3. ≤2.0s response latency (completion time p95 per user)
 4. 90% confidence threshold
 
 ### **Experiment 2: Premium Model Value Analysis**
@@ -53,9 +52,9 @@ You'll need:
 - **Control**: GPT-4o with full tools (current version)
 - **Treatment**: Claude Opus 4 with identical tools (current version)
 
-**Success Criteria**:
-- ≥15% satisfaction improvement by Claude Opus 4
-- Cost-value ratio ≥ 0.6 (satisfaction gain ÷ cost increase)
+**Success Criteria** (measured per user):
+- ≥15% satisfaction improvement by Claude Opus 4 (positive feedback rate per user)
+- Cost-value ratio ≥ 0.6 (satisfaction gain % ÷ cost increase % per user)
 - 90% confidence threshold
 
 ## Setting Up Both Experiments
@@ -68,56 +67,93 @@ Create the experiment variations using the bootstrap script:
 uv run python bootstrap/tutorial_3_experiment_variations.py
 ```
 
-This creates variations for both experiments:
-- **Tool Implementation**: `control-basic`, `treatment-a-advanced`, `treatment-c-external`
+This creates variations for the premium model experiment:
 - **Premium Model Value**: `claude-opus-treatment`
-- **Note**: Remaining variations use existing other-paid configuration (GPT-4o with full tools)
+- **Security Agent Analysis**: Uses existing baseline and enhanced variations
+- **Note**: Both experiments use existing other-paid configuration as control
 
-### **Step 2: Configure Tool Implementation Experiment**
+### **Step 2: Use Built-in AI Metrics (Per User)**
+
+LaunchDarkly AI SDK automatically tracks these user-level metrics when your system runs. No setup needed - they're created automatically:
+
+**Available Built-in Metrics:**
+- **Input tokens per user (average)** - tracks average input cost per user
+- **Output tokens per user (average)** - tracks average output cost per user
+- **Completion time p95 per user** - tracks 95th percentile response latency per user
+- **Positive feedback count per user** - tracks user satisfaction events
+- **Negative feedback count per user** - tracks user dissatisfaction events
+
+**Experiments will use these user-level metrics** with calculated decision criteria:
+- **Performance constraint**: Completion time p95 per user ≤ 2.0s
+- **Cost calculation per user**: Total cost = (input tokens + output tokens) × model cost per token
+- **Satisfaction rate per user**: Positive feedback / (positive + negative feedback)
+- **Cost-value ratio**: Satisfaction improvement % ÷ cost increase % (calculated post-experiment)
+
+### **Step 3: Configure Security Agent Experiment**
+
+1. **Navigate to AI Configs** → **security-agent** → **Create experiment**
+2. **Experiment Setup**:
+   - **Name**: `Security Agent Analysis`
+   - **Hypothesis**: `Strict security agent will cause a loss of context and reduce user satisfaction`
+   - **Metrics**:
+     - **Primary**: Positive feedback rate per user
+     - **Secondary**: Input tokens per user, Output tokens per user, Completion time p95 per user
+   - **Audience**:
+     - **AI Config**: security-agent
+     - **Targeting rule**: If Context is in Segment Other Paid
+   - **Allocation**: 100% sample size
+
+3. **Configure Two Variations** (50% each):
+   - **Control**: Use existing baseline variation
+   - **Treatment**: Use existing enhanced variation
+
+4. **Statistical Approach**:
+   - **Type**: Bayesian experiment
+   - **Threshold**: 95% threshold
+   - **Credible interval**: 90% credible interval
+
+5. **Success Criteria**:
+   - ≥10% improvement in safety compliance (positive feedback rate per user)
+   - ≤5% cost increase per user (calculated from token usage × cost per token)
+   - ≤2.0s response latency (completion time p95 per user)
+   - 90% confidence threshold
+
+### **Step 4: Configure Premium Model Experiment**
 
 1. **Navigate to AI Configs** → **support-agent** → **Create experiment**
 2. **Experiment Setup**:
-   - **Name**: `Comprehensive Tool ROI Analysis`
-   - **Hypothesis**: `Advanced tool configurations improve satisfaction within cost/latency constraints`
-   - **Target**: `other-paid` segment (100% traffic)
-
-3. **Configure Three Variations**:
-   - **Control (33%)**: `control-basic` (search_v1 only)
-   - **Treatment A (33%)**: `treatment-a-advanced` (search_v2 + reranking)
-   - **Treatment C (33%)**: `treatment-c-external` (arxiv_search + semantic_scholar only)
-
-4. **Success Criteria**:
-   - ≥15% satisfaction improvement vs control
-   - ≤20% cost increase per query
-   - ≤2.0s response time (95th percentile)
-   - 90% confidence threshold
-
-### **Step 3: Configure Premium Model Experiment**
-
-1. **Create New Experiment** on `support-agent` AI Config
-2. **Experiment Setup**:
    - **Name**: `Premium Model Value Analysis`
    - **Hypothesis**: `Claude Opus 4 justifies premium cost with superior satisfaction`
-   - **Target**: `other-paid` segment (100% traffic)
+   - **Metrics**:
+     - **Primary**: Total tokens per completion (users)
+     - **Secondary**: Positive feedback rate, Negative feedback rate, user latency
+   - **Audience**:
+     - **AI Config**: support-agent
+     - **Targeting rule**: If Context is in Segment Other Paid
+   - **Allocation**: 100% sample size
 
 3. **Configure Two Variations** (50% each):
    - **Control**: Use existing other-paid variation (GPT-4o with full tools)
    - **Treatment**: `claude-opus-treatment` (Claude Opus 4 with identical tools)
 
-4. **Success Criteria**:
-   - ≥15% satisfaction improvement by Claude Opus 4
-   - Cost-value ratio ≥ 0.6 (satisfaction gain ÷ cost increase)
+4. **Statistical Approach**:
+   - **Type**: Bayesian experiment
+   - **Threshold**: 95% threshold
+   - **Credible interval**: 90% credible interval
+
+5. **Success Criteria**:
+   - ≥15% satisfaction improvement by Claude Opus 4 (positive feedback rate per user)
+   - Cost-value ratio ≥ 0.6 (satisfaction gain % ÷ cost increase % per user)
    - 90% confidence threshold
 
-### **Step 4: Launch Both Experiments**
-
-1. **Review Settings**: Verify targeting and success criteria
-2. **Start Experiments**: Click "Start experiment" for both
-3. **Confirm Active**: Both experiments should show "Running" status
 
 ## Generating Experiment Data
 
-### **Step 5: Run Traffic Generator**
+### **Step 5: Launch Both Experiments**
+
+Review your experiment settings, then click "Start experiment" for both. Once active, proceed to generate data.
+
+### **Step 6: Run Traffic Generator**
 
 Start your backend and generate realistic experiment data:
 
@@ -126,47 +162,75 @@ Start your backend and generate realistic experiment data:
 uv run uvicorn api.main:app --reload --port 8000
 
 # Generate experiment data (separate terminal)
-python tools/traffic_generator.py --queries 100 --delay 2
+python tools/traffic_generator.py --queries 300 --delay 2
 ```
 
 **What Happens**:
 - **Knowledge base analysis**: Extracts 10+ topics from your documents
 - **Random query generation**: Each query picks random topic + complexity
 - **Realistic feedback**: Claude Haiku judges responses as thumbs_up/thumbs_down/no_feedback
-- **Dual experiment data**: LaunchDarkly routes same queries to both experiments simultaneously
-- **Real-time metrics**: Track engagement rate and satisfaction rate
+- **LaunchDarkly data**: Feedback sent to experiments for analysis
+- **Dual experiments**: Same queries feed both security agent and model experiments
 
 **Progress Example**:
 ```
 📚 Analyzing knowledge base...
 🔍 Found 12 topics for query generation
 
-📝 Query 1/100 | Topic: feature flags (intermediate)
-🎯 Feedback: 👍 thumbs_up
-📈 Engagement: 40.0% (40/100) | Satisfaction: 80.0% (32/40)
+📝 Query 1/300 | Topic: feature flags (intermediate)
+🎯 Feedback: 👍 sent to LaunchDarkly
 
-🏁 EXPERIMENT COMPLETE
-✅ Engagement: PASS (40.0%)
-✅ Satisfaction: PASS (80.0%)
+🏁 TRAFFIC GENERATION COMPLETE
+📊 Total queries processed: 300
+📈 Data sent to LaunchDarkly experiments
+🔍 Check experiment results in LaunchDarkly dashboard
 ```
 
 **Monitor Results**: Refresh your LaunchDarkly experiment "Results" tabs to see data flowing in.
 
 ## Evaluating Your Experiment Results
 
-### **Decision Framework**
+### **Security Agent Analysis Decision Flow**
 
-1. **Check Success Criteria**: ≥15% satisfaction improvement + ≥90% confidence
-2. **Verify Constraints**: Response time ≤2s, cost increase ≤20%
-3. **Calculate ROI**: `(Satisfaction %) × (User Base) × (Retention Value)`
-4. **Choose Winner**: Highest ROI with strongest confidence
+**Step 1: Filter Qualifying Treatment**
+Check if enhanced security beats baseline control using per-user metrics:
+- ≥10% improvement in safety compliance (positive feedback rate per user)
+- ≥90% statistical confidence
+- Completion time p95 per user ≤2.0s
+- Cost increase per user ≤5% (calculated from token usage × cost per token)
 
-**Example Results**:
-- **Treatment A**: 18% satisfaction, 94% confidence → **Qualifies**
-- **Treatment B**: 22% satisfaction, 96% confidence → **Winner**
-- **Treatment C**: 12% satisfaction, 87% confidence → **Failed**
+**Step 2: Make Security Decision**
+- If enhanced security qualifies: Deploy enhanced security to all users
+- If enhanced security fails: Keep baseline security for cost efficiency
 
-**Action**: Deploy Treatment B to all users via LaunchDarkly targeting.
+**Example Results** (per-user metrics):
+- **Control**: Baseline security agent performance per user
+- **Treatment**: Enhanced security shows 12% safety improvement per user, 94% confidence, 1.6s p95, 3% cost increase per user → **Qualifies**
+
+**Decision**: Deploy enhanced security agent - meets safety improvement threshold with acceptable cost/latency trade-offs.
+
+### **Premium Model Value Decision Flow**
+
+**Step 1: Filter Qualifying Treatment**
+Check if Claude Opus 4 beats GPT-4o control using per-user metrics:
+- ≥15% satisfaction improvement vs GPT-4o (positive feedback rate per user)
+- ≥90% statistical confidence
+- Cost-value ratio ≥ 0.6 (satisfaction gain % ÷ cost increase % per user)
+
+**Step 2: Make Model Decision**
+- If Claude Opus 4 qualifies: Switch premium users to Claude Opus 4
+- If Claude Opus 4 fails: Keep GPT-4o for cost efficiency
+
+**Example Results** (per-user metrics):
+- **Control**: GPT-4o baseline performance per user
+- **Treatment**: Claude Opus 4 shows 20% satisfaction improvement per user, 95% confidence, cost-value ratio 0.8 → **Qualifies**
+
+**Cost Calculation**:
+- GPT-4o cost per user: $0.15 (average tokens × $15/$1M)
+- Claude Opus 4 cost per user: $0.45 (average tokens × $75/$1M)
+- Cost increase: 200%, Satisfaction gain: 20%, Ratio: 20%/200% = 0.1 → **Failed** (needs ≥0.6)
+
+**Decision**: Keep GPT-4o - Claude Opus 4 doesn't justify cost per user.
 
 ## What You've Accomplished
 
