@@ -2,7 +2,7 @@
 
 ## Overview
 
-You've built a sophisticated multi-agent system with smart targeting and premium research tools. But here's what every AI product team faces: stakeholders need concrete proof that advanced features deliver measurable value. They want to see hard numbers showing that premium search tools increase user satisfaction and that expensive models use resources more efficiently.
+You've built a sophisticated multi-agent system with smart targeting and premium research tools. What you and every AI product team now face is: stakeholders need concrete proof that advanced features deliver measurable value. They want to see hard numbers showing that premium search tools increase user satisfaction and that expensive models use resources more efficiently.
 
 *Part 3 of 3 of the series: **Chaos to Clarity: Defensible AI Systems That Deliver on Your Goals***
 
@@ -23,6 +23,12 @@ You'll need:
 - **Completed Parts 1 & 2**: Working multi-agent system with segmentation
 - **Active LaunchDarkly Project**: With AI Configs and user segments from Part 2
 - **API Keys**: All keys from previous parts (Anthropic, OpenAI, LaunchDarkly, Mistral)
+
+## ⚠️ Cost Warning
+
+> **IMPORTANT: This tutorial costs approximately $40 with default settings**
+>
+> The expense comes from using Claude Opus 4 ($15/$75 per 1M tokens) and generating 200+ completions for statistical significance. To reduce costs to $5-10, switch to Claude Sonnet 3.5 or GPT-4o-mini by editing the model settings in `bootstrap/tutorial_3_experiment_variations.py`, or use `--queries 50` instead of 200 when running the traffic generator.
 
 ## Data Foundation
 
@@ -57,9 +63,95 @@ You'll need:
 - Cost-value ratio ≥ 0.6 (satisfaction gain % ÷ cost increase % per user, using real $ from `ai_cost_per_request`)
 - 90% confidence threshold
 
-## Setting Up Both Experiments
+## Setting Up Metrics and Experiments
 
-### **Step 1: Create Experiment Variations**
+### **Step 1: Configure Metrics**
+
+Navigate to **Metrics** and create these five metrics:
+
+#### **Metric 1: P95 User Latency**
+
+![P95 User Latency Metric Configuration](screenshots/user_duration.png)
+
+> **Event key:** `$ld:ai:duration:total`
+>
+> **What do you want to measure:** `Value / Size` → `Numeric`
+>
+> **Aggregation:** `Sum`
+>
+> **Metric definition:** `P95` `value` of the per `user` event `sum`, where `lower is better`
+>
+> **Unit of measure:** `ms`
+>
+> **Metric name:** `p95_total_user_latency`
+>
+> **Metric key:** `user_latency`
+
+#### **Metric 2: Average Total Tokens**
+
+![Average Total Tokens Metric Configuration](screenshots/tokens.png)
+
+> **Event key:** `$ld:ai:tokens:total`
+>
+> **What do you want to measure:** `Value / Size` → `Numeric`
+>
+> **Aggregation:** `Average`
+>
+> **Metric definition:** `Average` `value` of the per `user` event `sum`, where `lower is better`
+>
+> **Unit of measure:** `tokens`
+>
+> **Metric name:** `average_total_user_tokens`
+>
+> **Metric key:** `average_tokens`
+
+#### **Metric 3: Positive Feedback Rate**
+
+> **Event key:** `$ld:ai:feedback:positive`
+>
+> **What do you want to measure:** `Count`
+>
+> **Metric definition:** `Conversion rate` where `higher is better`
+>
+> **Metric name:** `positive.feedback.rate`
+>
+> **Metric key:** `positive_feedback`
+
+#### **Metric 4: Negative Feedback Rate**
+
+> **Event key:** `$ld:ai:feedback:negative`
+>
+> **What do you want to measure:** `Count`
+>
+> **Metric definition:** `Conversion rate` where `lower is better`
+>
+> **Metric name:** `negative.feedback.rate`
+>
+> **Metric key:** `negative_feedback`
+
+#### **Metric 5: AI Cost Per Request**
+
+![AI Cost Per Request Metric Configuration](screenshots/cost.png)
+
+> **Event key:** `ai_cost_per_request`
+>
+> **What do you want to measure:** `Value / Size` → `Numeric`
+>
+> **Aggregation:** `Average`
+>
+> **Metric definition:** `Average` `value` of the per `user` event `sum`, where `lower is better`
+>
+> **Unit of measure:** `$`
+>
+> **Metric name:** `ai_cost_per_request`
+>
+> **Metric key:** `ai_cost`
+
+**Important:** Click "Create metric" and ensure it shows as "Production" environment.
+
+The cost tracking is implemented in `utils/cost_calculator.py`, which calculates actual dollar costs using the formula `(input_tokens × input_price + output_tokens × output_price) / 1M`. The system has pre-configured pricing for each model: GPT-4o at $2.50/$10 per million tokens, Claude Opus 4 at $15/$75, and Claude Sonnet at $3/$15. When a request completes, the cost is immediately calculated and sent to LaunchDarkly as a custom event, enabling direct cost-per-user analysis in your experiments.
+
+### **Step 2: Create Experiment Variations**
 
 Create the experiment variations using the bootstrap script:
 
@@ -72,93 +164,136 @@ This creates variations for the premium model experiment:
 - **Security Agent Analysis**: Uses existing baseline and enhanced variations
 - **Note**: Both experiments use existing other-paid configuration as control
 
-### **Step 2: Use Built-in AI Metrics (Per User)**
-
-LaunchDarkly AI SDK automatically tracks these user-level metrics when your system runs. No setup needed - they're created automatically:
-
-**Available Built-in Metrics:**
-- **Input tokens per user (average)** - tracks average input cost per user
-- **Output tokens per user (average)** - tracks average output cost per user
-- **Completion time p95 per user** - tracks 95th percentile response latency per user
-- **Positive feedback count per user** - tracks user satisfaction events
-- **Negative feedback count per user** - tracks user dissatisfaction events
-
-**Custom Cost Metrics:**
-This implementation also tracks **actual dollar costs per request** using a custom metric:
-- **ai_cost_per_request** - calculates real cost based on: `(input_tokens × input_price + output_tokens × output_price) / 1M`
-- Model pricing automatically configured for GPT-4o ($2.50/$10), Claude Opus 4 ($15/$75), etc.
-- Cost tracked immediately when each request completes
-- Enables direct cost-per-user analysis in experiments
-
-**Experiments will use these user-level metrics** with calculated decision criteria:
-- **Performance constraint**: Completion time p95 per user ≤ 2.0s
-- **Cost calculation per user**: Average `ai_cost_per_request` events per user
-- **Satisfaction rate per user**: Positive feedback / (positive + negative feedback)
-- **Cost-value ratio**: Satisfaction improvement % ÷ cost increase % (calculated post-experiment)
-
 ### **Step 3: Configure Security Agent Experiment**
 
-1. **Navigate to AI Configs** → **security-agent** → **Create experiment**
-2. **Experiment Setup**:
-   - **Name**: `Security Agent Analysis`
-   - **Hypothesis**: `Strict security agent will cause a loss of context and reduce user satisfaction`
-   - **Metrics**:
-     - **Primary**: Positive feedback rate per user
-     - **Secondary**: Input tokens per user, Output tokens per user, Completion time p95 per user
-   - **Audience**:
-     - **AI Config**: security-agent
-     - **Targeting rule**: If Context is in Segment Other Paid
-   - **Allocation**: 100% sample size
+![Security Agent Experiment Configuration](screenshots/security_level.png)
 
-3. **Configure Two Variations** (50% each):
-   - **Control**: Use existing baseline variation
-   - **Treatment**: Use existing enhanced variation
+Navigate to **AI Configs → security-agent → Create experiment**. You'll see a 4-step configuration flow:
 
-4. **Statistical Approach**:
-   - **Type**: Bayesian experiment
-   - **Threshold**: 95% threshold
-   - **Credible interval**: 90% credible interval
+#### **Section 1: Experiment Details**
 
-5. **Success Criteria**:
-   - ≥10% improvement in safety compliance (positive feedback rate per user)
-   - ≤5% cost increase per user (from `ai_cost_per_request` custom metric)
-   - ≤2.0s response latency (completion time p95 per user)
-   - 90% confidence threshold
+Fill in these fields:
+
+> **Experiment name:**
+> ```
+> Security Level
+> ```
+>
+> **Hypothesis:**
+> ```
+> Strict security agent will cause a loss of context and reduce user satisfaction
+> ```
+
+#### **Section 2: Select Metrics**
+
+Click the metrics dropdown and add:
+
+> **Primary metric:** `positive.feedback.rate`
+>
+> **Secondary metrics:**
+> - `p95_total_user_latency`
+> - `average_total_user_tokens`
+> - `negative.feedback.rate`
+
+#### **Section 3: Define Audience**
+
+The AI Config `security-agent` is pre-selected. Add targeting:
+
+> **Targeting rule:** Select `If Context` → `is in Segment` → `Other Paid`
+
+#### **Section 4: Confirm Allocation**
+
+Enable absolute percentage display:
+
+> **☑ Show absolute percentage**
+>
+> **100%** of `user` contexts are in this experiment
+
+Click **"Allocation split"** to configure variations:
+
+> **Basic Security** (Control): `50%` → Select variation: `baseline`
+>
+> **Strict Security** (Treatment): `50%` → Select variation: `enhanced`
+
+Review and click **"Start experiment"** to launch.
+
+#### **Success Criteria to Monitor**
+- ≥10% improvement in positive feedback rate
+- ≤5% cost increase (track via `ai_cost_per_request` metric)
+- ≤2.0s p95 latency
+- 90% statistical confidence
 
 ### **Step 4: Configure Premium Model Experiment**
 
-1. **Navigate to AI Configs** → **support-agent** → **Create experiment**
-2. **Experiment Setup**:
-   - **Name**: `Premium Model Value Analysis`
-   - **Hypothesis**: `Claude Opus 4 justifies premium cost with superior satisfaction`
-   - **Metrics**:
-     - **Primary**: Total tokens per completion (users)
-     - **Secondary**: Positive feedback rate, Negative feedback rate, user latency
-   - **Audience**:
-     - **AI Config**: support-agent
-     - **Targeting rule**: If Context is in Segment Other Paid
-   - **Allocation**: 100% sample size
+![Premium Model Value Analysis Experiment Configuration](screenshots/premium_model.png)
 
-3. **Configure Two Variations** (50% each):
-   - **Control**: Use existing other-paid variation (GPT-4o with full tools)
-   - **Treatment**: `claude-opus-treatment` (Claude Opus 4 with identical tools)
+Navigate to **AI Configs → support-agent → Create experiment**. Follow the same 4-step flow:
 
-4. **Statistical Approach**:
-   - **Type**: Bayesian experiment
-   - **Threshold**: 95% threshold
-   - **Credible interval**: 90% credible interval
+#### **Section 1: Experiment Details**
 
-5. **Success Criteria**:
-   - ≥15% satisfaction improvement by Claude Opus 4 (positive feedback rate per user)
-   - Cost-value ratio ≥ 0.6 (satisfaction gain % ÷ cost increase % per user, using `ai_cost_per_request`)
-   - 90% confidence threshold
+Fill in these fields:
+
+> **Experiment name:**
+> ```
+> Premium Model Value Analysis
+> ```
+>
+> **Hypothesis:**
+> ```
+> Claude Opus 4 justifies premium cost with superior satisfaction
+> ```
+
+#### **Section 2: Select Metrics**
+
+Click the metrics dropdown and add:
+
+> **Primary metric:** `positive.feedback.rate`
+>
+> **Secondary metrics:**
+> - `negative.feedback.rate`
+> - `p95_total_user_latency`
+> - `average_total_user_tokens`
+> - `ai_cost_per_request`
+
+#### **Section 3: Define Audience**
+
+The AI Config `support-agent` is pre-selected. Add targeting:
+
+> **Targeting rule:** Select `If Context` → `is in Segment` → `Other Paid`
+
+#### **Section 4: Confirm Allocation**
+
+Enable absolute percentage display:
+
+> **☑ Show absolute percentage**
+>
+> **100%** of `user` contexts are in this experiment
+
+Click **"Allocation split"** to configure variations:
+
+> **Other Paid** (Control): `50%` → Select variation: `other-paid`
+>
+> **Claude Opus 4 Treatment** (Treatment): `50%` → Select variation: `claude-opus-treatment`
+
+Review and click **"Start experiment"** to launch.
+
+#### **Success Criteria to Monitor**
+- ≥15% satisfaction improvement (positive feedback rate)
+- Cost-value ratio ≥ 0.6 (satisfaction % ÷ cost increase %)
+- 90% statistical confidence
 
 
 ## Generating Experiment Data
 
 ### **Step 5: Launch Both Experiments**
 
-Review your experiment settings, then click "Start experiment" for both. Once active, proceed to generate data.
+1. **Review Settings**: Verify all configurations match the templates above
+2. **Start Security Experiment**: Click "Start experiment" on Security Level
+3. **Start Model Experiment**: Click "Start experiment" on Premium Model Value Analysis
+4. **Verify Status**: Both should show "Running" in the experiments list
+5. **Check Metrics**: Navigate to Metrics tab and verify:
+   - Built-in metrics show "Leading: [experiment name]"
+   - Custom `ai_cost_per_request` metric shows both experiments connected
 
 ### **Step 6: Run Traffic Generator**
 
@@ -203,7 +338,7 @@ python tools/traffic_generator.py --queries 50 --delay 2
 **What Happens (Both Options)**:
 - **Knowledge base analysis**: Extracts 20+ topics from your documents using Claude
 - **Random query generation**: Each query picks random topic from analyzed KB
-- **Realistic feedback**: 80% positive, 20% negative (simulating real user patterns)
+- **AI-powered feedback**: Claude evaluates each response to determine if a user would give positive/negative/no feedback based on answer quality
 - **LaunchDarkly data**: Feedback and cost metrics sent to experiments for analysis
 - **Dual experiments**: Same queries feed both security agent and model experiments
 - **Cost tracking**: Real dollar costs calculated and tracked per request
