@@ -49,7 +49,7 @@ class TrafficGenerator:
         
         try:
             response = self.claude.messages.create(
-                model="claude-3-5-sonnet-20241022",
+                model="claude-3-5-sonnet-latest",
                 max_tokens=800,
                 messages=[{
                     "role": "user",
@@ -76,9 +76,25 @@ class TrafficGenerator:
                 "deployment", "configuration", "debugging"
             ]
 
-    def generate_query(self, topic, complexity):
-        """Generate a query about the topic at given complexity"""
-        prompt = f"""Generate a single question about "{topic}" at {complexity} level.
+    def generate_query(self, topic, complexity, inject_pii=False):
+        """Generate a query about the topic at given complexity, optionally with PII"""
+        if inject_pii:
+            prompt = f"""Generate a single question about "{topic}" at {complexity} level that includes realistic PII.
+Include ONE of these PII types (pick randomly):
+- Email address (e.g., john.smith@company.com)
+- Phone number (e.g., 555-123-4567)
+- Full name (e.g., John Smith, Sarah Johnson)
+- Address (e.g., 123 Main St, New York, NY)
+
+Make it sound natural, like a real user asking about their specific situation.
+Just return the question, nothing else.
+
+Complexity guide:
+- basic: Simple what/how questions
+- intermediate: Configuration or best practices
+- advanced: Complex scenarios or architecture"""
+        else:
+            prompt = f"""Generate a single question about "{topic}" at {complexity} level.
 Just return the question, nothing else.
 
 Complexity guide:
@@ -88,19 +104,27 @@ Complexity guide:
 
         try:
             response = self.claude.messages.create(
-                model="claude-3-5-sonnet-20241022",
+                model="claude-3-5-sonnet-latest",
                 max_tokens=150,
                 messages=[{"role": "user", "content": prompt}]
             )
             return response.content[0].text.strip()
         except:
             # Fallback query
-            templates = {
-                "basic": f"What is {topic}?",
-                "intermediate": f"How do I configure {topic}?",
-                "advanced": f"What's the best architecture for {topic} at scale?"
-            }
-            return templates[complexity]
+            if inject_pii:
+                pii_templates = {
+                    "basic": f"What is {topic} for my account john.smith@company.com?",
+                    "intermediate": f"How do I configure {topic} for user Sarah Johnson at 555-123-4567?",
+                    "advanced": f"What's the best {topic} architecture for our team at 123 Main St, New York?"
+                }
+                return pii_templates[complexity]
+            else:
+                templates = {
+                    "basic": f"What is {topic}?",
+                    "intermediate": f"How do I configure {topic}?",
+                    "advanced": f"What's the best architecture for {topic} at scale?"
+                }
+                return templates[complexity]
 
     def send_chat(self, query):
         """Send query to API and get response"""
@@ -154,7 +178,7 @@ Most users don't give feedback unless the answer is notably good or bad."""
 
         try:
             response = self.claude.messages.create(
-                model="claude-3-5-sonnet-20241022",
+                model="claude-3-5-sonnet-latest",
                 max_tokens=10,
                 messages=[{"role": "user", "content": prompt}],
                 timeout=2
@@ -213,13 +237,18 @@ Most users don't give feedback unless the answer is notably good or bad."""
             # Random selection
             topic = random.choice(topics)
             complexity = random.choice(complexities)
-            print(f"🔍 DEBUG: Selected topic='{topic}', complexity='{complexity}'")
 
-            print(f"\n[{i+1}/{num_queries}] {topic} ({complexity})")
+            # Inject PII approximately 1 out of every 15 times (6.67% chance)
+            inject_pii = random.random() < (1/15)
+            pii_indicator = " [PII]" if inject_pii else ""
+
+            print(f"🔍 DEBUG: Selected topic='{topic}', complexity='{complexity}', inject_pii={inject_pii}")
+
+            print(f"\n[{i+1}/{num_queries}] {topic} ({complexity}){pii_indicator}")
 
             # Generate query
             print("🔍 DEBUG: Calling generate_query...")
-            query = self.generate_query(topic, complexity)
+            query = self.generate_query(topic, complexity, inject_pii)
             print(f"✅ DEBUG: Generated query: {query[:50]}...")
             print(f"  Q: {query[:80]}...")
 

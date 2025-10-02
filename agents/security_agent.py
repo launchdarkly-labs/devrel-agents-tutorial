@@ -70,7 +70,7 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
     
     # NOTE: Instructions are fetched on each call using LaunchDarkly pattern
 
-    def call_model(state: AgentState):
+    async def call_model(state: AgentState):
         """
         LANGGRAPH NODE: PII Detection with Structured Output
 
@@ -92,17 +92,15 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
             messages = state["messages"]
 
             # Fetch config dynamically for each call
-            import asyncio
-
             # Get latest config from LaunchDarkly
             user_context = state.get("user_context", {})
             user_id = state.get("user_id", "security_user")
 
-            agent_config = asyncio.run(config_manager.get_config(
+            agent_config = await config_manager.get_config(
                 user_id=user_id,
                 config_key="security-agent",
                 user_context=user_context
-            ))
+            )
 
             if not agent_config.enabled:
                 # Return safe default if config is disabled
@@ -132,12 +130,16 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
             full_messages = [system_message] + messages
 
             # Call model with structured output
-            pii_result = structured_model.invoke(full_messages)
+            if hasattr(structured_model, "ainvoke"):
+                pii_result = await structured_model.ainvoke(full_messages)
+            else:
+                pii_result = structured_model.invoke(full_messages)
 
             # Track metrics
             config_manager.track_metrics(
                 agent_config.tracker,
-                lambda: "security_pii_detection_success"
+                lambda: "security_pii_detection_success",
+                model_name=agent_config.model.name
             )
 
             # Extract structured results
@@ -162,7 +164,8 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
             try:
                 config_manager.track_metrics(
                     tracker,
-                    lambda: (_ for _ in ()).throw(e)  # Trigger error tracking
+                    lambda: (_ for _ in ()).throw(e),  # Trigger error tracking
+                    model_name=agent_config.model.name if 'agent_config' in locals() else None
                 )
             except:
                 pass

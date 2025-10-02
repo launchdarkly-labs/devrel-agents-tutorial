@@ -80,60 +80,38 @@ async def submit_feedback(feedback: FeedbackRequest):
     try:
         log_student(f"FEEDBACK: {feedback.feedback} from {feedback.source}")
         
-        # Initialize AI metrics tracker with real LaunchDarkly tracker
-        tracker = None
+        # Get LaunchDarkly tracker and submit feedback
         try:
-            from ai_metrics.metrics_tracker import AIMetricsTracker
             # Get a real LaunchDarkly AI config to get the tracker
             support_config = await agent_service.config_manager.get_config(feedback.user_id, "support-agent")
-            tracker = AIMetricsTracker(support_config.tracker)
-            log_debug(" AI METRICS: Feedback tracker initialized with LaunchDarkly")
-        except Exception as e:
-            log_debug(f"AI METRICS: LaunchDarkly initialization failed: {e}")
-            try:
-                # Fallback to no tracker
-                from ai_metrics.metrics_tracker import AIMetricsTracker
-                tracker = AIMetricsTracker()
-                log_debug("  AI METRICS: Using fallback tracker")
-            except Exception as fallback_error:
-                log_debug(f"AI METRICS: Tracker initialization failed: {fallback_error}")
-        
-        # Submit feedback to LaunchDarkly AI metrics
-        if tracker:
-            try:
-                # Convert feedback format
-                thumbs_up = feedback.feedback == "positive"
-                
-                await tracker.submit_feedback_async(
-                    user_id=feedback.user_id,
-                    request_id=feedback.message_id,
-                    user_query=feedback.user_query,
-                    ai_response=feedback.ai_response,
-                    variation_key=feedback.variation_key,
-                    model=feedback.model,
-                    tool_calls=feedback.tool_calls,
-                    thumbs_up=thumbs_up,
-                    source=feedback.source
-                )
-                
+
+            # Convert feedback format
+            thumbs_up = feedback.feedback == "positive"
+
+            # Track feedback using config_manager
+            success = agent_service.config_manager.track_feedback(
+                support_config.tracker,
+                thumbs_up=thumbs_up
+            )
+
+            if success:
                 log_debug(f"FEEDBACK SUBMITTED: {feedback.feedback} for {feedback.variation_key}")
                 return FeedbackResponse(
                     success=True,
                     message=f"Feedback submitted successfully"
                 )
-                
-            except Exception as e:
-                log_student(f"FEEDBACK ERROR: {e}")
+            else:
+                log_debug(f"FEEDBACK: Failed to submit feedback to LaunchDarkly")
                 return FeedbackResponse(
                     success=False,
-                    message=f"Failed to submit feedback: {e}"
+                    message="Failed to submit feedback to metrics tracking"
                 )
-        else:
-            # No tracker available - just log feedback
-            log_debug(f"FEEDBACK LOGGED: {feedback.feedback} (no metrics tracking)")
+
+        except Exception as e:
+            log_student(f"FEEDBACK ERROR: {e}")
             return FeedbackResponse(
-                success=True,
-                message="Feedback logged (metrics tracking unavailable)"
+                success=False,
+                message=f"Failed to submit feedback: {e}"
             )
         
     except Exception as e:
