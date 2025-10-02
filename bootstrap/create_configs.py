@@ -200,6 +200,7 @@ class MultiAgentBootstrap:
         model_config_key_map = {
             "claude-3-5-sonnet-20241022": "Anthropic.claude-3-7-sonnet-latest",
             "claude-3-5-haiku-20241022": "Anthropic.claude-3-5-haiku-20241022",
+            "claude-opus-4-20250514": "Anthropic.claude-opus-4-20250514",
             "gpt-4o": "OpenAI.gpt-4o",
             "gpt-4o-mini": "OpenAI.gpt-4o-mini-2024-07-18",
             "mistral-small-latest": "Mistral.mistral-small-latest"
@@ -270,6 +271,7 @@ class MultiAgentBootstrap:
         model_config_key_map = {
             "claude-3-5-sonnet-20241022": "Anthropic.claude-3-7-sonnet-latest",
             "claude-3-5-haiku-20241022": "Anthropic.claude-3-5-haiku-20241022",
+            "claude-opus-4-20250514": "Anthropic.claude-opus-4-20250514",
             "gpt-4o": "OpenAI.gpt-4o",
             "gpt-4o-mini": "OpenAI.gpt-4o-mini-2024-07-18",
             "mistral-small-latest": "Mistral.mistral-small-latest"

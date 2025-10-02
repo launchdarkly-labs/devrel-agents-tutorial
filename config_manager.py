@@ -133,6 +133,10 @@ class FixedConfigManager:
                         total_input_tokens += usage_data.get("input_tokens", 0)
                         total_output_tokens += usage_data.get("output_tokens", 0)
                         total_tokens += usage_data.get("total_tokens", 0)
+            else:
+                # Handle structured output calls (Pydantic models from with_structured_output)
+                # These don't return dict with messages, so token usage isn't accessible
+                log_student(f"⚠️  STRUCTURED OUTPUT: Cannot extract tokens from {type(result).__name__} - use raw LLM call for cost tracking")
 
             # Track token usage if found
             if total_tokens > 0:
@@ -145,7 +149,11 @@ class FixedConfigManager:
                 log_student(f"TOKEN TRACKING: {total_tokens} tokens ({total_input_tokens} in, {total_output_tokens} out)")
 
                 # Calculate and track cost using the token counts
-                if model_name and user_id:
+                if not model_name:
+                    log_student(f"⚠️  COST SKIPPED: model_name is missing (model_name={model_name})")
+                elif not user_id:
+                    log_student(f"⚠️  COST SKIPPED: user_id is missing (user_id={user_id})")
+                elif model_name and user_id:
                     cost = calculate_cost(model_name, total_input_tokens, total_output_tokens)
                     if cost > 0:
                         # Build context for LaunchDarkly
@@ -155,9 +163,9 @@ class FixedConfigManager:
                                 context_builder.set(key, value)
                         ld_context = context_builder.build()
 
-                        # Track cost as custom event with metric value
+                        # Track cost as custom event (LaunchDarkly should auto-attribute based on context)
                         self.ld_client.track("ai_cost_per_request", ld_context, None, cost)
-                        log_student(f"COST TRACKING: ${cost:.6f} for {model_name} ({total_tokens} tokens)")
+                        log_student(f"COST TRACKING: ${cost:.6f} for {model_name} (user={user_id})")
                         self.ld_client.flush()
 
             self.ld_client.flush()
@@ -237,7 +245,11 @@ class FixedConfigManager:
                 log_student(f"TOKEN TRACKING (async): {total_tokens} tokens ({total_input_tokens} in, {total_output_tokens} out)")
 
                 # Calculate and track cost using the token counts
-                if model_name and user_id:
+                if not model_name:
+                    log_student(f"⚠️  COST SKIPPED: model_name is missing (model_name={model_name})")
+                elif not user_id:
+                    log_student(f"⚠️  COST SKIPPED: user_id is missing (user_id={user_id})")
+                elif model_name and user_id:
                     cost = calculate_cost(model_name, total_input_tokens, total_output_tokens)
                     if cost > 0:
                         context_builder = Context.builder(user_id).kind('user')
@@ -246,9 +258,12 @@ class FixedConfigManager:
                                 context_builder.set(key, value)
                         ld_context = context_builder.build()
 
+                        # Track cost as custom event (LaunchDarkly should auto-attribute based on context)
                         self.ld_client.track("ai_cost_per_request", ld_context, None, cost)
-                        log_student(f"COST TRACKING (async): ${cost:.6f} for {model_name}")
+                        log_student(f"COST TRACKING (async): ${cost:.6f} for {model_name} (user={user_id})")
                         self.ld_client.flush()
+                    else:
+                        log_student(f"⚠️  COST SKIPPED: cost is 0 (model={model_name}, tokens={total_tokens})")
 
             return result
         except Exception:

@@ -40,7 +40,7 @@ You'll need:
 
 **Success Criteria** (measured per user):
 1. ≥10% improvement in safety compliance (positive feedback rate per user)
-2. ≤5% cost increase per user (calculated from token usage × cost per token)
+2. ≤5% cost increase per user (from `ai_cost_per_request` custom metric tracking actual $ cost)
 3. ≤2.0s response latency (completion time p95 per user)
 4. 90% confidence threshold
 
@@ -54,7 +54,7 @@ You'll need:
 
 **Success Criteria** (measured per user):
 - ≥15% satisfaction improvement by Claude Opus 4 (positive feedback rate per user)
-- Cost-value ratio ≥ 0.6 (satisfaction gain % ÷ cost increase % per user)
+- Cost-value ratio ≥ 0.6 (satisfaction gain % ÷ cost increase % per user, using real $ from `ai_cost_per_request`)
 - 90% confidence threshold
 
 ## Setting Up Both Experiments
@@ -83,9 +83,16 @@ LaunchDarkly AI SDK automatically tracks these user-level metrics when your syst
 - **Positive feedback count per user** - tracks user satisfaction events
 - **Negative feedback count per user** - tracks user dissatisfaction events
 
+**Custom Cost Metrics:**
+This implementation also tracks **actual dollar costs per request** using a custom metric:
+- **ai_cost_per_request** - calculates real cost based on: `(input_tokens × input_price + output_tokens × output_price) / 1M`
+- Model pricing automatically configured for GPT-4o ($2.50/$10), Claude Opus 4 ($15/$75), etc.
+- Cost tracked immediately when each request completes
+- Enables direct cost-per-user analysis in experiments
+
 **Experiments will use these user-level metrics** with calculated decision criteria:
 - **Performance constraint**: Completion time p95 per user ≤ 2.0s
-- **Cost calculation per user**: Total cost = (input tokens + output tokens) × model cost per token
+- **Cost calculation per user**: Average `ai_cost_per_request` events per user
 - **Satisfaction rate per user**: Positive feedback / (positive + negative feedback)
 - **Cost-value ratio**: Satisfaction improvement % ÷ cost increase % (calculated post-experiment)
 
@@ -114,7 +121,7 @@ LaunchDarkly AI SDK automatically tracks these user-level metrics when your syst
 
 5. **Success Criteria**:
    - ≥10% improvement in safety compliance (positive feedback rate per user)
-   - ≤5% cost increase per user (calculated from token usage × cost per token)
+   - ≤5% cost increase per user (from `ai_cost_per_request` custom metric)
    - ≤2.0s response latency (completion time p95 per user)
    - 90% confidence threshold
 
@@ -143,7 +150,7 @@ LaunchDarkly AI SDK automatically tracks these user-level metrics when your syst
 
 5. **Success Criteria**:
    - ≥15% satisfaction improvement by Claude Opus 4 (positive feedback rate per user)
-   - Cost-value ratio ≥ 0.6 (satisfaction gain % ÷ cost increase % per user)
+   - Cost-value ratio ≥ 0.6 (satisfaction gain % ÷ cost increase % per user, using `ai_cost_per_request`)
    - 90% confidence threshold
 
 
@@ -155,38 +162,80 @@ Review your experiment settings, then click "Start experiment" for both. Once ac
 
 ### **Step 6: Run Traffic Generator**
 
-Start your backend and generate realistic experiment data:
+Start your backend and generate realistic experiment data. Choose between sequential or concurrent traffic generation:
+
+#### **Option A: Concurrent Traffic Generator (Recommended for large datasets)**
+
+For faster experiment data generation with parallel requests:
 
 ```bash
 # Start backend API
 uv run uvicorn api.main:app --reload --port 8000
 
-# Generate experiment data (separate terminal)
-python tools/traffic_generator.py --queries 300 --delay 2
+# Generate experiment data with 10 concurrent requests (separate terminal)
+./run_experiment_concurrent.sh
 ```
 
-**What Happens**:
-- **Knowledge base analysis**: Extracts 10+ topics from your documents
-- **Random query generation**: Each query picks random topic + complexity
-- **Realistic feedback**: Claude Haiku judges responses as thumbs_up/thumbs_down/no_feedback
-- **LaunchDarkly data**: Feedback sent to experiments for analysis
-- **Dual experiments**: Same queries feed both security agent and model experiments
+**Configuration**:
+- **200 queries** by default (edit script to adjust)
+- **10 concurrent requests** running in parallel
+- **2000-second timeout** (33 minutes) per request to handle MCP tool rate limits
+- **~40-60 minutes** total runtime (vs 66+ hours sequential for 200 queries)
+- **Logs saved** to `logs/concurrent_experiment_TIMESTAMP.log`
 
-**Progress Example**:
+Alternatively, run directly with custom settings:
+```bash
+uv run python -u tools/concurrent_traffic_generator.py --queries 200 --concurrency 10
+```
+
+#### **Option B: Sequential Traffic Generator (Simple, one-at-a-time)**
+
+For smaller test runs or debugging:
+
+```bash
+# Start backend API
+uv run uvicorn api.main:app --reload --port 8000
+
+# Generate experiment data sequentially (separate terminal)
+python tools/traffic_generator.py --queries 50 --delay 2
+```
+
+**What Happens (Both Options)**:
+- **Knowledge base analysis**: Extracts 20+ topics from your documents using Claude
+- **Random query generation**: Each query picks random topic from analyzed KB
+- **Realistic feedback**: 80% positive, 20% negative (simulating real user patterns)
+- **LaunchDarkly data**: Feedback and cost metrics sent to experiments for analysis
+- **Dual experiments**: Same queries feed both security agent and model experiments
+- **Cost tracking**: Real dollar costs calculated and tracked per request
+
+**Progress Example (Concurrent)**:
 ```
 📚 Analyzing knowledge base...
-🔍 Found 12 topics for query generation
+✅ Generated 23 topics
 
-📝 Query 1/300 | Topic: feature flags (intermediate)
-🎯 Feedback: 👍 sent to LaunchDarkly
+⚡ Sending 200 requests with 10 concurrent workers...
 
-🏁 TRAFFIC GENERATION COMPLETE
-📊 Total queries processed: 300
-📈 Data sent to LaunchDarkly experiments
-🔍 Check experiment results in LaunchDarkly dashboard
+✅ [1/200] Success (23.4s) - other_paid: What is reinforcement learning?...
+✅ [2/200] Success (45.2s) - other_paid: How does Q-learning work?...
+⏱️  [15/200] Timeout (>2000s) - other_paid: Complex research query...
+✅ [200/200] Success (387.1s) - eu_paid: Explain temporal difference...
+
+======================================================================
+✅ COMPLETE
+======================================================================
+Total time: 45.3 minutes (2718s)
+Successful: 195/200 (97.5%)
+Failed: 5/200 (2.5%)
+Average: 13.6s per query (with concurrency)
 ```
 
-**Monitor Results**: Refresh your LaunchDarkly experiment "Results" tabs to see data flowing in.
+**Performance Notes**:
+- Most queries complete in 10-60 seconds
+- Queries using `semantic_scholar` MCP tool may take 5-20 minutes due to API rate limits
+- Concurrent execution handles slow requests gracefully by continuing with others
+- Failed/timeout requests (<5% typically) don't affect experiment validity
+
+**Monitor Results**: Refresh your LaunchDarkly experiment "Results" tabs to see data flowing in. Cost metrics appear as custom events alongside feedback and token metrics.
 
 ## Evaluating Your Experiment Results
 
@@ -197,7 +246,7 @@ Check if enhanced security beats baseline control using per-user metrics:
 - ≥10% improvement in safety compliance (positive feedback rate per user)
 - ≥90% statistical confidence
 - Completion time p95 per user ≤2.0s
-- Cost increase per user ≤5% (calculated from token usage × cost per token)
+- Cost increase per user ≤5% (from `ai_cost_per_request` metric average)
 
 **Step 2: Make Security Decision**
 - If enhanced security qualifies: Deploy enhanced security to all users
@@ -225,10 +274,15 @@ Check if Claude Opus 4 beats GPT-4o control using per-user metrics:
 - **Control**: GPT-4o baseline performance per user
 - **Treatment**: Claude Opus 4 shows 20% satisfaction improvement per user, 95% confidence, cost-value ratio 0.8 → **Qualifies**
 
-**Cost Calculation**:
-- GPT-4o cost per user: $0.15 (average tokens × $15/$1M)
-- Claude Opus 4 cost per user: $0.45 (average tokens × $75/$1M)
+**Cost Calculation** (using `ai_cost_per_request` metric):
+- GPT-4o cost per user: $0.15 average (from tracked `ai_cost_per_request` events)
+- Claude Opus 4 cost per user: $0.45 average (from tracked `ai_cost_per_request` events)
 - Cost increase: 200%, Satisfaction gain: 20%, Ratio: 20%/200% = 0.1 → **Failed** (needs ≥0.6)
+
+**Note**: The `ai_cost_per_request` custom metric automatically calculates real dollar costs using:
+- GPT-4o: $2.50 input / $10 output per 1M tokens
+- Claude Opus 4: $15 input / $75 output per 1M tokens
+- Claude Sonnet 3.5: $3 input / $15 output per 1M tokens
 
 **Decision**: Keep GPT-4o - Claude Opus 4 doesn't justify cost per user.
 
@@ -243,6 +297,25 @@ You've built a **data-driven optimization engine** with:
 **Typical Results**:
 - **Advanced tools**: 15-30% satisfaction improvement, most pronounced on complex queries
 - **Premium models**: 15-25% satisfaction improvement when cost-value ratio ≥ 0.6
+
+## Troubleshooting
+
+### **Long Response Times (>20 minutes)**
+
+If you see requests taking exceptionally long:
+- **Root cause**: The `semantic_scholar` MCP tool can hit API rate limits, causing 30-second retry delays
+- **Impact**: Queries using this tool may take 5-20 minutes to complete
+- **Solution**: The 2000-second timeout handles this gracefully
+- **Alternative**: Remove `semantic_scholar` from tool configurations for faster responses (60-120 seconds typical)
+- **Verification**: Check logs for `HTTP/1.1 429` errors indicating rate limiting
+
+### **Cost Metrics Not Appearing**
+
+If `ai_cost_per_request` events aren't showing in LaunchDarkly:
+- **Verify model pricing**: Check `utils/cost_calculator.py` has pricing for your models
+- **Check completion**: Cost only tracked when requests complete successfully (not timeout/error)
+- **LaunchDarkly flush**: Cost events flush immediately after each request completion
+- **Debug logging**: Look for `💰 COST CALCULATED:` and `COST TRACKING (async):` in API logs
 
 ## Beyond This Tutorial
 

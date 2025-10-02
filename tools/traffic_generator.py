@@ -141,7 +141,7 @@ Complexity guide:
                     "user_id": user_id,
                     "user_context": full_context
                 },
-                timeout=30
+                timeout=2000
             )
             
             if response.status_code == 200:
@@ -212,7 +212,8 @@ Most users don't give feedback unless the answer is notably good or bad."""
                     "variation_key": chat_data.get("variation_key", "unknown"),
                     "model": chat_data.get("model", "unknown"),
                     "tool_calls": chat_data.get("tool_calls", []),  # Add required tool_calls field
-                    "source": "simulated"
+                    "source": "simulated",
+                    "user_context": self.user_context  # Add context for LaunchDarkly targeting
                 },
                 timeout=10
             )
