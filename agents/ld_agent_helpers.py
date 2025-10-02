@@ -42,40 +42,6 @@ def map_provider_to_langchain(provider_name):
 
 
 
-def track_langgraph_metrics(tracker, func):
-    """
-    Track LangGraph agent operations with LaunchDarkly metrics.
-    Based on the pattern from your examples.
-    """
-    try:
-        result = tracker.track_duration_of(func)
-        tracker.track_success()
-
-        # For LangGraph agents, usage_metadata is included on all messages that used AI
-        total_input_tokens = 0
-        total_output_tokens = 0
-        total_tokens = 0
-
-        if "messages" in result:
-            for message in result['messages']:
-                # Check for usage_metadata directly on the message
-                if hasattr(message, "usage_metadata") and message.usage_metadata:
-                    usage_data = message.usage_metadata
-                    total_input_tokens += usage_data.get("input_tokens", 0)
-                    total_output_tokens += usage_data.get("output_tokens", 0)
-                    total_tokens += usage_data.get("total_tokens", 0)
-
-        if total_tokens > 0:
-            token_usage = TokenUsage(
-                input=total_input_tokens,
-                output=total_output_tokens,
-                total=total_tokens
-            )
-            tracker.track_tokens(token_usage)
-    except Exception:
-        tracker.track_error()
-        raise
-    return result
 
 
 async def create_agent_with_fresh_config(
@@ -157,9 +123,9 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
         def __init__(self):
             self.max_tool_calls = 15  # Default value
 
-        def invoke(self, request_data: dict) -> dict:
+        async def ainvoke(self, request_data: dict) -> dict:
             """
-            Main agent invocation - fetches config and executes
+            Async invocation - fetches config and executes without blocking event loop
             """
             try:
                 # Extract request parameters
@@ -169,13 +135,13 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                 messages = request_data.get("messages", [])
 
                 # Create agent with config
-                agent, tracker, disabled = asyncio.run(create_agent_with_fresh_config(
+                agent, tracker, disabled = await create_agent_with_fresh_config(
                     config_manager=config_manager,
                     config_key=config_key,
                     user_id=user_id,
                     user_context=user_context,
                     tools=tools
-                ))
+                )
 
                 if disabled:
                     log_student(f"{config_key}: AI Config is disabled")
@@ -200,11 +166,42 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                 }
 
                 # Get max_tool_calls from LaunchDarkly config by fetching it fresh
-                agent_config = asyncio.run(config_manager.get_config(
+                agent_config = await config_manager.get_config(
                     user_id=user_id,
                     config_key=config_key,
                     user_context=user_context
-                ))
+                )
+
+                # Debug what we got back from LaunchDarkly
+                if not agent_config:
+                    log_student(f"ERROR: get_config returned None for {config_key}")
+                    return {
+                        "user_input": user_input,
+                        "response": f"Configuration error: {config_key} returned None",
+                        "tool_calls": [],
+                        "tool_details": [],
+                        "messages": []
+                    }
+
+                if not hasattr(agent_config, 'model'):
+                    log_student(f"ERROR: agent_config missing 'model' attribute. Type: {type(agent_config)}, attrs: {dir(agent_config) if agent_config else 'None'}")
+                    return {
+                        "user_input": user_input,
+                        "response": f"Configuration error: missing model in {config_key}",
+                        "tool_calls": [],
+                        "tool_details": [],
+                        "messages": []
+                    }
+
+                if not hasattr(agent_config.model, 'name') or not agent_config.model.name:
+                    log_student(f"ERROR: agent_config.model missing 'name'. Model: {agent_config.model}, type: {type(agent_config.model)}")
+                    return {
+                        "user_input": user_input,
+                        "response": f"Configuration error: missing model name in {config_key}",
+                        "tool_calls": [],
+                        "tool_details": [],
+                        "messages": []
+                    }
 
                 max_tool_calls = 5  # Default
 
@@ -262,6 +259,28 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
 
                 # Create agent with limited tools and natural recursion
                 from langchain.chat_models import init_chat_model
+
+                # Debug model config
+                if not hasattr(agent_config, 'model') or not hasattr(agent_config.model, 'name'):
+                    log_student(f"ERROR: agent_config missing model or model.name: {agent_config}")
+                    return {
+                        "user_input": user_input,
+                        "response": "Configuration error: model not properly configured",
+                        "tool_calls": [],
+                        "tool_details": [],
+                        "messages": []
+                    }
+
+                if not hasattr(agent_config, 'provider') or not hasattr(agent_config.provider, 'name'):
+                    log_student(f"ERROR: agent_config missing provider or provider.name: {agent_config}")
+                    return {
+                        "user_input": user_input,
+                        "response": "Configuration error: provider not properly configured",
+                        "tool_calls": [],
+                        "tool_details": [],
+                        "messages": []
+                    }
+
                 langchain_provider = map_provider_to_langchain(agent_config.provider.name)
                 llm = init_chat_model(
                     model=agent_config.model.name,
@@ -276,11 +295,29 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
 
                 log_student(f"DEBUG: Executing agent with LaunchDarkly max_tool_calls={max_tool_calls}, tools={len(tools)}")
 
+                # Get the current message count before invoking
+                prev_message_count = len(agent_messages)
+
                 # Execute agent with natural recursion limits
-                response = track_langgraph_metrics(
-                    tracker,
-                    lambda: agent.invoke(initial_state)
-                )
+                # Prefer async invoke if available
+                if hasattr(agent, "ainvoke"):
+                    response = await config_manager.track_metrics_async(
+                        tracker,
+                        lambda: agent.ainvoke(initial_state),
+                        model_name=agent_config.model.name,
+                        user_id=user_id,
+                        user_context=user_context,
+                        prev_message_count=prev_message_count
+                    )
+                else:
+                    response = config_manager.track_metrics(
+                        tracker,
+                        lambda: agent.invoke(initial_state),
+                        model_name=agent_config.model.name,
+                        user_id=user_id,
+                        user_context=user_context,
+                        prev_message_count=prev_message_count
+                    )
 
                 # Update the response with our accurate tool count for LaunchDarkly metrics
                 actual_tool_count = tool_counter["calls"]
@@ -339,6 +376,32 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                 log_student(f"Error in {config_key} agent: {e}")
                 return {
                     "user_input": user_input,
+                    "response": f"I apologize, but I encountered an error: {e}",
+                    "tool_calls": [],
+                    "tool_details": [],
+                    "messages": []
+                }
+
+        def invoke(self, request_data: dict) -> dict:
+            """
+            Synchronous wrapper that delegates to async path without using asyncio.run inside a running loop.
+            """
+            try:
+                import asyncio as _asyncio
+                try:
+                    loop = _asyncio.get_running_loop()
+                except RuntimeError:
+                    loop = None
+
+                if loop and loop.is_running():
+                    # Running inside an event loop; create a task and wait
+                    return _asyncio.run(self.ainvoke(request_data))  # Fallback for environments without loop control
+                else:
+                    return _asyncio.run(self.ainvoke(request_data))
+            except Exception as e:
+                log_student(f"SYNC INVOKE ERROR in {config_key}: {e}")
+                return {
+                    "user_input": request_data.get("user_input", ""),
                     "response": f"I apologize, but I encountered an error: {e}",
                     "tool_calls": [],
                     "tool_details": [],

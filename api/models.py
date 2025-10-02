@@ -40,6 +40,7 @@ class FeedbackRequest(BaseModel):
     model: str
     tool_calls: List[str]
     source: str  # "real_user" or "simulated"
+    user_context: Optional[Dict] = None  # Geographic and plan attributes for LaunchDarkly targeting
     
 class FeedbackResponse(BaseModel):
     success: bool

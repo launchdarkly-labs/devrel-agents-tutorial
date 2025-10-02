@@ -140,7 +140,8 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             # Track PII pre-screening start
             config_manager.track_metrics(
                 supervisor_config.tracker,
-                lambda: "supervisor_pii_prescreen_start"
+                lambda: "supervisor_pii_prescreen_start",
+                model_name=supervisor_config.model.name
             )
 
             # Create PII pre-screening model with structured output
@@ -166,7 +167,8 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             # Track successful pre-screening
             config_manager.track_metrics(
                 supervisor_config.tracker,
-                lambda: f"supervisor_pii_prescreen_success_{screening_result.recommended_route}"
+                lambda: f"supervisor_pii_prescreen_success_{screening_result.recommended_route}",
+                model_name=supervisor_config.model.name
             )
 
             # Log the intelligent decision
@@ -188,7 +190,8 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             # Fallback to security agent for safety
             config_manager.track_metrics(
                 supervisor_config.tracker,
-                lambda: (_ for _ in ()).throw(e)
+                lambda: (_ for _ in ()).throw(e),
+                model_name=supervisor_config.model.name if 'supervisor_config' in locals() else None
             )
 
             log_student(f"PII PRE-SCREENING ERROR: Defaulting to security agent for safety")
@@ -226,7 +229,8 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             # Track supervisor decision-making process
             config_manager.track_metrics(
                 supervisor_config.tracker,
-                lambda: "supervisor_decision_start"
+                lambda: "supervisor_decision_start",
+                model_name=supervisor_config.model.name
             )
 
             # Enhanced routing logic with intelligent pre-screening
@@ -248,7 +252,8 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             # Track successful supervisor decision
             config_manager.track_metrics(
                 supervisor_config.tracker,
-                lambda: f"supervisor_decision_success_{next_agent}"
+                lambda: f"supervisor_decision_success_{next_agent}",
+                model_name=supervisor_config.model.name
             )
 
             return {"current_agent": next_agent}
@@ -263,7 +268,7 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
 
             # Fallback to security agent for safety
             return {"current_agent": "security_agent"}
-    def security_node(state: SupervisorState):
+    async def security_node(state: SupervisorState):
         """
         LANGGRAPH NODE: Security Agent Orchestration
 
@@ -290,7 +295,8 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             # Track supervisor orchestration start for security agent
             config_manager.track_metrics(
                 supervisor_config.tracker,
-                lambda: "supervisor_orchestrating_security_start"
+                lambda: "supervisor_orchestrating_security_start",
+                model_name=supervisor_config.model.name
             )
             
             # Prepare security agent input
@@ -304,12 +310,16 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             }
             
             # Execute security agent
-            result = security_agent.invoke(security_input)
+            if hasattr(security_agent, "ainvoke"):
+                result = await security_agent.ainvoke(security_input)
+            else:
+                result = security_agent.invoke(security_input)
             
             # Track successful supervisor orchestration for security agent
             config_manager.track_metrics(
                 supervisor_config.tracker,
-                lambda: "supervisor_orchestrating_security_success"
+                lambda: "supervisor_orchestrating_security_success",
+                model_name=supervisor_config.model.name
             )
             
             # After security processing, route to support with sanitized data
@@ -357,7 +367,7 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             )
             raise
     
-    def support_node(state: SupervisorState):
+    async def support_node(state: SupervisorState):
         """
         LANGGRAPH NODE: Support Agent Orchestration
 
@@ -384,7 +394,8 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             # Track supervisor orchestration start for support agent
             config_manager.track_metrics(
                 supervisor_config.tracker,
-                lambda: "supervisor_orchestrating_support_start"
+                lambda: "supervisor_orchestrating_support_start",
+                model_name=supervisor_config.model.name
             )
             
             # Use processed (potentially redacted) text if available
@@ -443,13 +454,17 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             }
             
             # Execute support agent
-            result = support_agent.invoke(support_input)
+            if hasattr(support_agent, "ainvoke"):
+                result = await support_agent.ainvoke(support_input)
+            else:
+                result = support_agent.invoke(support_input)
             
             # Track successful supervisor orchestration for support agent
             tool_calls = result.get("tool_calls", [])
             config_manager.track_metrics(
                 supervisor_config.tracker,
-                lambda: f"supervisor_orchestrating_support_success_tools_{len(tool_calls)}"
+                lambda: f"supervisor_orchestrating_support_success_tools_{len(tool_calls)}",
+                model_name=supervisor_config.model.name
             )
             
             support_response = result["response"]
@@ -511,7 +526,8 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             support_tool_calls = state.get("support_tool_calls", [])
             config_manager.track_metrics(
                 supervisor_config.tracker,
-                lambda: f"supervisor_workflow_complete_tools_{len(support_tool_calls)}"
+                lambda: f"supervisor_workflow_complete_tools_{len(support_tool_calls)}",
+                model_name=supervisor_config.model.name
             )
             
             support_response = state.get("support_response", "")
