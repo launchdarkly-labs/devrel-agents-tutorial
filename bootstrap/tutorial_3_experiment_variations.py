@@ -2,12 +2,12 @@
 """
 Bootstrap script for Tutorial 3 Experiment Variations
 
-Creates the 4 experiment variations needed for tutorial-3 A/B testing:
-- Tool Implementation ROI: Which tool configuration delivers the best satisfaction while maintaining acceptable cost and latency trade-offs?
-- Model Efficiency Analysis: Does Claude Opus 4 deliver superior user satisfaction compared to GPT-4o for premium users?
+Creates the experiment variation needed for tutorial-3 A/B testing:
+- Premium Model Value Analysis: Does Claude Opus 4 deliver superior user satisfaction compared to GPT-4o for premium users?
 
 This script is separate from the tutorial-2 bootstrap and only handles
 experiment variations, not the base AI Configs (which should already exist).
+Security agent variations use existing configurations from tutorial-2.
 """
 
 import os
@@ -37,49 +37,37 @@ class Tutorial3VariationBootstrap:
             "LD-API-Version": "beta"
         }
 
-    def create_tool_implementation_variations(self) -> bool:
-        """Create the 4 variations for tool implementation ROI experiment"""
+    def verify_security_agent_variations(self) -> bool:
+        """Verify that existing security agent variations are available for experiments"""
 
-        variations = [
-            {
-                "key": "control-basic",
-                "name": "Control - Basic Search",
-                "instructions": "You are a helpful assistant that can search documentation and research papers. When search results are available, prioritize information from those results over your general knowledge to provide the most accurate and up-to-date responses.",
-                "model": {
-                    "name": "claude-3-5-sonnet-20241022",
-                    "provider": "anthropic"
-                },
-                "tools": ["search_v1"],
-                "customParameters": {}
-            },
-            {
-                "key": "treatment-a-advanced",
-                "name": "Treatment A - Advanced Internal",
-                "instructions": "You are a helpful assistant that can search documentation and research papers. When search results are available, prioritize information from those results over your general knowledge to provide the most accurate and up-to-date responses. Use available tools to search the knowledge base accurately and comprehensively.",
-                "model": {
-                    "name": "claude-3-5-sonnet-20241022",
-                    "provider": "anthropic"
-                },
-                "tools": ["search_v2", "reranking"],
-                "customParameters": {}
-            },
-            {
-                "key": "treatment-c-external",
-                "name": "Treatment C - External Only",
-                "instructions": "You are a helpful assistant that can search external research databases. Use available tools to search academic databases to answer questions accurately and comprehensively with the latest research.",
-                "model": {
-                    "name": "claude-3-5-sonnet-20241022",
-                    "provider": "anthropic"
-                },
-                "tools": ["arxiv_search", "semantic_scholar"],
-                "customParameters": {"max_tool_calls": 8}
-            }
-        ]
+        print("\n🔍 Verifying security agent variations...")
 
-        return self._create_variations("support-agent", variations)
+        # Check if security-agent AI Config exists with required variations
+        url = f"{self.base_url}/projects/{self.project_key}/ai-configs/security-agent/variations"
+        response = requests.get(url, headers=self.headers)
 
-    def create_model_efficiency_variations(self) -> bool:
-        """Create the 1 premium model variation for model efficiency experiment"""
+        if response.status_code != 200:
+            print(f"❌ Error: security-agent variations not found (status: {response.status_code})")
+            print(f"   Response: {response.text}")
+            print("   Please complete tutorial-2 first to create the base AI Configs")
+            return False
+
+        variations = response.json().get("items", [])
+        variation_keys = [var["key"] for var in variations]
+        required_variations = ["baseline", "enhanced"]
+
+        missing_variations = [var for var in required_variations if var not in variation_keys]
+
+        if missing_variations:
+            print(f"❌ Error: Missing required security agent variations: {missing_variations}")
+            print("   Please ensure security-agent has baseline and enhanced variations")
+            return False
+
+        print("  ✅ Security agent variations exist (baseline, enhanced)")
+        return True
+
+    def create_premium_model_variations(self) -> bool:
+        """Create the 1 premium model variation for premium model experiment"""
 
         variations = [
             {
@@ -188,14 +176,14 @@ class Tutorial3VariationBootstrap:
 
         print("\n📋 Creating experiment variations...")
 
-        # Create tool implementation variations
-        if not self.create_tool_implementation_variations():
-            print("❌ Failed to create tool implementation variations")
+        # Verify security agent variations exist
+        if not self.verify_security_agent_variations():
+            print("❌ Security agent variations not available")
             sys.exit(1)
 
-        # Create model efficiency variations
-        if not self.create_model_efficiency_variations():
-            print("❌ Failed to create model efficiency variations")
+        # Create premium model variations
+        if not self.create_premium_model_variations():
+            print("❌ Failed to create premium model variations")
             sys.exit(1)
 
         print("\n" + "=" * 50)
@@ -205,9 +193,9 @@ class Tutorial3VariationBootstrap:
         print("2. Create experiments using these variations")
         print("3. Follow tutorial-3 for metrics and experiment setup")
         print("\nCreated variations:")
-        print("  Tool Implementation: control-basic, treatment-a-advanced, treatment-c-external")
-        print("  Model Efficiency: claude-opus-treatment")
-        print("  Note: Remaining variations use existing other-paid configuration")
+        print("  Premium Model: claude-opus-treatment")
+        print("  Security Agent: Uses existing baseline and enhanced variations")
+        print("  Note: Both experiments use existing other-paid configuration as control")
 
 if __name__ == "__main__":
     bootstrap = Tutorial3VariationBootstrap()
