@@ -7,14 +7,14 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Load sample users for LaunchDarkly targeting
-try:
-    with open('data/fake_users.json', 'r') as f:
-        sample_users = json.load(f)['users']
-        print(f" UI: Loaded {len(sample_users)} sample users from fake_users.json")
-except Exception as e:
-    print(f" UI: Failed to load fake_users.json: {e}")
-    sample_users = []
+# Sample users for LaunchDarkly targeting (hardcoded)
+sample_users = [
+    {"id": "user_other_free_001", "country": "US", "region": "other", "plan": "free"},
+    {"id": "user_other_paid_001", "country": "US", "region": "other", "plan": "paid"},
+    {"id": "user_eu_free_001", "country": "FR", "region": "eu", "plan": "free"},
+    {"id": "user_eu_paid_001", "country": "DE", "region": "eu", "plan": "paid"},
+]
+print(f" UI: Loaded {len(sample_users)} sample users")
 
 # Function to get user context for LaunchDarkly targeting
 def get_user_context(user_id, sample_users):
@@ -771,7 +771,7 @@ with st.sidebar:
     st.header("Context")
     
     # User ID selection with improved styling
-    user_options = [user['id'] for user in sample_users] + ['user_001']
+    user_options = [user['id'] for user in sample_users]
     # Find default index for user_other_paid_001
     default_index = 0
     if "user_other_paid_001" in user_options:

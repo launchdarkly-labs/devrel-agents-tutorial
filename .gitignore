@@ -22,6 +22,10 @@ docs/
 # Environment files
 .env
 
+# Logs
+logs/
+*.log
+
 # Unused/cleanup files
 demo_pii_protection.py
 requirements.txt

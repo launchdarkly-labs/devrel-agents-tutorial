@@ -82,8 +82,12 @@ async def submit_feedback(feedback: FeedbackRequest):
         
         # Get LaunchDarkly tracker and submit feedback
         try:
-            # Get a real LaunchDarkly AI config to get the tracker
-            support_config = await agent_service.config_manager.get_config(feedback.user_id, "support-agent")
+            # Get a real LaunchDarkly AI config to get the tracker with user context
+            support_config = await agent_service.config_manager.get_config(
+                feedback.user_id, 
+                "support-agent",
+                feedback.user_context
+            )
 
             # Convert feedback format
             thumbs_up = feedback.feedback == "positive"
