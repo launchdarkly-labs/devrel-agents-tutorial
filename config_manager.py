@@ -7,8 +7,10 @@ import time
 import ldclient
 from ldclient import Context
 from ldai.client import LDAIClient, LDAIAgentConfig, LDAIAgentDefaults, ModelConfig
+from ldai.tracker import TokenUsage, FeedbackKind
 from dotenv import load_dotenv
 from utils.logger import log_student, log_debug
+from utils.cost_calculator import calculate_cost
 
 load_dotenv()
 
@@ -106,27 +108,64 @@ class FixedConfigManager:
             log_debug(f"CONFIG MANAGER ERROR TRACEBACK: {traceback.format_exc()}")
             raise
     
-    def track_metrics(self, tracker, func):
-        """Track metrics with LaunchDarkly"""
+    def track_metrics(self, tracker, func, model_name=None, user_id=None, user_context=None, prev_message_count=0):
+        """Track metrics with LaunchDarkly including cost tracking"""
         if not tracker:
             return func()
-        
+
         try:
-            from ai_metrics.metrics_tracker import track_langgraph_metrics
-            result = track_langgraph_metrics(tracker, func)
-            
-            # track_langgraph_metrics already handles success and token tracking
+            # Use tracker's built-in duration tracking
+            result = tracker.track_duration_of(func)
+            tracker.track_success()
+
+            # For LangGraph agents, usage_metadata is included on all messages that used AI
+            total_input_tokens = 0
+            total_output_tokens = 0
+            total_tokens = 0
+
+            if isinstance(result, dict) and "messages" in result:
+                # Only look at messages that were added during this function call
+                new_messages = result['messages'][prev_message_count:]
+                for message in new_messages:
+                    # Check for usage_metadata directly on the message
+                    if hasattr(message, "usage_metadata") and message.usage_metadata:
+                        usage_data = message.usage_metadata
+                        total_input_tokens += usage_data.get("input_tokens", 0)
+                        total_output_tokens += usage_data.get("output_tokens", 0)
+                        total_tokens += usage_data.get("total_tokens", 0)
+
+            # Track token usage if found
+            if total_tokens > 0:
+                token_usage = TokenUsage(
+                    input=total_input_tokens,
+                    output=total_output_tokens,
+                    total=total_tokens
+                )
+                tracker.track_tokens(token_usage)
+                log_student(f"TOKEN TRACKING: {total_tokens} tokens ({total_input_tokens} in, {total_output_tokens} out)")
+
+                # Calculate and track cost using the token counts
+                if model_name and user_id:
+                    cost = calculate_cost(model_name, total_input_tokens, total_output_tokens)
+                    if cost > 0:
+                        # Build context for LaunchDarkly
+                        context_builder = Context.builder(user_id).kind('user')
+                        if user_context:
+                            for key, value in user_context.items():
+                                context_builder.set(key, value)
+                        ld_context = context_builder.build()
+
+                        # Track cost as custom event with metric value
+                        self.ld_client.track("ai_cost_per_request", ld_context, None, cost)
+                        log_student(f"COST TRACKING: ${cost:.6f} for {model_name} ({total_tokens} tokens)")
+                        self.ld_client.flush()
+
             self.ld_client.flush()
             return result
-            
+
         except Exception:
-            # Track error and fallback
-            try:
-                tracker.track_error()
-                self.ld_client.flush()
-            except:
-                pass
-            return func()
+            tracker.track_error()
+            raise
     
     def clear_cache(self):
         """Clear LaunchDarkly SDK cache"""
@@ -136,6 +175,87 @@ class FixedConfigManager:
         """Flush metrics to LaunchDarkly"""
         self.ld_client.flush()
     
+    def track_feedback(self, tracker, thumbs_up: bool):
+        """Track user feedback with LaunchDarkly"""
+        if not tracker:
+            return False
+
+        try:
+            # Use LaunchDarkly's feedback tracking
+            feedback_dict = {
+                "kind": FeedbackKind.Positive if thumbs_up else FeedbackKind.Negative
+            }
+            tracker.track_feedback(feedback_dict)
+            log_student(f"FEEDBACK TRACKED: {'👍 Positive' if thumbs_up else '👎 Negative'}")
+            self.ld_client.flush()
+            return True
+        except Exception as e:
+            log_debug(f"FEEDBACK TRACKING ERROR: {e}")
+            return False
+
+    async def track_metrics_async(self, tracker, async_func, model_name=None, user_id=None, user_context=None, prev_message_count=0):
+        """Async variant of metrics tracking with cost calculation"""
+        if not tracker:
+            return await async_func()
+
+        start_time = time.time()
+        try:
+            result = await async_func()
+
+            # Track duration manually for async
+            duration_ms = int((time.time() - start_time) * 1000)
+            if hasattr(tracker, 'track_duration'):
+                tracker.track_duration(duration_ms)
+
+            if hasattr(tracker, 'track_success'):
+                tracker.track_success()
+
+            # For LangGraph agents, usage_metadata is included on all messages that used AI
+            total_input_tokens = 0
+            total_output_tokens = 0
+            total_tokens = 0
+
+            if isinstance(result, dict) and "messages" in result:
+                # Only look at messages that were added during this function call
+                new_messages = result['messages'][prev_message_count:]
+                for message in new_messages:
+                    # Check for usage_metadata directly on the message
+                    if hasattr(message, "usage_metadata") and message.usage_metadata:
+                        usage_data = message.usage_metadata
+                        total_input_tokens += usage_data.get("input_tokens", 0)
+                        total_output_tokens += usage_data.get("output_tokens", 0)
+                        total_tokens += usage_data.get("total_tokens", 0)
+
+            # Track tokens and cost
+            if total_tokens > 0:
+                token_usage = TokenUsage(
+                    input=total_input_tokens,
+                    output=total_output_tokens,
+                    total=total_tokens
+                )
+                tracker.track_tokens(token_usage)
+                log_student(f"TOKEN TRACKING (async): {total_tokens} tokens ({total_input_tokens} in, {total_output_tokens} out)")
+
+                # Calculate and track cost using the token counts
+                if model_name and user_id:
+                    cost = calculate_cost(model_name, total_input_tokens, total_output_tokens)
+                    if cost > 0:
+                        context_builder = Context.builder(user_id).kind('user')
+                        if user_context:
+                            for key, value in user_context.items():
+                                context_builder.set(key, value)
+                        ld_context = context_builder.build()
+
+                        self.ld_client.track("ai_cost_per_request", ld_context, None, cost)
+                        log_student(f"COST TRACKING (async): ${cost:.6f} for {model_name}")
+                        self.ld_client.flush()
+
+            return result
+        except Exception:
+            if hasattr(tracker, 'track_error'):
+                tracker.track_error()
+            raise
+
     def close(self):
         """Close LaunchDarkly client"""
         try:
