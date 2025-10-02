@@ -46,7 +46,7 @@ You'll need:
 
 **Success Criteria** (measured per user):
 1. ≥10% improvement in safety compliance (positive feedback rate per user)
-2. ≤5% cost increase per user (from `ai_cost_per_request` custom metric tracking actual $ cost)
+2. ≤5% cost increase per user
 3. ≤2.0s response latency (completion time p95 per user)
 4. 90% confidence threshold
 
@@ -60,7 +60,7 @@ You'll need:
 
 **Success Criteria** (measured per user):
 - ≥15% satisfaction improvement by Claude Opus 4 (positive feedback rate per user)
-- Cost-value ratio ≥ 0.6 (satisfaction gain % ÷ cost increase % per user, using real $ from `ai_cost_per_request`)
+- Cost-value ratio ≥ 0.6 (satisfaction gain % ÷ cost increase % per user)
 - 90% confidence threshold
 
 ## Setting Up Metrics and Experiments
@@ -159,10 +159,7 @@ Create the experiment variations using the bootstrap script:
 uv run python bootstrap/tutorial_3_experiment_variations.py
 ```
 
-This creates variations for the premium model experiment:
-- **Premium Model Value**: `claude-opus-treatment`
-- **Security Agent Analysis**: Uses existing baseline and enhanced variations
-- **Note**: Both experiments use existing other-paid configuration as control
+This creates the `claude-opus-treatment` variation for the Premium Model Value experiment. The Security Agent Analysis experiment will use your existing baseline and enhanced variations. Both experiments use the existing other-paid configuration as their control group.
 
 ### **Step 3: Configure Security Agent Experiment**
 
