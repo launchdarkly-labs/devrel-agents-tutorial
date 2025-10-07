@@ -151,14 +151,6 @@ This creates the `claude-opus-treatment` variation for the Premium Model Value e
 
 ### **Step 3: Configure Security Agent Experiment**
 
-<br>
-
-<div align="center">
-<img src="screenshots/security_level.png" alt="Security Agent Experiment Configuration" width="50%">
-</div>
-
-<br>
-
 Navigate to **AI Configs → security-agent → Create experiment**. You'll see a 4-step configuration flow:
 
 #### **Section 1: Experiment Details**
@@ -208,6 +200,14 @@ Click **"Allocation split"** to configure variations:
 
 Review and click **"Start experiment"** to launch.
 
+<br>
+
+<div align="center">
+<img src="screenshots/security_level.png" alt="Security Agent Experiment Configuration" width="50%">
+</div>
+
+<br>
+
 #### **Success Criteria to Monitor**
 - ≥10% improvement in positive feedback rate
 - ≤5% cost increase (track via `ai_cost_per_request` metric)
@@ -215,14 +215,6 @@ Review and click **"Start experiment"** to launch.
 - 90% statistical confidence
 
 ### **Step 4: Configure Premium Model Experiment**
-
-<br>
-
-<div align="center">
-<img src="screenshots/premium_model.png" alt="Premium Model Value Analysis Experiment Configuration" width="50%">
-</div>
-
-<br>
 
 Navigate to **AI Configs → support-agent → Create experiment**. Follow the same 4-step flow:
 
@@ -274,11 +266,37 @@ Click **"Allocation split"** to configure variations:
 
 Review and click **"Start experiment"** to launch.
 
+<br>
+
+<div align="center">
+<img src="screenshots/premium_model.png" alt="Premium Model Value Analysis Experiment Configuration" width="50%">
+</div>
+
+<br>
+
 #### **Success Criteria to Monitor**
 - ≥15% satisfaction improvement (positive feedback rate)
 - Cost-value ratio ≥ 0.25 (satisfaction % ÷ cost increase %)
 - 90% statistical confidence
 
+## Understanding Your Experimental Design
+
+**Two Independent Experiments Running Concurrently:**
+```
+Experiment 1: Security Agent (200 users)
+├── 50% Baseline (100 users)
+└── 50% Enhanced (100 users)
+
+Experiment 2: Premium Model (200 users)
+├── 50% GPT-4o (100 users)
+└── 50% Opus 4 (100 users)
+```
+
+Since these are the **same 200 users**, each user experiences:
+- One security variation (baseline OR enhanced)
+- One model variation (GPT-4o OR Opus 4)
+
+Random assignment ensures balance: ~50 users get each combination naturally.
 
 ## Generating Experiment Data
 
@@ -449,24 +467,13 @@ The 0.25 cost-value threshold means that for every 1% increase in cost, we need 
 
 ### **Key Insights from These Results**
 
-1. **Enhanced Security is a Clear Win** - Ship it immediately
-   - Strong positive lift with acceptable tradeoffs
-   - This is what a successful experiment looks like
+**Enhanced Security is a clear win that should be shipped immediately.** With a strong positive lift and acceptable tradeoffs, this exemplifies what a successful experiment looks like.
 
-2. **Opus 4 Shows Why We Need Cost-Value Analysis**
-   - Quality improvement confirmed (22.6% lift)
-   - BUT cost increase (161%) outpaces value
-   - Prevents expensive mistake of deploying to all users
+**Opus 4 demonstrates why we need cost-value analysis.** While the quality improvement is confirmed with a 22.6% lift, the cost increase of 161% far outpaces the value delivered. This analysis prevents the expensive mistake of deploying premium models to all users.
 
-3. **Both Experiments Succeeded in Learning**
-   - Security experiment: Validated improvement hypothesis ✅
-   - Model experiment: Prevented costly deployment ✅
-   - Saving money is also a successful outcome
+**Both experiments succeeded in learning.** The security experiment validated our improvement hypothesis ✅, while the model experiment prevented a costly deployment ✅. Remember that saving money is also a successful outcome.
 
-4. **Next Steps for Opus 4**
-   - Test with enterprise segment (higher willingness to pay)
-   - Negotiate better pricing with Anthropic
-   - Reserve for complex queries only (add routing logic)
+**For Opus 4, consider these next steps:** Test with enterprise segments who have higher willingness to pay, negotiate better pricing with Anthropic, or reserve it for complex queries only by adding routing logic.
 
 ## Experimental Limitations & Mitigations
 
@@ -486,30 +493,7 @@ The 0.25 cost-value threshold means that for every 1% increase in cost, we need 
 - 💡 **Note**: You cannot analyze interaction effects between security and model choices
 
 **Statistical Confidence**
-LaunchDarkly uses **Bayesian statistics** to calculate confidence:
-- **90% confidence** = 90% probability the true effect is positive
-- This is NOT the same as p-value < 0.10 from frequentist tests
-- We set 90% (not 95%) to balance false positives vs. false negatives
-- For mission-critical features, consider raising to 95% confidence
-
-## Understanding Your Experimental Design
-
-**Two Independent Experiments Running Concurrently:**
-```
-Experiment 1: Security Agent (200 users)
-├── 50% Baseline (100 users)
-└── 50% Enhanced (100 users)
-
-Experiment 2: Premium Model (200 users)
-├── 50% GPT-4o (100 users)
-└── 50% Opus 4 (100 users)
-```
-
-Since these are the **same 200 users**, each user experiences:
-- One security variation (baseline OR enhanced)
-- One model variation (GPT-4o OR Opus 4)
-
-Random assignment ensures balance: ~50 users get each combination naturally.
+LaunchDarkly uses **Bayesian statistics** to calculate confidence, where 90% confidence means there's a 90% probability the true effect is positive. This is NOT the same as p-value < 0.10 from frequentist tests. We set the threshold at 90% (rather than 95%) to balance false positives versus false negatives, though for mission-critical features you should consider raising the confidence threshold to 95%.
 
 ## What You've Accomplished
 
