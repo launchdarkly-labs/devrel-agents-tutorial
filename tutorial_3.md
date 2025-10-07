@@ -28,14 +28,10 @@ You'll need:
 
 > **IMPORTANT: This tutorial costs approximately $35-45 with default settings**
 >
-> **Cost Breakdown** (200 queries total):
-> - Control (GPT-4o): 100 conversations × ~5 tool calls × 3K tokens avg = $15-20
-> - Treatment (Opus 4): 100 conversations × ~5 tool calls × 3K tokens avg = $20-25
->
 > **Time Investment**:
-> - Setup: 25 minutes (configuration)
-> - Data generation: 40-60 minutes (concurrent execution)
-> - Analysis: 10 minutes (reading results)
+> - Setup: 25 minutes
+> - Data generation: 40-60 minutes
+> - Analysis: 10 minutes
 > - **Total: ~90 minutes active time**
 >
 > To reduce costs to $5-10: Use `--queries 50` and consider switching Opus 4 to Sonnet 3.5 in `bootstrap/tutorial_3_experiment_variations.py`
@@ -44,7 +40,7 @@ You'll need:
 
 **Realistic Experiment Data**: We'll target other-paid users (non-EU countries, paid tier) with queries randomly selected from YOUR knowledge base topics. The system uses 3-option feedback simulation (thumbs_up/thumbs_down/no_feedback) matching real user patterns, sending feedback data to LaunchDarkly for experiment analysis.
 
-**Important**: You'll run two independent experiments concurrently on the same user population. Each user gets randomly assigned to one variation in each experiment. LaunchDarkly analyzes each experiment separately - there's no built-in interaction effect analysis between experiments.
+**Important**: You'll run two independent experiments concurrently on the same user population. Each user gets randomly assigned to one variation in each experiment. LaunchDarkly analyzes each experiment separately. For this tutorial we won't consider interaction effect analysis between experiments.
 
 ## Understanding Your Two Experiments
 
@@ -79,87 +75,67 @@ You'll need:
 
 ### **Step 1: Configure Metrics**
 
-Navigate to **Metrics** and create these five metrics:
+Navigate to **Metrics** and create these three custom metrics (feedback rates are built-in):
 
 #### **Metric 1: P95 User Latency**
 
-![P95 User Latency Metric Configuration](screenshots/user_duration.png)
+1. **Event key:** Enter `$ld:ai:duration:total`
+2. **What do you want to measure:** Select "Value / Size" then choose "Numeric"
+3. **Aggregation:** Select "Sum"
+4. **Metric definition:** Select "P95" from the first dropdown, "value" from the second, "user" from the third, "sum" from the fourth, and "lower is better" from the final dropdown
+5. **Unit of measure:** Enter `ms`
+6. **Metric name:** Enter `p95_total_user_latency`
+7. **Metric key:** Enter `user_latency`
 
-> **Event key:** `$ld:ai:duration:total`
->
-> **What do you want to measure:** `Value / Size` → `Numeric`
->
-> **Aggregation:** `Sum`
->
-> **Metric definition:** `P95` `value` of the per `user` event `sum`, where `lower is better`
->
-> **Unit of measure:** `ms`
->
-> **Metric name:** `p95_total_user_latency`
->
-> **Metric key:** `user_latency`
+<br>
+
+<div align="center">
+<img src="screenshots/user_duration.png" alt="P95 User Latency Metric Configuration" width="25%">
+</div>
+
+<br>
 
 #### **Metric 2: Average Total Tokens**
 
-![Average Total Tokens Metric Configuration](screenshots/tokens.png)
+1. **Event key:** Enter `$ld:ai:tokens:total`
+2. **What do you want to measure:** Select "Value / Size" then choose "Numeric"
+3. **Aggregation:** Select "Average"
+4. **Metric definition:** Select "Average" from the first dropdown, "value" from the second, "user" from the third, "sum" from the fourth, and "lower is better" from the final dropdown
+5. **Unit of measure:** Enter `tokens`
+6. **Metric name:** Enter `average_total_user_tokens`
+7. **Metric key:** Enter `average_tokens`
 
-> **Event key:** `$ld:ai:tokens:total`
->
-> **What do you want to measure:** `Value / Size` → `Numeric`
->
-> **Aggregation:** `Average`
->
-> **Metric definition:** `Average` `value` of the per `user` event `sum`, where `lower is better`
->
-> **Unit of measure:** `tokens`
->
-> **Metric name:** `average_total_user_tokens`
->
-> **Metric key:** `average_tokens`
+<br>
 
-#### **Metric 3: Positive Feedback Rate**
+<div align="center">
+<img src="screenshots/tokens.png" alt="Average Total Tokens Metric Configuration" width="25%">
+</div>
 
-> **Event key:** `$ld:ai:feedback:positive`
->
-> **What do you want to measure:** `Count`
->
-> **Metric definition:** `Conversion rate` where `higher is better`
->
-> **Metric name:** `positive.feedback.rate`
->
-> **Metric key:** `positive_feedback`
+<br>
 
-#### **Metric 4: Negative Feedback Rate**
+#### **Metrics 3 & 4: Feedback Rates**
 
-> **Event key:** `$ld:ai:feedback:negative`
->
-> **What do you want to measure:** `Count`
->
-> **Metric definition:** `Conversion rate` where `lower is better`
->
-> **Metric name:** `negative.feedback.rate`
->
-> **Metric key:** `negative_feedback`
+The positive and negative feedback rate metrics are **built-in LaunchDarkly AI metrics** that are automatically available. You don't need to create these - they'll appear in the metrics dropdown when configuring your experiments:
+- **Positive Feedback Rate** (`$ld:ai:feedback:positive`)
+- **Negative Feedback Rate** (`$ld:ai:feedback:negative`)
 
 #### **Metric 5: AI Cost Per Request**
 
-![AI Cost Per Request Metric Configuration](screenshots/cost.png)
+1. **Event key:** Enter `ai_cost_per_request`
+2. **What do you want to measure:** Select "Value / Size" then choose "Numeric"
+3. **Aggregation:** Select "Average"
+4. **Metric definition:** Select "Average" from the first dropdown, "value" from the second, "user" from the third, "sum" from the fourth, and "lower is better" from the final dropdown
+5. **Unit of measure:** Enter `$`
+6. **Metric name:** Enter `ai_cost_per_request`
+7. **Metric key:** Enter `ai_cost`
 
-> **Event key:** `ai_cost_per_request`
->
-> **What do you want to measure:** `Value / Size` → `Numeric`
->
-> **Aggregation:** `Average`
->
-> **Metric definition:** `Average` `value` of the per `user` event `sum`, where `lower is better`
->
-> **Unit of measure:** `$`
->
-> **Metric name:** `ai_cost_per_request`
->
-> **Metric key:** `ai_cost`
+<br>
 
-**Important:** Click "Create metric" and ensure it shows as "Production" environment.
+<div align="center">
+<img src="screenshots/cost.png" alt="AI Cost Per Request Metric Configuration" width="25%">
+</div>
+
+<br>
 
 The cost tracking is implemented in `utils/cost_calculator.py`, which calculates actual dollar costs using the formula `(input_tokens × input_price + output_tokens × output_price) / 1M`. The system has pre-configured pricing for each model: GPT-4o at $2.50/$10 per million tokens, Claude Opus 4 at $15/$75, and Claude Sonnet at $3/$15. When a request completes, the cost is immediately calculated and sent to LaunchDarkly as a custom event, enabling direct cost-per-user analysis in your experiments.
 
@@ -175,7 +151,13 @@ This creates the `claude-opus-treatment` variation for the Premium Model Value e
 
 ### **Step 3: Configure Security Agent Experiment**
 
-![Security Agent Experiment Configuration](screenshots/security_level.png)
+<br>
+
+<div align="center">
+<img src="screenshots/security_level.png" alt="Security Agent Experiment Configuration" width="50%">
+</div>
+
+<br>
 
 Navigate to **AI Configs → security-agent → Create experiment**. You'll see a 4-step configuration flow:
 
@@ -234,7 +216,13 @@ Review and click **"Start experiment"** to launch.
 
 ### **Step 4: Configure Premium Model Experiment**
 
-![Premium Model Value Analysis Experiment Configuration](screenshots/premium_model.png)
+<br>
+
+<div align="center">
+<img src="screenshots/premium_model.png" alt="Premium Model Value Analysis Experiment Configuration" width="50%">
+</div>
+
+<br>
 
 Navigate to **AI Configs → support-agent → Create experiment**. Follow the same 4-step flow:
 
