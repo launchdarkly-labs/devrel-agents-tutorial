@@ -123,7 +123,8 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
             )
 
             # Use structured output for guaranteed PII format
-            structured_model = base_model.with_structured_output(PIIDetectionResponse)
+            # include_raw=True preserves usage metadata for cost tracking
+            structured_model = base_model.with_structured_output(PIIDetectionResponse, include_raw=True)
 
             # Create system message with current instructions from LaunchDarkly
             system_message = SystemMessage(content=agent_config.instructions)
@@ -131,9 +132,12 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
 
             # Call model with structured output
             if hasattr(structured_model, "ainvoke"):
-                pii_result = await structured_model.ainvoke(full_messages)
+                response = await structured_model.ainvoke(full_messages)
             else:
-                pii_result = structured_model.invoke(full_messages)
+                response = structured_model.invoke(full_messages)
+            
+            # Extract parsed result from response
+            pii_result = response["parsed"] if isinstance(response, dict) else response
 
             # Track metrics
             config_manager.track_metrics(
@@ -162,11 +166,12 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
             
             # Track error with LDAI metrics
             try:
-                config_manager.track_metrics(
-                    tracker,
-                    lambda: (_ for _ in ()).throw(e),  # Trigger error tracking
-                    model_name=agent_config.model.name if 'agent_config' in locals() else None
-                )
+                if 'agent_config' in locals() and agent_config and hasattr(agent_config, 'tracker'):
+                    config_manager.track_metrics(
+                        agent_config.tracker,
+                        lambda: (_ for _ in ()).throw(e),  # Trigger error tracking
+                        model_name=agent_config.model.name
+                    )
             except:
                 pass
             

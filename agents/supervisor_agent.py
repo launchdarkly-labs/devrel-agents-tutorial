@@ -154,15 +154,17 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
                 temperature=0.1
             )
 
-            prescreen_model = base_model.with_structured_output(PIIPreScreening)
+            # Use include_raw=True to preserve usage metadata for cost tracking
+            prescreen_model = base_model.with_structured_output(PIIPreScreening, include_raw=True)
 
             # Get pre-screening prompt from LaunchDarkly config
             prescreen_prompt = supervisor_config.instructions
 
             screening_message = HumanMessage(content=f"{prescreen_prompt}\n\nUser Input: {user_input}")
 
-            # Get structured pre-screening result
-            screening_result = prescreen_model.invoke([screening_message])
+            # Get structured pre-screening result with raw response
+            response = prescreen_model.invoke([screening_message])
+            screening_result = response["parsed"] if isinstance(response, dict) else response
 
             # Track successful pre-screening
             config_manager.track_metrics(

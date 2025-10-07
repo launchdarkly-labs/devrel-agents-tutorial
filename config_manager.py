@@ -123,20 +123,25 @@ class FixedConfigManager:
             total_output_tokens = 0
             total_tokens = 0
 
-            if isinstance(result, dict) and "messages" in result:
-                # Only look at messages that were added during this function call
-                new_messages = result['messages'][prev_message_count:]
-                for message in new_messages:
-                    # Check for usage_metadata directly on the message
-                    if hasattr(message, "usage_metadata") and message.usage_metadata:
-                        usage_data = message.usage_metadata
+            if isinstance(result, dict):
+                # Check for structured output with include_raw=True
+                if "raw" in result and hasattr(result["raw"], "usage_metadata"):
+                    usage_data = result["raw"].usage_metadata
+                    if usage_data:
                         total_input_tokens += usage_data.get("input_tokens", 0)
                         total_output_tokens += usage_data.get("output_tokens", 0)
                         total_tokens += usage_data.get("total_tokens", 0)
-            else:
-                # Handle structured output calls (Pydantic models from with_structured_output)
-                # These don't return dict with messages, so token usage isn't accessible
-                log_student(f"⚠️  STRUCTURED OUTPUT: Cannot extract tokens from {type(result).__name__} - use raw LLM call for cost tracking")
+                # Check for LangGraph state dict with messages
+                elif "messages" in result:
+                    # Only look at messages that were added during this function call
+                    new_messages = result['messages'][prev_message_count:]
+                    for message in new_messages:
+                        # Check for usage_metadata directly on the message
+                        if hasattr(message, "usage_metadata") and message.usage_metadata:
+                            usage_data = message.usage_metadata
+                            total_input_tokens += usage_data.get("input_tokens", 0)
+                            total_output_tokens += usage_data.get("output_tokens", 0)
+                            total_tokens += usage_data.get("total_tokens", 0)
 
             # Track token usage if found
             if total_tokens > 0:
@@ -223,16 +228,25 @@ class FixedConfigManager:
             total_output_tokens = 0
             total_tokens = 0
 
-            if isinstance(result, dict) and "messages" in result:
-                # Only look at messages that were added during this function call
-                new_messages = result['messages'][prev_message_count:]
-                for message in new_messages:
-                    # Check for usage_metadata directly on the message
-                    if hasattr(message, "usage_metadata") and message.usage_metadata:
-                        usage_data = message.usage_metadata
+            if isinstance(result, dict):
+                # Check for structured output with include_raw=True
+                if "raw" in result and hasattr(result["raw"], "usage_metadata"):
+                    usage_data = result["raw"].usage_metadata
+                    if usage_data:
                         total_input_tokens += usage_data.get("input_tokens", 0)
                         total_output_tokens += usage_data.get("output_tokens", 0)
                         total_tokens += usage_data.get("total_tokens", 0)
+                # Check for LangGraph state dict with messages
+                elif "messages" in result:
+                    # Only look at messages that were added during this function call
+                    new_messages = result['messages'][prev_message_count:]
+                    for message in new_messages:
+                        # Check for usage_metadata directly on the message
+                        if hasattr(message, "usage_metadata") and message.usage_metadata:
+                            usage_data = message.usage_metadata
+                            total_input_tokens += usage_data.get("input_tokens", 0)
+                            total_output_tokens += usage_data.get("output_tokens", 0)
+                            total_tokens += usage_data.get("total_tokens", 0)
 
             # Track tokens and cost
             if total_tokens > 0:
