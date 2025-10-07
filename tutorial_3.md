@@ -282,17 +282,7 @@ Review and click **"Start experiment"** to launch.
 
 ## Generating Experiment Data
 
-### **Step 5: Launch Both Experiments**
-
-1. **Review Settings**: Verify all configurations match the templates above
-2. **Start Security Experiment**: Click "Start experiment" on Security Level
-3. **Start Model Experiment**: Click "Start experiment" on Premium Model Value Analysis
-4. **Verify Status**: Both should show "Running" in the experiments list
-5. **Check Metrics**: Navigate to Metrics tab and verify:
-   - Built-in metrics show "Leading: [experiment name]"
-   - Custom `ai_cost_per_request` metric shows both experiments connected
-
-### **Step 6: Run Traffic Generator**
+### **Step 5: Run Traffic Generator**
 
 Start your backend and generate realistic experiment data. Choose between sequential or concurrent traffic generation:
 
