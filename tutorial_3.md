@@ -24,28 +24,40 @@ You'll need:
 - **Active LaunchDarkly Project**: With AI Configs and user segments from Part 2
 - **API Keys**: All keys from previous parts (Anthropic, OpenAI, LaunchDarkly, Mistral)
 
-## ⚠️ Cost Warning
+## ⚠️ Cost and Time Investment
 
-> **IMPORTANT: This tutorial costs approximately $40 with default settings**
+> **IMPORTANT: This tutorial costs approximately $35-45 with default settings**
 >
-> The expense comes from using Claude Opus 4 ($15/$75 per 1M tokens) and generating 200+ completions for statistical significance. To reduce costs to $5-10, switch to Claude Sonnet 3.5 or GPT-4o-mini by editing the model settings in `bootstrap/tutorial_3_experiment_variations.py`, or use `--queries 50` instead of 200 when running the traffic generator.
+> **Cost Breakdown** (200 queries total):
+> - Control (GPT-4o): 100 conversations × ~5 tool calls × 3K tokens avg = $15-20
+> - Treatment (Opus 4): 100 conversations × ~5 tool calls × 3K tokens avg = $20-25
+>
+> **Time Investment**:
+> - Setup: 25 minutes (configuration)
+> - Data generation: 40-60 minutes (concurrent execution)
+> - Analysis: 10 minutes (reading results)
+> - **Total: ~90 minutes active time**
+>
+> To reduce costs to $5-10: Use `--queries 50` and consider switching Opus 4 to Sonnet 3.5 in `bootstrap/tutorial_3_experiment_variations.py`
 
 ## Data Foundation
 
 **Realistic Experiment Data**: We'll target other-paid users (non-EU countries, paid tier) with queries randomly selected from YOUR knowledge base topics. The system uses 3-option feedback simulation (thumbs_up/thumbs_down/no_feedback) matching real user patterns, sending feedback data to LaunchDarkly for experiment analysis.
 
+**Important**: You'll run two independent experiments concurrently on the same user population. Each user gets randomly assigned to one variation in each experiment. LaunchDarkly analyzes each experiment separately - there's no built-in interaction effect analysis between experiments.
+
 ## Understanding Your Two Experiments
 
 ### **Experiment 1: Security Agent Analysis**
 
-**Question**: Does strict security cause a loss of context and reduce user satisfaction?
+**Question**: Does enhanced security improve safety compliance without significantly harming user satisfaction?
 
 **Variations** (50% each):
 - **Control**: Baseline security agent (existing baseline variation)
 - **Treatment**: Enhanced security agent (existing enhanced variation)
 
 **Success Criteria** (measured per user):
-1. ≥10% improvement in safety compliance (positive feedback rate per user)
+1. ≥10% improvement in positive feedback rate per user
 2. ≤5% cost increase per user
 3. ≤2.0s response latency (completion time p95 per user)
 4. 90% confidence threshold
@@ -60,7 +72,7 @@ You'll need:
 
 **Success Criteria** (measured per user):
 - ≥15% satisfaction improvement by Claude Opus 4 (positive feedback rate per user)
-- Cost-value ratio ≥ 0.6 (satisfaction gain % ÷ cost increase % per user)
+- Cost-value ratio ≥ 0.25 (satisfaction gain % ÷ cost increase % per user)
 - 90% confidence threshold
 
 ## Setting Up Metrics and Experiments
@@ -178,7 +190,7 @@ Fill in these fields:
 >
 > **Hypothesis:**
 > ```
-> Strict security agent will cause a loss of context and reduce user satisfaction
+> Enhanced security improves safety compliance without significantly harming user satisfaction
 > ```
 
 #### **Section 2: Select Metrics**
@@ -276,7 +288,7 @@ Review and click **"Start experiment"** to launch.
 
 #### **Success Criteria to Monitor**
 - ≥15% satisfaction improvement (positive feedback rate)
-- Cost-value ratio ≥ 0.6 (satisfaction % ÷ cost increase %)
+- Cost-value ratio ≥ 0.25 (satisfaction % ÷ cost increase %)
 - 90% statistical confidence
 
 
@@ -369,49 +381,157 @@ Average: 13.6s per query (with concurrency)
 
 **Monitor Results**: Refresh your LaunchDarkly experiment "Results" tabs to see data flowing in. Cost metrics appear as custom events alongside feedback and token metrics.
 
-## Evaluating Your Experiment Results
+## Interpreting Your Results (After Data Collection)
 
-### **Security Agent Analysis Decision Flow**
+Once your experiments have collected data from ~100 users per variation, you'll see results in the LaunchDarkly UI. Here's how to interpret them:
 
-**Step 1: Filter Qualifying Treatment**
-Check if enhanced security beats baseline control using per-user metrics:
-- ≥10% improvement in safety compliance (positive feedback rate per user)
-- ≥90% statistical confidence
-- Completion time p95 per user ≤2.0s
-- Cost increase per user ≤5% (from `ai_cost_per_request` metric average)
+### **Security Agent Analysis - Sample Results**
 
-**Step 2: Make Security Decision**
-- If enhanced security qualifies: Deploy enhanced security to all users
-- If enhanced security fails: Keep baseline security for cost efficiency
+After 100 users per variation (200 total), LaunchDarkly shows:
 
-**Example Results** (per-user metrics):
-- **Control**: Baseline security agent performance per user
-- **Treatment**: Enhanced security shows 12% safety improvement per user, 94% confidence, 1.6s p95, 3% cost increase per user → **Qualifies**
+**Primary Metric: Positive Feedback Rate (Conversion)**
+- **Control (Baseline)**: 38.0% ± 4.8%
+- **Treatment (Enhanced)**: 43.5% ± 4.9%
+- **Lift**: +14.5% (relative improvement)
+- **Confidence**: 94%
+- **Status**: ✅ Meets ≥10% threshold
 
-**Decision**: Deploy enhanced security agent - meets safety improvement threshold with acceptable cost/latency trade-offs.
+**Secondary Metrics:**
+| Metric | Control | Treatment | Change | Status |
+|--------|---------|-----------|---------|---------|
+| P95 Latency | 1.85s | 1.92s | +3.8% | ✅ <2.0s |
+| Avg Cost/User | $0.124 | $0.129 | +4.0% | ✅ <5% |
+| Avg Tokens/User | 2,847 | 2,956 | +3.8% | ℹ️ Monitor |
+| Negative Feedback | 18.0% | 15.5% | -13.9% | ✅ Improved |
 
-### **Premium Model Value Decision Flow**
+**Decision Logic:**
+```
+IF positive_feedback_lift ≥ 10%
+   AND confidence ≥ 90%
+   AND p95_latency ≤ 2.0s
+   AND cost_increase ≤ 5%
+THEN deploy_enhanced_security()
+```
 
-**Step 1: Filter Qualifying Treatment**
-Check if Claude Opus 4 beats GPT-4o control using per-user metrics:
-- ≥15% satisfaction improvement vs GPT-4o (positive feedback rate per user)
-- ≥90% statistical confidence
-- Cost-value ratio ≥ 0.6 (satisfaction gain % ÷ cost increase % per user)
+**Result: ✅ Ship Enhanced Security**
+- Significant safety improvement (14.5% lift, 94% confidence)
+- Acceptable latency impact (1.92s vs 2.0s threshold)
+- Cost increase within budget (4% vs 5% threshold)
+- Bonus: Reduced negative feedback
 
-**Step 2: Make Model Decision**
-- If Claude Opus 4 qualifies: Switch premium users to Claude Opus 4
-- If Claude Opus 4 fails: Keep GPT-4o for cost efficiency
+### **Premium Model Analysis - Sample Results**
 
-**Example Results** (per-user metrics):
-- **Control**: GPT-4o baseline performance per user
-- **Treatment**: Claude Opus 4 shows 20% satisfaction improvement per user, 95% confidence, cost-value ratio 0.8 → **Qualifies**
+**Primary Metric: Positive Feedback Rate**
+- **Control (GPT-4o)**: 42.0% ± 4.9%
+- **Treatment (Opus 4)**: 51.5% ± 5.0%
+- **Lift**: +22.6% (relative improvement)
+- **Confidence**: 96%
+- **Status**: ✅ Meets ≥15% threshold
 
-**Cost Calculation** (using `ai_cost_per_request` metric):
-- GPT-4o cost per user: $0.15 average (from tracked `ai_cost_per_request` events)
-- Claude Opus 4 cost per user: $0.45 average (from tracked `ai_cost_per_request` events)
-- Cost increase: 200%, Satisfaction gain: 20%, Ratio: 20%/200% = 0.1 → **Failed** (needs ≥0.6)
+**Cost Analysis:**
+| Metric | GPT-4o | Opus 4 | Change |
+|--------|--------|---------|---------|
+| Avg Cost/User | $0.158 | $0.412 | +161% |
+| Positive Feedback | 42.0% | 51.5% | +22.6% |
 
-**Decision**: Keep GPT-4o - Claude Opus 4 doesn't justify cost per user.
+**Cost-Value Ratio Calculation:**
+```python
+satisfaction_gain = 22.6%  # relative improvement
+cost_increase = 161%       # relative increase
+ratio = satisfaction_gain / cost_increase
+ratio = 22.6 / 161 = 0.14
+```
+
+**Decision Logic:**
+```
+IF positive_feedback_lift ≥ 15%
+   AND confidence ≥ 90%
+   AND cost_value_ratio ≥ 0.25
+THEN deploy_opus_4()
+ELSE keep_gpt4o()
+```
+
+**Result: ❌ Keep GPT-4o**
+- Strong satisfaction improvement (22.6% lift, 96% confidence)
+- BUT cost-value ratio too low (0.14 < 0.25 threshold)
+- Opus 4 costs 2.6x more but only improves satisfaction 1.2x
+- ROI doesn't justify premium pricing
+
+### **Understanding Cost-Value Thresholds**
+
+The 0.25 cost-value threshold means that for every 1% increase in cost, we need at least 0.25% improvement in satisfaction. This is a pragmatic threshold that:
+- Accounts for margin requirements
+- Ensures sustainable unit economics
+- Balances quality improvements with cost constraints
+
+**Alternative Scenarios Where Opus 4 Would Win:**
+- If Opus 4 averaged $0.25/user (58% increase): Ratio = 22.6% / 58% = 0.39 ✅
+- If Opus 4 showed 40% satisfaction gain: Ratio = 40% / 161% = 0.25 ✅
+- Target enterprise users with lower cost sensitivity
+
+### **Key Insights from These Results**
+
+1. **Enhanced Security is a Clear Win** - Ship it immediately
+   - Strong positive lift with acceptable tradeoffs
+   - This is what a successful experiment looks like
+
+2. **Opus 4 Shows Why We Need Cost-Value Analysis**
+   - Quality improvement confirmed (22.6% lift)
+   - BUT cost increase (161%) outpaces value
+   - Prevents expensive mistake of deploying to all users
+
+3. **Both Experiments Succeeded in Learning**
+   - Security experiment: Validated improvement hypothesis ✅
+   - Model experiment: Prevented costly deployment ✅
+   - Saving money is also a successful outcome
+
+4. **Next Steps for Opus 4**
+   - Test with enterprise segment (higher willingness to pay)
+   - Negotiate better pricing with Anthropic
+   - Reserve for complex queries only (add routing logic)
+
+## Experimental Limitations & Mitigations
+
+**Model-as-Judge Evaluation**
+- ⚠️ **Limitation**: We use Claude to evaluate response quality, not real users
+- ✅ **Mitigation**: Model-as-judge correlates well with human preferences (see: Anthropic's Constitutional AI paper)
+- 💡 **Next step**: Validate findings with a smaller human evaluation study (20-30 responses per variation)
+
+**Sample Size**
+- ⚠️ **Limitation**: 100 users per variation is minimum for detecting 15-20% effects
+- ✅ **Mitigation**: Both experiments showed large effects (14.5% and 22.6% lifts)
+- 💡 **For smaller effects** (<10%), increase to 200-300 users per variation
+
+**Independent Experiments**
+- ⚠️ **Limitation**: LaunchDarkly treats these as two separate experiments, not a factorial design
+- ✅ **Mitigation**: Random assignment naturally balances security versions across model versions
+- 💡 **Note**: You cannot analyze interaction effects between security and model choices
+
+**Statistical Confidence**
+LaunchDarkly uses **Bayesian statistics** to calculate confidence:
+- **90% confidence** = 90% probability the true effect is positive
+- This is NOT the same as p-value < 0.10 from frequentist tests
+- We set 90% (not 95%) to balance false positives vs. false negatives
+- For mission-critical features, consider raising to 95% confidence
+
+## Understanding Your Experimental Design
+
+**Two Independent Experiments Running Concurrently:**
+```
+Experiment 1: Security Agent (200 users)
+├── 50% Baseline (100 users)
+└── 50% Enhanced (100 users)
+
+Experiment 2: Premium Model (200 users)
+├── 50% GPT-4o (100 users)
+└── 50% Opus 4 (100 users)
+```
+
+Since these are the **same 200 users**, each user experiences:
+- One security variation (baseline OR enhanced)
+- One model variation (GPT-4o OR Opus 4)
+
+Random assignment ensures balance: ~50 users get each combination naturally.
 
 ## What You've Accomplished
 
