@@ -138,13 +138,22 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
             
             # Extract parsed result from response
             pii_result = response["parsed"] if isinstance(response, dict) else response
-
-            # Track metrics
-            config_manager.track_metrics(
-                agent_config.tracker,
-                lambda: "security_pii_detection_success",
-                model_name=agent_config.model.name
-            )
+            
+            # Extract and track token usage from raw response
+            if isinstance(response, dict) and "raw" in response and hasattr(response["raw"], "usage_metadata"):
+                usage_data = response["raw"].usage_metadata
+                if usage_data:
+                    from ldai.tracker import TokenUsage
+                    token_usage = TokenUsage(
+                        input=usage_data.get("input_tokens", 0),
+                        output=usage_data.get("output_tokens", 0),
+                        total=usage_data.get("total_tokens", 0)
+                    )
+                    agent_config.tracker.track_tokens(token_usage)
+                    log_student(f"SECURITY PII DETECTION TOKENS: {token_usage.total} tokens ({token_usage.input} in, {token_usage.output} out)")
+            
+            # Track success metric
+            agent_config.tracker.track_success()
 
             # Extract structured results
             detected = pii_result.detected

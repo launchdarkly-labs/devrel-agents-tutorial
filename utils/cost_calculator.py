@@ -59,7 +59,7 @@ def calculate_cost(model_name: str, input_tokens: int, output_tokens: int) -> fl
     output_cost = (output_tokens / 1_000_000) * pricing["output"]
     total_cost = input_cost + output_cost
     
-    print(f"💰 COST CALCULATED: ${total_cost:.6f} for {model_name} ({input_tokens} in, {output_tokens} out)")
+    print(f"COST CALCULATED: ${total_cost:.6f} for {model_name} ({input_tokens} in, {output_tokens} out)")
 
     return round(total_cost, 6)  # Round to 6 decimal places for precision
 

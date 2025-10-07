@@ -165,13 +165,22 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             # Get structured pre-screening result with raw response
             response = prescreen_model.invoke([screening_message])
             screening_result = response["parsed"] if isinstance(response, dict) else response
-
-            # Track successful pre-screening
-            config_manager.track_metrics(
-                supervisor_config.tracker,
-                lambda: f"supervisor_pii_prescreen_success_{screening_result.recommended_route}",
-                model_name=supervisor_config.model.name
-            )
+            
+            # Extract and track token usage from raw response
+            if isinstance(response, dict) and "raw" in response and hasattr(response["raw"], "usage_metadata"):
+                usage_data = response["raw"].usage_metadata
+                if usage_data:
+                    from ldai.tracker import TokenUsage
+                    token_usage = TokenUsage(
+                        input=usage_data.get("input_tokens", 0),
+                        output=usage_data.get("output_tokens", 0),
+                        total=usage_data.get("total_tokens", 0)
+                    )
+                    supervisor_config.tracker.track_tokens(token_usage)
+                    log_student(f"PII PRESCREEN TOKENS: {token_usage.total} tokens ({token_usage.input} in, {token_usage.output} out)")
+            
+            # Track success metric
+            supervisor_config.tracker.track_success()
 
             # Log the intelligent decision
             log_student(f"ROUTING: {screening_result.recommended_route} ({screening_result.confidence:.1f}) - {screening_result.reasoning}")
