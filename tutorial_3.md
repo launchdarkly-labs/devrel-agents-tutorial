@@ -1,5 +1,11 @@
 # Proving ROI with Data-Driven AI Agent Experiments
 
+<div align="center">
+<img src="screenshots/header.jpg" alt="From Guessing to Knowing - Prove ROI with Data-Driven AI Experiments" width="100%"/>
+</div>
+
+<br>
+
 ## What You'll Learn in 5 Minutes (or Build in 90)
 
 > **Key Findings from Our Experiments:**
