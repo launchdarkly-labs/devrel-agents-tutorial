@@ -1,6 +1,6 @@
 # Proving ROI with Data-Driven AI Agent Experiments
 
-## 📊 What You'll Learn in 5 Minutes (or Build in 90)
+## What You'll Learn in 5 Minutes (or Build in 90)
 
 > **Key Findings from Our Experiments:**
 > - 🔴 Strict security **decreased** user satisfaction by 39%
@@ -20,8 +20,8 @@ You need data, not opinions. This tutorial shows you how to get it.
 
 In 90 minutes, you'll run actual A/B tests that answer:
 
-🔍 **Does strict security kill user satisfaction?**
-💰 **Is Claude Opus 4 worth 33% more than GPT-4o?**
+**Does strict security kill user satisfaction?**
+**Is Claude Opus 4 worth 33% more than GPT-4o?**
 
 *Spoiler: The answers will surprise you.*
 
@@ -29,7 +29,7 @@ In 90 minutes, you'll run actual A/B tests that answer:
 
 ## Quick Start Options
 
-### 🚀 **Option 1: Just Want the Concepts?** (5 min read)
+### **Option 1: Just Want the Concepts?** (5 min read)
 Skip to [Understanding the Experiments](#understanding-your-two-experiments) to learn the methodology without running code.
 
 ### 🛠️ **Option 2: Full Hands-On Tutorial** (90 min)
