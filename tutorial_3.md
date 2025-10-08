@@ -151,54 +151,58 @@ This creates the `claude-opus-treatment` variation for the Premium Model Value e
 
 ### **Step 3: Configure Security Agent Experiment**
 
-Navigate to **AI Configs → security-agent → Create experiment**. You'll see a 4-step configuration flow:
+Navigate to **AI Configs → security-agent → Experiments** tab → **Create experiment**.
 
-#### **Section 1: Experiment Details**
+#### **Experiment Design**
 
-Fill in these fields:
+**Experiment type:**
+- Keep `Feature change` selected (default)
 
-> **Experiment name:**
-> ```
-> Security Level
-> ```
->
-> **Hypothesis:**
-> ```
-> Enhanced security improves safety compliance without significantly harming user satisfaction
-> ```
+**Name:** `Security Level`
 
-#### **Section 2: Select Metrics**
+#### **Hypothesis and Metrics**
 
-Click the metrics dropdown and add:
+**Hypothesis:** `Enhanced security improves safety compliance without significantly harming user satisfaction`
 
-> **Primary metric:** `positive.feedback.rate`
->
-> **Secondary metrics:**
-> - `p95_total_user_latency`
-> - `average_total_user_tokens`
-> - `negative.feedback.rate`
+**Randomize by:** `user`
 
-#### **Section 3: Define Audience**
+**Metrics:** Click "Select metrics or metric groups" and add:
+1. `Positive feedback rate` → Select first to set as **Primary**
+2. `Negative feedback rate` 
+3. `p95_total_user_latency`
+4. `ai_cost_per_request`
 
-The AI Config `security-agent` is pre-selected. Add targeting:
+#### **Audience Targeting**
 
-> **Targeting rule:** Select `If Context` → `is in Segment` → `Other Paid`
+**Flag or AI Config**
+- Click the dropdown and select **security-agent**
 
-#### **Section 4: Confirm Allocation**
+**Targeting rule:** 
+- Click the dropdown and select **Rule 4**
+- This will configure: `If Context` → `is in Segment` → `Other Paid`
 
-Enable absolute percentage display:
+#### **Audience Allocation**
 
-> **☑ Show absolute percentage**
->
-> **100%** of `user` contexts are in this experiment
+**Variations served outside of this experiment:** 
+- `Basic Security`
 
-Click **"Allocation split"** to configure variations:
+**Sample size:** Set to `100%` of users in this experiment
 
-> **Basic Security** (Control): `50%` → Select variation: `baseline`
->
-> **Strict Security** (Treatment): `50%` → Select variation: `enhanced`
+**Variations split:** Click "Edit" and configure:
+- `pii-detector`: `0%`
+- `Basic Security`: `50%`
+- `Strict Security`: `50%`
 
-Review and click **"Start experiment"** to launch.
+**Control:** 
+- `Basic Security`
+
+#### **Statistical Approach and Success Criteria**
+
+**Statistical approach:** `Bayesian`
+**Threshold:** `90%`
+
+Click **"Save"** 
+Click **"Start experiment"** to launch.
 
 <br>
 
@@ -216,55 +220,63 @@ Review and click **"Start experiment"** to launch.
 
 ### **Step 4: Configure Premium Model Experiment**
 
-Navigate to **AI Configs → support-agent → Create experiment**. Follow the same 4-step flow:
+Navigate to **AI Configs → support-agent → Experiments** tab → **Create experiment**.
 
-#### **Section 1: Experiment Details**
+#### **Experiment Design**
 
-Fill in these fields:
+**Experiment type:**
+- Keep `Feature change` selected (default)
 
-> **Experiment name:**
-> ```
-> Premium Model Value Analysis
-> ```
->
-> **Hypothesis:**
-> ```
-> Claude Opus 4 justifies premium cost with superior satisfaction
-> ```
+**Name:** `Premium Model Value Analysis`
 
-#### **Section 2: Select Metrics**
+#### **Hypothesis and Metrics**
 
-Click the metrics dropdown and add:
+**Hypothesis:** `Claude Opus 4 justifies premium cost with superior satisfaction`
 
-> **Primary metric:** `positive.feedback.rate`
->
-> **Secondary metrics:**
-> - `negative.feedback.rate`
-> - `p95_total_user_latency`
-> - `average_total_user_tokens`
-> - `ai_cost_per_request`
+**Randomize by:** `user`
 
-#### **Section 3: Define Audience**
+**Metrics:** Click "Select metrics or metric groups" and add:
+1. `Positive feedback rate` → Select first to set as **Primary**
+2. `Negative feedback rate`
+3. `p95_total_user_latency`
+4. `average_total_user_tokens`
+5. `ai_cost_per_request`
 
-The AI Config `support-agent` is pre-selected. Add targeting:
+#### **Audience Targeting**
 
-> **Targeting rule:** Select `If Context` → `is in Segment` → `Other Paid`
+**Flag or AI Config**
+- Click the dropdown and select **support-agent**
 
-#### **Section 4: Confirm Allocation**
+**Targeting rule:**
+- Click the dropdown and select **Rule 4**
+- This will configure: `If Context` → `is in Segment` → `Other Paid`
 
-Enable absolute percentage display:
+#### **Audience Allocation**
 
-> **☑ Show absolute percentage**
->
-> **100%** of `user` contexts are in this experiment
+**Variations served outside of this experiment:** 
+- `other-paid`
 
-Click **"Allocation split"** to configure variations:
+**Sample size:** Set to `100%` of users in this experiment
 
-> **Other Paid** (Control): `50%` → Select variation: `other-paid`
->
-> **Claude Opus 4 Treatment** (Treatment): `50%` → Select variation: `claude-opus-treatment`
+**Variations split:** Click "Edit" and configure:
+- `rag-search-enhanced`: `0%`
+- `eu-free`: `0%`
+- `eu-paid`: `0%`
+- `other-free`: `0%`
+- `other-paid`: `50%`
+- `international-standard`: `0%`
+- `claude-opus-treatment`: `50%`
 
-Review and click **"Start experiment"** to launch.
+**Control:** 
+- `other-paid`
+
+#### **Statistical Approach and Success Criteria**
+
+**Statistical approach:** `Bayesian`
+**Threshold:** `90%`
+
+Click **"Save"** 
+Click **"Start experiment"** to launch.
 
 <br>
 
@@ -341,12 +353,8 @@ python tools/traffic_generator.py --queries 50 --delay 2
 ```
 
 **What Happens (Both Options)**:
-- **Knowledge base analysis**: Extracts 20+ topics from your documents using Claude
-- **Random query generation**: Each query picks random topic from analyzed KB
-- **AI-powered feedback**: Claude evaluates each response to determine if a user would give positive/negative/no feedback based on answer quality
-- **LaunchDarkly data**: Feedback and cost metrics sent to experiments for analysis
-- **Dual experiments**: Same queries feed both security agent and model experiments
-- **Cost tracking**: Real dollar costs calculated and tracked per request
+
+The simulation begins with knowledge base analysis, where Claude extracts 20+ topics from your documents to create a realistic query foundation. During execution, each query randomly selects from these analyzed topics to ensure diverse, relevant testing scenarios. AI-powered feedback evaluation follows, with Claude assessing each response to determine whether a real user would provide positive, negative, or no feedback based on answer quality and relevance. All feedback and cost metrics are automatically sent to LaunchDarkly for experiment analysis, while dual experiments run simultaneously—the same queries feed both your security agent and model experiments for direct comparison. Throughout the process, real dollar costs are calculated and tracked per request, giving you accurate financial impact data for each experimental variation.
 
 **Progress Example (Concurrent)**:
 ```
@@ -455,10 +463,7 @@ ELSE keep_gpt4o()
 
 ### **Understanding Cost-Value Thresholds**
 
-The 0.25 cost-value threshold means that for every 1% increase in cost, we need at least 0.25% improvement in satisfaction. This is a pragmatic threshold that:
-- Accounts for margin requirements
-- Ensures sustainable unit economics
-- Balances quality improvements with cost constraints
+The 0.25 cost-value threshold means that for every 1% increase in cost, we need at least 0.25% improvement in satisfaction. This is a pragmatic threshold that accounts for margin requirements, ensures sustainable unit economics, and balances quality improvements with cost constraints.
 
 **Alternative Scenarios Where Opus 4 Would Win:**
 - If Opus 4 averaged $0.25/user (58% increase): Ratio = 22.6% / 58% = 0.39 ✅

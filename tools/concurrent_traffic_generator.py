@@ -66,7 +66,7 @@ Reply with ONLY one of these:
 Most users don't give feedback unless the answer is notably good or bad."""
 
         try:
-            ai_response = self.anthropic.messages.create(
+            ai_response = self.claude.messages.create(
                 model="claude-3-haiku-20240307",
                 max_tokens=10,
                 messages=[{"role": "user", "content": prompt}]
