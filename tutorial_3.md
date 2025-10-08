@@ -23,8 +23,6 @@ In 90 minutes, you'll run actual A/B tests that answer:
 **Does strict security kill user satisfaction?**
 **Is Claude Opus 4 worth 33% more than GPT-4o?**
 
-*Spoiler: The answers will surprise you.*
-
 *Part 3 of 3: **Chaos to Clarity: Defensible AI Systems That Deliver***
 
 ## Quick Start Options
@@ -45,7 +43,7 @@ Follow the complete guide to run your own experiments.
 
 **Investment:**
 - Time: ~90 minutes (25 min setup, 60 min data collection, 5 min analysis)
-- Cost: $35-45 default ($5-10 with `--queries 50`)
+- Cost: $25-35 default ($5-10 with `--queries 50`)
 
 </details>
 
@@ -486,15 +484,6 @@ After 107-108 judge model evaluations per variation:
 
 **Read across:** GPT-4o dominates on performance, speed, and cost
 
-**Cost-Performance Analysis:**
-```python
-# Claude Opus 4 vs Other Paid (GPT-4o)
-satisfaction_rate = 5.31% / 14.55% = 0.365  # 36.5% as effective
-cost_increase = 33.31%                       # 33% more expensive
-latency_increase = 80.69%                    # 81% slower
-token_increase = 73.51%                      # 74% more tokens
-```
-
 **Decision Logic:**
 ```
 IF treatment_feedback_rate > control_feedback_rate
@@ -515,29 +504,20 @@ The experiment conclusively answers the question: Claude Opus 4 does NOT justify
 </div>
 
 <br>
+
 ### **Key Insights from Real Experiment Data**
 
-These actual results demonstrate several critical lessons about AI experimentation:
+**1. Test Your Assumptions**
 
-**1. Judge Model Preferences Can Be Counter-Intuitive**
+Both experiments challenged conventional wisdom. "Stricter security" reduced satisfaction by 39%. "Premium models" performed 63% worse. What seems like obvious improvements often aren't—data beats intuition.
 
-The security experiment revealed a surprising truth: basic security with 62% positive feedback dramatically outperformed strict security at just 38%. This teaches us that the judge model values helpful, complete responses over strict PII filtering. What initially seems like an improvement (stricter security protocols) can actually harm the evaluation significantly. This finding challenges our assumptions about what constitutes better AI safety features.
+**2. Statistical Rigor Prevents Expensive Mistakes**
 
-**2. Premium Models Don't Always Mean Better Results**
+Only 37.86% probability that strict security helps vs. 99.52% that GPT-4o beats Opus 4. LaunchDarkly's statistical engine prevents costly decisions based on random variation or wishful thinking.
 
-The model experiment delivered another surprise: GPT-4o comprehensively outperformed Claude Opus 4 on every single metric. With 14.55% positive feedback versus Opus 4's 5.31%, GPT-4o proved 2.7x more effective while being 1.8x faster (123ms vs 223ms P95 latency) and 25% cheaper ($0.0119 vs $0.0159 per request). This definitively proves that newer or more expensive models aren't automatically better for your specific use case.
+**3. Multiple Metrics Reveal Trade-offs**
 
-**3. Statistical Significance Matters**
-
-Both experiments highlight the importance of statistical rigor. The security experiment showed only 37.86% probability to beat control, far below the 90% threshold needed for confidence. Meanwhile, the model experiment showed 99.52% probability that the control is better—an extremely conclusive result. LaunchDarkly's statistical engine prevents us from making costly decisions based on false positives or random variation.
-
-**4. Multiple Metrics Tell the Complete Story**
-
-Looking beyond primary metrics revealed important nuances. Strict security reduced negative feedback by 51% but completely killed overall satisfaction. Claude Opus 4 used 74% more tokens without improving quality, revealing inefficiency alongside poor performance. These findings emphasize the need to optimize for primary metrics while carefully monitoring secondary impacts that could affect the overall user experience.
-
-**5. Cost-Performance Trade-offs Are Critical**
-
-GPT-4o emerged as the clear winner, delivering better results at lower cost with faster speed—a rare scenario with no trade-offs required. The decision becomes straightforward when one option excels across all dimensions. In alternative scenarios, if Opus 4 had shown 40% improvement in satisfaction, the 33% cost increase might have been justifiable, but the actual results show performance degradation alongside cost increases.
+Primary metrics tell you what to optimize for, but secondary metrics reveal the cost. Strict security did reduce complaints (-51%) but killed overall satisfaction. Always monitor the full picture before deciding.
 
 
 ## Experimental Limitations & Mitigations
