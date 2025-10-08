@@ -30,7 +30,7 @@ In 90 minutes, you'll run actual A/B tests that answer:
 ### **Option 1: Just Want the Concepts?** (5 min read)
 Skip to [Understanding the Experiments](#understanding-your-two-experiments) to learn the methodology without running code.
 
-### 🛠️ **Option 2: Full Hands-On Tutorial** (90 min)
+### **Option 2: Full Hands-On Tutorial** (90 min)
 Follow the complete guide to run your own experiments.
 
 <details>
@@ -496,7 +496,7 @@ ELSE keep_current_model()
 
 **Answer: No - Claude Opus 4 fails to justify its premium cost**
 
-The experiment conclusively answers the question: Claude Opus 4 does NOT justify its premium pricing with superior satisfaction. In fact, it delivers dramatically worse satisfaction at a higher cost. Claude Opus 4 has a 99.52% probability of being worse than GPT-4o. The positive feedback rate is 63% lower (5.31% vs 14.55%) despite being 33% more expensive. Response times are nearly 2x slower (223ms vs 123ms), which harms the user experience. Additionally, Opus 4 uses 74% more tokens while delivering demonstrably worse results. This is a clear case where the premium model fails on every dimension—cost, performance, and satisfaction—making GPT-4o the obvious choice for paid users.
+The experiment conclusively answers the question: Claude Opus 4 does NOT justify its premium pricing with superior satisfaction. In fact, it delivers dramatically worse satisfaction at a higher cost. Claude Opus 4 has a 99.52% probability of being worse than GPT-4o. The positive feedback rate is 63% lower (5.31% vs 14.55%) despite being 33% more expensive. Response times are nearly 2x slower (223ms vs 123ms), which harms the user experience. Additionally, Opus 4 uses 74% more tokens while delivering demonstrably worse results. This is a clear case where the premium model fails on every dimension: cost, performance, and satisfaction. GPT-4o is the obvious choice for paid users.
 <br>
 
 <div align="center">
@@ -509,7 +509,7 @@ The experiment conclusively answers the question: Claude Opus 4 does NOT justify
 
 **1. Test Your Assumptions**
 
-Both experiments challenged conventional wisdom. "Stricter security" reduced satisfaction by 39%. "Premium models" performed 63% worse. What seems like obvious improvements often aren't—data beats intuition.
+Both experiments challenged conventional wisdom. "Stricter security" reduced satisfaction by 39%. "Premium models" performed 63% worse. What seems like obvious improvements often aren't; data beats intuition.
 
 **2. Statistical Rigor Prevents Expensive Mistakes**
 
@@ -524,20 +524,20 @@ Primary metrics tell you what to optimize for, but secondary metrics reveal the 
 
 **Model-as-Judge Evaluation**
 
-We use Claude to evaluate response quality rather than real users, which represents a limitation of this experimental setup. However, research shows that model-as-judge approaches correlate well with human preferences, as documented in Anthropic's Constitutional AI paper. To strengthen confidence in these findings, the next step would be to validate results with a smaller human evaluation study, examining 20-30 responses per variation to confirm the model's assessments align with actual user preferences.
+We use Claude to evaluate response quality rather than real users, which represents a limitation of this experimental setup. However, research shows that model-as-judge approaches correlate well with human preferences, as documented in [Anthropic's Constitutional AI paper](https://arxiv.org/abs/2212.08073). To strengthen confidence in these findings, the next step would be to validate results with a smaller human evaluation study, examining 20-30 responses per variation to confirm the model's assessments align with actual user preferences.
 
 **Sample Size**
 
-With approximately 100 users per variation, we're at the minimum threshold for detecting 15-20% effects reliably. Fortunately, both experiments showed large, clear effects—the security experiment revealed a 39% difference and the model experiment showed a 63% difference—making the results conclusive despite the modest sample size. For experiments where you expect smaller effects (under 10%), you should increase the sample to 200-300 users per variation to ensure adequate statistical power.
+With approximately 100 users per variation, we're at the minimum threshold for detecting 15-20% effects reliably. Fortunately, both experiments showed large, clear effects: the security experiment revealed a 39% difference and the model experiment showed a 63% difference. This makes the results conclusive despite the modest sample size. For experiments where you expect smaller effects (under 10%), you should increase the sample to 200-300 users per variation to ensure adequate statistical power.
 
 **Independent Experiments**
 
-LaunchDarkly treats these as two separate experiments rather than a factorial design, which limits our ability to analyze interactions. While random assignment naturally balances security versions across model versions, preventing systematic bias, you cannot analyze interaction effects between security and model choices. For example, we cannot determine if Claude Opus 4 might perform better specifically with strict security settings. If interaction effects are important to your use case, consider running a proper factorial experiment design.
+LaunchDarkly treats these as two separate experiments rather than a factorial design, which limits our ability to analyze interactions. While random assignment naturally balances security versions across model versions, preventing systematic bias, you cannot analyze interaction effects between security and model choices. For example, we cannot determine if Claude Opus 4 might perform better specifically with strict security settings. If interaction effects are important to your use case, consider running a proper [factorial experiment design](https://en.wikipedia.org/wiki/Factorial_experiment).
 
 **Statistical Confidence**
-LaunchDarkly uses **Bayesian statistics** to calculate confidence, where 90% confidence means there's a 90% probability the true effect is positive. This is NOT the same as p-value < 0.10 from frequentist tests. We set the threshold at 90% (rather than 95%) to balance false positives versus false negatives, though for mission-critical features you should consider raising the confidence threshold to 95%.
+LaunchDarkly uses **[Bayesian statistics](https://launchdarkly.com/docs/home/experimentation/bayesian)** to calculate confidence, where 90% confidence means there's a 90% probability the true effect is positive. This is NOT the same as p-value < 0.10 from [frequentist tests](https://en.wikipedia.org/wiki/Frequentist_inference). We set the threshold at 90% (rather than 95%) to balance false positives versus false negatives, though for mission-critical features you should consider raising the confidence threshold to 95%.
 
-## ⚠️ Common Mistakes We Avoided
+## Common Mistakes We Avoided
 
 ❌ **"Let's run the experiment for a week and see"**
 ✅ **We defined success criteria upfront** (≥15% improvement, 90% confidence)
@@ -598,45 +598,45 @@ Run experiments comparing streaming versus batch responses, token budget limits,
 
 **Progressive Testing Strategy:**
 
-1. **🧪 Offline testing** - Golden datasets, synthetic queries, LLM-as-judge
+1. **Offline testing** - Golden datasets, synthetic queries, LLM-as-judge
    - Catches obvious failures without risking users
 
-2. **👥 Shadow testing** - Replay production traffic behind the scenes
+2. **Shadow testing** - Replay production traffic behind the scenes
    - Reveals issues offline testing misses
 
-3. **🚀 Canary deployment** - Start with 1-5% of traffic
+3. **Canary deployment** - Start with 1-5% of traffic
    - Expand based on metrics, auto-rollback on degradation
 
-**Advanced Practices:** Moving forward, require statistical proof before deploying any new AI configuration changes. A/B test your prompt engineering modifications to measure instruction variations with concrete outcomes. When model updates become available, compare versions using confidence intervals to ensure improvements are real. Consider exploring advanced experimental designs like multi-armed bandits for faster convergence, sequential analysis for early stopping, and factorial designs to understand interaction effects between multiple AI components.
+**Advanced Practices:** Moving forward, require statistical proof before deploying any new AI configuration changes. A/B test your prompt engineering modifications to measure instruction variations with concrete outcomes. When model updates become available, compare versions using confidence intervals to ensure improvements are real. Consider exploring advanced experimental designs like [multi-armed bandits](https://en.wikipedia.org/wiki/Multi-armed_bandit) for faster convergence, [sequential analysis](https://en.wikipedia.org/wiki/Sequential_analysis) for early stopping, and [factorial designs](https://en.wikipedia.org/wiki/Factorial_experiment) to understand interaction effects between multiple AI components.
 
 ## From Chaos to Clarity
 
-Across this three-part series, you've transformed from hardcoded AI configurations to a scientifically rigorous, data-driven optimization engine. **[Part 1](tutorial_1.md)** established your foundation with a dynamic multi-agent LangGraph system controlled by LaunchDarkly AI Configs, eliminating the need for code deployments when adjusting AI behavior. **[Part 2](tutorial_2.md)** added sophisticated targeting with geographic privacy rules, user segmentation by plan tiers, and MCP tool integration for real academic research capabilities. **[Part 3](tutorial_3.md)** completed your journey with statistical experimentation that proves ROI and guides optimization decisions with mathematical confidence rather than intuition.
+Across this three-part series, you've transformed from hardcoded AI configurations to a scientifically rigorous, data-driven optimization engine. **[Part 1](tutorial_1.md)** established your foundation with a dynamic multi-agent [LangGraph](https://langchain-ai.github.io/langgraph/) system controlled by [LaunchDarkly AI Configs](https://launchdarkly.com/ai-config/), eliminating the need for code deployments when adjusting AI behavior. **[Part 2](tutorial_2.md)** added sophisticated targeting with geographic privacy rules, user segmentation by plan tiers, and [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) tool integration for real academic research capabilities. **[Part 3](tutorial_3.md)** completed your journey with statistical experimentation that proves ROI and guides optimization decisions with mathematical confidence rather than intuition.
 
 You now possess a defensible AI system that adapts to changing requirements, scales across user segments, and continuously improves through measured experimentation. Your stakeholders receive concrete evidence for AI investments, your engineering team deploys features with statistical backing, and your users benefit from optimized experiences driven by real data rather than assumptions. The chaos of ad-hoc AI development has given way to clarity through systematic, scientific product development.
 
 ## Your Next Steps
 
 ### **This Week**
-✅ Run one small experiment on your production traffic
-✅ Challenge one assumption with data (e.g., "Is GPT-4 really better than GPT-3.5 for our use case?")
-✅ Share results with your team - data beats opinions
+- Run one small experiment on your production traffic
+- Challenge one assumption with data (e.g., "Is GPT-4 really better than GPT-3.5 for our use case?")
+- Share results with your team - data beats opinions
 
 ### **This Month**
-📊 Build experiment templates for common questions
-📊 Create a metrics dashboard for ongoing monitoring
-📊 Document which experiments worked (and which didn't)
+- Build experiment templates for common questions
+- Create a metrics dashboard for ongoing monitoring
+- Document which experiments worked (and which didn't)
 
 ### **This Quarter**
-🚀 Establish a culture where no AI change ships without metrics
-🚀 Build a library of proven configurations
-🚀 Use data to justify (or reject) expensive AI investments
+- Establish a culture where no AI change ships without metrics
+- Build a library of proven configurations
+- Use data to justify (or reject) expensive AI investments
 
 ## Resources & Community
 
 - **[LaunchDarkly Experimentation Docs](https://launchdarkly.com/docs/home/experimentation)** - Deep dive into statistical methods
 - **[AI Config Best Practices](https://launchdarkly.com/docs/home/experimentation/types)** - LLM-specific patterns
-- **Questions?** Open an issue in the [GitHub repo](https://github.com/launchdarkly/agents-demo)
+- **Questions?** Open an issue in the [GitHub repo](https://github.com/anthropics/claude-code/issues)
 - **Share your results** with #ai-experiments in our community Slack
 
 ---
