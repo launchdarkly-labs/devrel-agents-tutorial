@@ -3,11 +3,29 @@ Helper functions for LaunchDarkly AI agents - simplified version
 """
 import asyncio
 import json
+import time
 from typing import List, Any, Tuple, Optional
 from langchain.chat_models import init_chat_model
 from langgraph.prebuilt import create_react_agent
 from ldai.tracker import TokenUsage
 from utils.logger import log_student
+
+# Simple rate limiter to prevent hitting API limits
+_last_llm_call_time = 0
+_min_call_interval = 1.0  # 1 second between LLM calls
+
+def _rate_limit_llm_call():
+    """Simple rate limiter for LLM calls"""
+    global _last_llm_call_time
+    current_time = time.time()
+    time_since_last_call = current_time - _last_llm_call_time
+
+    if time_since_last_call < _min_call_interval:
+        sleep_time = _min_call_interval - time_since_last_call
+        log_student(f"Rate limiting: waiting {sleep_time:.2f}s")
+        time.sleep(sleep_time)
+
+    _last_llm_call_time = time.time()
 
 
 def map_provider_to_langchain(provider_name):
@@ -147,15 +165,60 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                     user_context=user_context
                 )
 
+                # Apply rate limiting before LLM call
+                _rate_limit_llm_call()
+
                 # Execute agent with tracking
-                response = await config_manager.track_metrics_async(
-                    tracker,
-                    lambda: agent.ainvoke(initial_state),
-                    model_name=agent_config.model.name,
-                    user_id=user_id,
-                    user_context=user_context,
-                    prev_message_count=prev_message_count
-                )
+                start_time = time.time()
+                try:
+                    # Execute agent
+                    response = await agent.ainvoke(initial_state)
+
+                    # Track success and latency
+                    tracker.track_success()
+                    latency_ms = int((time.time() - start_time) * 1000)
+                    if hasattr(tracker, 'track_latency_ms'):
+                        tracker.track_latency_ms(latency_ms)
+
+                    # Extract token usage from new messages
+                    new_messages = response['messages'][prev_message_count:]
+                    total_input = 0
+                    total_output = 0
+
+                    for msg in new_messages:
+                        if hasattr(msg, 'usage_metadata') and msg.usage_metadata:
+                            total_input += msg.usage_metadata.get('input_tokens', 0)
+                            total_output += msg.usage_metadata.get('output_tokens', 0)
+
+                    # Track tokens if found
+                    if total_input > 0 or total_output > 0:
+                        token_usage = TokenUsage(
+                            input=total_input,
+                            output=total_output,
+                            total=total_input + total_output
+                        )
+                        tracker.track_tokens(token_usage)
+                        log_student(f"AGENT TOKENS: {token_usage.total} tokens ({token_usage.input} in, {token_usage.output} out)")
+
+                        # Track cost metric
+                        from utils.cost_calculator import calculate_cost
+                        from ldclient import Context
+                        cost = calculate_cost(agent_config.model.name, total_input, total_output)
+                        if cost > 0:
+                            context_builder = Context.builder(user_id).kind('user')
+                            if user_context:
+                                for key, value in user_context.items():
+                                    context_builder.set(key, value)
+                            ld_context = context_builder.build()
+
+                            # Track cost as custom event
+                            config_manager.ld_client.track("ai_cost_per_request", ld_context, None, cost)
+                            log_student(f"COST TRACKING: ${cost:.6f} for {agent_config.model.name}")
+                            config_manager.ld_client.flush()
+
+                except Exception as e:
+                    tracker.track_error()
+                    raise
 
                 # Extract new messages
                 new_messages = response['messages'][prev_message_count:]

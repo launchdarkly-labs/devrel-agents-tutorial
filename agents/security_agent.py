@@ -130,6 +130,10 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
             system_message = SystemMessage(content=agent_config.instructions)
             full_messages = [system_message] + messages
 
+            # Apply rate limiting before LLM call
+            from agents.ld_agent_helpers import _rate_limit_llm_call
+            _rate_limit_llm_call()
+
             # Call model with structured output
             if hasattr(structured_model, "ainvoke"):
                 response = await structured_model.ainvoke(full_messages)
@@ -151,7 +155,25 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
                     )
                     agent_config.tracker.track_tokens(token_usage)
                     log_student(f"SECURITY PII DETECTION TOKENS: {token_usage.total} tokens ({token_usage.input} in, {token_usage.output} out)")
-            
+
+                    # Track cost metric directly to LaunchDarkly
+                    from utils.cost_calculator import calculate_cost
+                    from ldclient import Context
+                    cost = calculate_cost(agent_config.model.name, token_usage.input, token_usage.output)
+                    if cost > 0:
+                        # Build context with user attributes for LaunchDarkly
+                        context_builder = Context.builder(state.get("user_id", "security_user")).kind('user')
+                        user_context_data = state.get("user_context", {})
+                        if user_context_data:
+                            for key, value in user_context_data.items():
+                                context_builder.set(key, value)
+                        ld_context = context_builder.build()
+
+                        # Track cost as custom event
+                        config_manager.ld_client.track("ai_cost_per_request", ld_context, None, cost)
+                        log_student(f"COST TRACKING: ${cost:.6f} for {agent_config.model.name}")
+                        config_manager.ld_client.flush()
+
             # Track success metric
             agent_config.tracker.track_success()
 
@@ -176,11 +198,7 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
             # Track error with LDAI metrics
             try:
                 if 'agent_config' in locals() and agent_config and hasattr(agent_config, 'tracker'):
-                    config_manager.track_metrics(
-                        agent_config.tracker,
-                        lambda: (_ for _ in ()).throw(e),  # Trigger error tracking
-                        model_name=agent_config.model.name
-                    )
+                    agent_config.tracker.track_error()
             except:
                 pass
             
