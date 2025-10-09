@@ -200,21 +200,16 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                         tracker.track_tokens(token_usage)
                         log_student(f"AGENT TOKENS: {token_usage.total} tokens ({token_usage.input} in, {token_usage.output} out)")
 
-                        # Track cost metric
+                        # Track cost metric with AI Config metadata for experiment attribution
                         from utils.cost_calculator import calculate_cost
-                        from ldclient import Context
                         cost = calculate_cost(agent_config.model.name, total_input, total_output)
                         if cost > 0:
-                            context_builder = Context.builder(user_id).kind('user')
-                            if user_context:
-                                for key, value in user_context.items():
-                                    context_builder.set(key, value)
-                            ld_context = context_builder.build()
+                            # Use centralized context builder to ensure exact match with AI Config evaluation
+                            ld_context = config_manager.build_context(user_id, user_context)
 
-                            # Track cost as custom event
-                            config_manager.ld_client.track("ai_cost_per_request", ld_context, None, cost)
+                            # Track cost with metadata for experiment attribution
+                            config_manager.track_cost_metric(agent_config, ld_context, cost)
                             log_student(f"COST TRACKING: ${cost:.6f} for {agent_config.model.name}")
-                            config_manager.ld_client.flush()
 
                 except Exception as e:
                     tracker.track_error()

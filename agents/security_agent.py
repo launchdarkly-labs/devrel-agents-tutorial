@@ -156,23 +156,18 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
                     agent_config.tracker.track_tokens(token_usage)
                     log_student(f"SECURITY PII DETECTION TOKENS: {token_usage.total} tokens ({token_usage.input} in, {token_usage.output} out)")
 
-                    # Track cost metric directly to LaunchDarkly
+                    # Track cost metric with AI Config metadata for experiment attribution
                     from utils.cost_calculator import calculate_cost
-                    from ldclient import Context
                     cost = calculate_cost(agent_config.model.name, token_usage.input, token_usage.output)
                     if cost > 0:
-                        # Build context with user attributes for LaunchDarkly
-                        context_builder = Context.builder(state.get("user_id", "security_user")).kind('user')
+                        # Use centralized context builder to ensure exact match with AI Config evaluation
+                        user_id = state.get("user_id", "security_user")
                         user_context_data = state.get("user_context", {})
-                        if user_context_data:
-                            for key, value in user_context_data.items():
-                                context_builder.set(key, value)
-                        ld_context = context_builder.build()
+                        ld_context = config_manager.build_context(user_id, user_context_data)
 
-                        # Track cost as custom event
-                        config_manager.ld_client.track("ai_cost_per_request", ld_context, None, cost)
+                        # Track cost with metadata for experiment attribution
+                        config_manager.track_cost_metric(agent_config, ld_context, cost)
                         log_student(f"COST TRACKING: ${cost:.6f} for {agent_config.model.name}")
-                        config_manager.ld_client.flush()
 
             # Track success metric
             agent_config.tracker.track_success()

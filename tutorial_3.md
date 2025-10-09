@@ -15,7 +15,7 @@
 
 ## The Problem
 
-Your CEO asks: **"Is the expensive AI model worth it?"**
+Your CEO asks: **"Is the new expensive AI model worth it?"**
 
 Your security team demands: **"Can we add stricter PII filtering?"**
 
@@ -35,7 +35,7 @@ In 30 minutes, you'll run actual A/B tests that answer:
 ### **Option 1: Just Want the Concepts?** (5 min read)
 Skip to [Understanding the Experiments](#understanding-your-two-experiments) to learn the methodology without running code.
 
-### **Option 2: Full Hands-On Tutorial** (90 min)
+### **Option 2: Full Hands-On Tutorial** (30 min)
 Follow the complete guide to run your own experiments.
 
 <details>
@@ -62,7 +62,7 @@ Follow the complete guide to run your own experiments.
 3. **AI responses** are evaluated for quality and tracked for cost/speed
 4. **LaunchDarkly** calculates statistical significance automatically
 
-**Note**: The two experiments run independently. Each user participates in both, but the results are analyzed separately.
+**Note**: The two experiments can run independently. Each user can participate in both, but the results are analyzed separately.
 
 **Pro tip**: You can stop experiments early once they reach statistical significance. In our case, we ran ~200 queries total and the premium model experiment reached significance first (99.52% confidence that GPT-4o is better). We then stopped that experiment and continued running the security experiment until it also reached significance, maximizing our statistical power while minimizing experiment runtime.
 
@@ -293,9 +293,9 @@ Click **"Start experiment"** to launch.
 
 ## Understanding Your Experimental Design
 
-**Two Independent Experiments Running Concurrently:**
+**If Two Independent Experiments Running Concurrently:**
 
-Since these are the **same 200 users**, each user experiences:
+Since these are the **same users**, each user experiences:
 - One security variation (baseline OR enhanced)
 - One model variation (GPT-4o OR Opus 4)
 
@@ -323,8 +323,9 @@ uv run python -u tools/concurrent_traffic_generator.py --queries 200 --concurren
 - **200 queries** by default (edit script to adjust)
 - **10 concurrent requests** running in parallel
 - **2000-second timeout** (33 minutes) per request to handle MCP tool rate limits
-- **~40-60 minutes** total runtime (vs 66+ hours sequential for 200 queries)
 - **Logs saved** to `logs/concurrent_experiment_TIMESTAMP.log`
+
+Note: runtime depends largely on if you retain MCP tool enablement as these take much longer to complete.
 
 <details>
 <summary>For smaller test runs or debugging</summary>
@@ -501,7 +502,7 @@ LaunchDarkly uses **[Bayesian statistics](https://launchdarkly.com/docs/home/exp
 
 ❌ **"Opus 4 is newer, so it must be better"**
 
-✅ **We tested the assumption** (turned out to be 63% worse)
+✅ **We tested the assumption** (turned out to be 64% worse)
 
 ❌ **"This metric looks good enough to ship"**
 
@@ -533,29 +534,23 @@ If `ai_cost_per_request` events aren't showing in LaunchDarkly, first verify tha
 
 ### **Other AI Experimentation Types Available in LaunchDarkly**
 
-While this tutorial focused on model selection and safety configurations, LaunchDarkly AI Configs support a comprehensive range of AI experimentation patterns:
+Even beyond the experiments you ran here, LaunchDarkly AI Configs give you two big buckets of opportunities:
 
-**Prompt & Template Experiments**
+**Experiments you can run only AI Config variations**
 
-Test different prompt structures, tones, and instruction sets to optimize output quality. Compare variations in few-shot examples, chain-of-thought reasoning patterns, or response formatting instructions. Measure adherence to output schemas and positive feedback rates with different communication styles.
+- `Prompt & Template Experiments` – clone a variation and iterate on instructions, tone, or few-shot examples to measure adherence to schemas or qualitative feedback.
+- `Tool & Model Bundles` – toggle `search_v2`, `reranking`, or MCP research tools per segment to validate different tool stacks, available directly through the `tools` array. 
+- `AI Model Parameters` –Iterate on `max_tool_calls`, `temperature` or other parameters.
+- `High-level Cost/Latency Trade-offs` – route cohorts between models such as Haiku vs Sonnet or slim vs premium tool sets to compare outcome quality versus spend.
 
-**RAG Configuration Testing**
+**Patterns that you can test using LaunchDarkly feature flags and/ or custom metrics**
 
-Experiment with retrieval parameters including reranking algorithms, and k-values for retrieval. Test different similarity thresholds, and hybrid search strategies. Measure retrieval relevance, response accuracy, and latency trade-offs.
+- `Fine-grained RAG tuning` – k-values, similarity thresholds, reranker swaps, and cache policies are currently hard-coded in the tool implementations; expose them via flags if you want to test them.
+- `Tool routing guardrails` – fallback flows, or error-handling heuristics need supporting logic in the agent wrapper before they can be toggled remotely.
+- `Safety guardrail calibration` – moderation thresholds, red-team prompts, and PII sensitivity levers require you to wire dedicated services or parameters into the security agent.
+- `Session budget enforcement` – add enforcement code and guard it with a flag when you are ready to experiment.
 
-**Tool & Function Calling Optimization**
-
-Compare different tool exposure strategies, routing thresholds, and fallback behaviors. Test when to use external APIs versus internal knowledge, how to handle tool failures gracefully, and optimal tool selection logic. Measure tool success rates and cost implications.
-
-**Safety Guardrail Calibration**
-
-Beyond our basic vs. strict security example, test different combinations of content filters, red-teaming responses, and compliance checks. Experiment with moderation thresholds, harmful content detection sensitivity, and PII handling strategies while measuring false positive rates and user friction.
-
-**Cost & Latency Trade-offs**
-
-Run experiments comparing token budget limits, and caching strategies. Test different model routing rules based on query complexity, user segments, or time-of-day patterns. Measure cost per successful outcome rather than just cost per request.
-
-**Advanced Practices:** Moving forward, require statistical proof before deploying any new AI configuration changes. A/B test your prompt engineering modifications to measure instruction variations with concrete outcomes. When model updates become available, compare versions using confidence intervals to ensure improvements are real. Consider exploring advanced experimental designs like [multi-armed bandits](https://launchdarkly.com/docs/home/multi-armed-bandits) for faster convergence, [sequential analysis](https://en.wikipedia.org/wiki/Sequential_analysis) for early stopping, and [factorial designs](https://docs.launchdarkly.com/guides/experimentation/designing-experiments) to understand interaction effects between multiple AI components.
+**Advanced Practices:** Require statistical evidence before shipping configuration changes. Pair each variation with clear success metrics, then A/B test prompt or tool adjustments and use confidence intervals to confirm improvements. When you introduce the new code paths above, protect them behind feature flags so you can run sequential tests, [multi-armed bandits](https://launchdarkly.com/docs/home/multi-armed-bandits) for faster convergence, or change your [experiment design](https://docs.launchdarkly.com/guides/experimentation/designing-experiments) to understand how prompts, tools, and safety levers interact.
 
 ## From Chaos to Clarity
 

@@ -4,7 +4,7 @@ from langchain_core.messages import HumanMessage, AIMessage, BaseMessage, System
 from .support_agent import create_support_agent
 from .security_agent import create_security_agent
 from config_manager import FixedConfigManager as ConfigManager
-from utils.logger import log_student
+from utils.logger import log_student, log_debug
 from pydantic import BaseModel
 
 def trim_message_history(messages: List[BaseMessage], max_messages: int = 10) -> List[BaseMessage]:
@@ -176,23 +176,18 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
                     supervisor_config.tracker.track_tokens(token_usage)
                     log_student(f"PII PRESCREEN TOKENS: {token_usage.total} tokens ({token_usage.input} in, {token_usage.output} out)")
 
-                    # Track cost metric directly to LaunchDarkly
+                    # Track cost metric with AI Config metadata for experiment attribution
                     from utils.cost_calculator import calculate_cost
-                    from ldclient import Context
                     cost = calculate_cost(supervisor_config.model.name, token_usage.input, token_usage.output)
                     if cost > 0:
-                        # Build context with user attributes for LaunchDarkly
-                        context_builder = Context.builder(state.get("user_id", "supervisor_user")).kind('user')
+                        # Use centralized context builder to ensure exact match with AI Config evaluation
+                        user_id = state.get("user_id", "supervisor_user")
                         user_context = state.get("user_context", {})
-                        if user_context:
-                            for key, value in user_context.items():
-                                context_builder.set(key, value)
-                        ld_context = context_builder.build()
+                        ld_context = config_manager.build_context(user_id, user_context)
 
-                        # Track cost as custom event
-                        config_manager.ld_client.track("ai_cost_per_request", ld_context, None, cost)
+                        # Track cost with metadata for experiment attribution
+                        config_manager.track_cost_metric(supervisor_config, ld_context, cost)
                         log_student(f"COST TRACKING: ${cost:.6f} for {supervisor_config.model.name}")
-                        config_manager.ld_client.flush()
 
             # Track success metric
             supervisor_config.tracker.track_success()
@@ -214,7 +209,9 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
 
         except Exception as e:
             # Fallback to security agent for safety
-            log_student(f"PII PRE-SCREENING ERROR: Defaulting to security agent for safety")
+            log_student(f"PII PRE-SCREENING ERROR: {type(e).__name__}: {str(e)}")
+            log_debug(f"PII PRE-SCREENING ERROR DETAIL: {e}")
+            log_student(f"FALLBACK: Defaulting to security agent for safety")
             return {
                 "current_agent": "security_agent",
                 "workflow_stage": "security_processing",

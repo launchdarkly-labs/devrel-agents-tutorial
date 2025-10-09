@@ -54,25 +54,29 @@ class FixedConfigManager:
         """Initialize AI client"""
         self.ai_client = LDAIClient(self.ld_client)
     
+    def build_context(self, user_id: str, user_context: dict = None) -> Context:
+        """Build a LaunchDarkly context with consistent attributes.
+        
+        This ensures the same context is used for both AI Config evaluation
+        and custom metric tracking, which is required for experiment association.
+        """
+        context_builder = Context.builder(user_id).kind('user')
+        
+        if user_context:
+            # Set all attributes from user_context for consistency
+            for key, value in user_context.items():
+                context_builder.set(key, value)
+                log_debug(f"CONFIG MANAGER: Set {key}={value}")
+        
+        return context_builder.build()
+    
     async def get_config(self, user_id: str, config_key: str = None, user_context: dict = None):
         """Get LaunchDarkly AI Config object directly - no wrapper"""
         log_debug(f"CONFIG MANAGER: Getting config for user_id={user_id}, config_key={config_key}")
         log_debug(f"CONFIG MANAGER: User context: {user_context}")
         
-        context_builder = Context.builder(user_id).kind('user')
-        
-        if user_context:
-            if 'country' in user_context:
-                context_builder.set('country', user_context['country'])
-                log_debug(f"CONFIG MANAGER: Set country={user_context['country']}")
-            if 'plan' in user_context:
-                context_builder.set('plan', user_context['plan'])
-                log_debug(f"CONFIG MANAGER: Set plan={user_context['plan']}")
-            if 'region' in user_context:
-                context_builder.set('region', user_context['region'])
-                log_debug(f"CONFIG MANAGER: Set region={user_context['region']}")
-        
-        ld_user_context = context_builder.build()
+        # Build context using centralized method
+        ld_user_context = self.build_context(user_id, user_context)
         log_debug(f"CONFIG MANAGER: Built LaunchDarkly context: {ld_user_context}")
         
         ai_config_key = config_key or os.getenv('LAUNCHDARKLY_AI_CONFIG_KEY', 'support-agent')
@@ -116,6 +120,33 @@ class FixedConfigManager:
     def flush_metrics(self):
         """Flush metrics to LaunchDarkly"""
         self.ld_client.flush()
+
+    def track_cost_metric(self, agent_config, context, cost):
+        """Track cost metric with AI Config metadata for experiment attribution.
+        
+        This ensures cost events include trackJsonData so they're properly
+        associated with AI Config variations in experiments, matching the
+        pattern used by token and feedback tracking.
+        """
+        try:
+            # Extract metadata from agent_config for experiment attribution
+            metadata = {
+                "version": 1,
+                "configKey": agent_config.key if hasattr(agent_config, 'key') else 'unknown',
+                "variationKey": agent_config.tracker._variation_key if hasattr(agent_config.tracker, '_variation_key') else 'unknown',
+                "modelName": agent_config.model.name if hasattr(agent_config, 'model') else 'unknown',
+                "providerName": agent_config.provider.name if hasattr(agent_config, 'provider') else 'unknown'
+            }
+            
+            # Track with metadata - this creates trackJsonData in the event
+            self.ld_client.track("ai_cost_per_request", context, metadata, cost)
+            self.ld_client.flush()
+            
+        except Exception as e:
+            log_debug(f"COST TRACKING ERROR: {e}")
+            # Fallback to basic tracking if metadata extraction fails
+            self.ld_client.track("ai_cost_per_request", context, None, cost)
+            self.ld_client.flush()
 
     def track_feedback(self, tracker, thumbs_up: bool):
         """Track user feedback with LaunchDarkly"""
