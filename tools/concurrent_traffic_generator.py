@@ -273,6 +273,7 @@ Complexity guide:
             }
 
             # Collect results as they complete
+            completed_count = 0
             for future in as_completed(future_to_task):
                 task = future_to_task[future]
                 query_num, topic, inject_pii = task
@@ -287,6 +288,10 @@ Complexity guide:
                         fallback_query = f"Can you explain {topic}?"
                     queries.append((query_num, fallback_query))
                     print(f"⚠️  Query {query_num} generation failed, using fallback")
+
+                completed_count += 1
+                if completed_count % 100 == 0 or completed_count == num_queries:
+                    print(f"📝 Generated {completed_count}/{num_queries} queries...")
 
         # Sort queries back to original order
         queries.sort(key=lambda x: x[0])

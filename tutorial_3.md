@@ -563,13 +563,9 @@ Across this three-part series, you've transformed from hardcoded AI configuratio
 
 You now possess a defensible AI system that adapts to changing requirements, scales across user segments, and continuously improves through measured experimentation. Your stakeholders receive concrete evidence for AI investments, your engineering team deploys features with statistical backing, and your users benefit from optimized experiences driven by real data rather than assumptions. The chaos of ad-hoc AI development has given way to clarity through systematic, scientific product development.
 
-## Resources & Community
+## Resources
 
 - **[LaunchDarkly Experimentation Docs](https://launchdarkly.com/docs/home/experimentation)** - Deep dive into statistical methods
-- **[AI Config Best Practices](https://launchdarkly.com/docs/home/experimentation/types)** - LLM-specific patterns
-- **Questions?** Open an issue in the [GitHub repo](https://github.com/anthropics/claude-code/issues)
-- **Share your results** with #ai-experiments in our community Slack
-
 ---
 
 **Remember:** Every AI decision backed by data is a risk avoided and a lesson learned. Start small, measure everything, ship with confidence.
