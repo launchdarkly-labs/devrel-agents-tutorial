@@ -23,9 +23,10 @@ from anthropic import Anthropic
 load_dotenv()
 
 class TrafficGenerator:
-    def __init__(self):
+    def __init__(self, pii_percentage=15):
         self.api_base_url = f"http://{os.getenv('API_HOST', 'localhost')}:{os.getenv('API_PORT', '8000')}"
         self.claude = Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
+        self.pii_percentage = pii_percentage
         
         # User context for API calls
         self.user_context = {
@@ -80,11 +81,13 @@ class TrafficGenerator:
         """Generate a query about the topic at given complexity, optionally with PII"""
         if inject_pii:
             prompt = f"""Generate a single question about "{topic}" at {complexity} level that includes realistic PII.
-Include ONE of these PII types (pick randomly):
+Include at least one of these PII types (pick randomly):
 - Email address (e.g., john.smith@company.com)
 - Phone number (e.g., 555-123-4567)
 - Full name (e.g., John Smith, Sarah Johnson)
 - Address (e.g., 123 Main St, New York, NY)
+- Company name (e.g., Acme Corp, Globex Inc)
+- Title/role (e.g., Product Manager, DevOps Engineer)
 
 Make it sound natural, like a real user asking about their specific situation.
 Just return the question, nothing else.
@@ -239,8 +242,8 @@ Most users don't give feedback unless the answer is notably good or bad."""
             topic = random.choice(topics)
             complexity = random.choice(complexities)
 
-            # Inject PII approximately 1 out of every 15 times (6.67% chance)
-            inject_pii = random.random() < (1/15)
+            # Use configurable PII percentage
+            inject_pii = random.random() < (self.pii_percentage / 100.0)
             pii_indicator = " [PII]" if inject_pii else ""
 
             print(f"🔍 DEBUG: Selected topic='{topic}', complexity='{complexity}', inject_pii={inject_pii}")
@@ -302,10 +305,16 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--queries', type=int, default=50, help='Number of queries')
     parser.add_argument('--delay', type=float, default=2.0, help='Delay between queries')
-    
+    parser.add_argument('--pii-percentage', type=int, default=15, help='Percentage of queries that should contain PII (0-100)')
+
     args = parser.parse_args()
-    
-    generator = TrafficGenerator()
+
+    # Validate PII percentage
+    if args.pii_percentage < 0 or args.pii_percentage > 100:
+        print("❌ Error: PII percentage must be between 0 and 100")
+        return
+
+    generator = TrafficGenerator(pii_percentage=args.pii_percentage)
     generator.run(args.queries, args.delay)
 
 if __name__ == "__main__":

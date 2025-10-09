@@ -21,10 +21,11 @@ from threading import Lock
 load_dotenv()
 
 class ConcurrentTrafficGenerator:
-    def __init__(self, concurrency=10):
+    def __init__(self, concurrency=10, pii_percentage=15):
         self.api_base_url = f"http://{os.getenv('API_HOST', 'localhost')}:{os.getenv('API_PORT', '8000')}"
         self.claude = Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
         self.concurrency = concurrency
+        self.pii_percentage = pii_percentage
         
         # Thread-safe counters
         self.lock = Lock()
@@ -83,42 +84,78 @@ Most users don't give feedback unless the answer is notably good or bad."""
         except:
             return "none"  # Default to no feedback on error
 
-    def analyze_knowledge_base(self):
-        """Ask Claude to analyze KB and return topics"""
-        print("Analyzing knowledge base...")
-        
+    def generate_base_topics(self):
+        """Generate base RL topics"""
         try:
             response = self.claude.messages.create(
                 model="claude-3-5-haiku-20241022",
-                max_tokens=1000,
+                max_tokens=800,
                 messages=[{
                     "role": "user",
-                    "content": """Based on the context that this is a knowledge base about reinforcement learning 
-                    (Sutton & Barto textbook), list 20 diverse topics or questions that users might ask.
-                    
-                    Mix complexity levels:
-                    - 8 basic questions (What is...?, How does...?)
-                    - 8 intermediate questions (Compare..., Explain the relationship...)
-                    - 4 advanced questions (Deep technical questions)
-                    
-                    Format: One question per line, no numbering."""
+                    "content": """List 20 reinforcement learning topics from the Sutton & Barto textbook.
+                    Just list the topics (like "Q-learning", "Policy gradients", etc.), one per line.
+                    Mix basic, intermediate, and advanced topics.
+                    No questions, just topic names."""
                 }]
             )
-            
+
             topics = [line.strip() for line in response.content[0].text.strip().split('\n') if line.strip()]
-            print(f"✅ Generated {len(topics)} topics")
+            print(f"✅ Generated {len(topics)} base topics")
             return topics
-            
+
         except Exception as e:
-            print(f"❌ Error analyzing KB: {e}")
-            # Fallback topics
+            print(f"❌ Error generating topics: {e}")
             return [
-                "What is reinforcement learning?",
-                "How do Q-learning and SARSA differ?",
-                "Explain the exploration-exploitation tradeoff",
-                "What are Markov Decision Processes?",
-                "How does temporal difference learning work?",
+                "Q-learning", "SARSA", "Policy gradients", "Actor-critic methods",
+                "Temporal difference learning", "Monte Carlo methods", "Dynamic programming",
+                "Exploration vs exploitation", "Markov Decision Processes", "Value functions"
             ]
+
+    def generate_query(self, topic, inject_pii=False):
+        """Generate a query about the topic, optionally with PII"""
+        complexity = random.choice(["basic", "intermediate", "advanced"])
+
+        if inject_pii:
+            prompt = f"""Generate a single question about "{topic}" at {complexity} level that includes realistic PII.
+Include at least of these PII types (pick randomly):
+- Email address (e.g., john.smith@company.com)
+- Phone number (e.g., 555-123-4567)
+- Full name (e.g., John Smith, Sarah Johnson)
+- Address (e.g., 123 Main St, New York, NY)
+- Company name (e.g., Acme Corp, Globex Inc)
+- Title/role (e.g., Product Manager, DevOps Engineer)
+
+
+Make it sound natural, like a real user asking about their specific situation.
+Just return the question, nothing else.
+
+Complexity guide:
+- basic: Simple what/how questions
+- intermediate: Compare/explain relationships
+- advanced: Deep technical questions"""
+        else:
+            prompt = f"""Generate a single question about "{topic}" at {complexity} level.
+Make it sound like a natural user question about reinforcement learning.
+Just return the question, nothing else.
+
+Complexity guide:
+- basic: Simple what/how questions
+- intermediate: Compare/explain relationships
+- advanced: Deep technical questions"""
+
+        try:
+            response = self.claude.messages.create(
+                model="claude-3-5-haiku-20241022",
+                max_tokens=100,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            return response.content[0].text.strip()
+        except:
+            # Fallback
+            if inject_pii:
+                return f"Hi, I'm John Smith (john.smith@email.com) and I need help with {topic}"
+            else:
+                return f"Can you explain {topic}?"
 
     def send_single_request(self, query_num, query):
         """Send a single request and process response"""
@@ -208,15 +245,53 @@ Most users don't give feedback unless the answer is notably good or bad."""
         print(f"Target: {self.api_base_url}")
         print(f"=" * 70)
         
-        # Generate queries
-        print("\n📚 Analyzing knowledge base...")
-        topics = self.analyze_knowledge_base()
-        
-        # Prepare queries
-        queries = []
+        # Generate base topics
+        print("\n📚 Generating base topics...")
+        topics = self.generate_base_topics()
+
+        # Prepare mixed queries concurrently
+        print(f"🔄 Generating {num_queries} queries concurrently ({self.pii_percentage}% with PII)...")
+
+        # Prepare query generation tasks
+        query_tasks = []
+        pii_count = 0
+
         for i in range(num_queries):
-            query = random.choice(topics)
-            queries.append((i+1, query))
+            topic = random.choice(topics)
+            inject_pii = random.random() < (self.pii_percentage / 100.0)
+            if inject_pii:
+                pii_count += 1
+            query_tasks.append((i+1, topic, inject_pii))
+
+        # Generate queries concurrently using ThreadPoolExecutor
+        queries = []
+        with ThreadPoolExecutor(max_workers=min(10, num_queries)) as executor:
+            # Submit all query generation tasks
+            future_to_task = {
+                executor.submit(self.generate_query, task[1], inject_pii=task[2]): task
+                for task in query_tasks
+            }
+
+            # Collect results as they complete
+            for future in as_completed(future_to_task):
+                task = future_to_task[future]
+                query_num, topic, inject_pii = task
+                try:
+                    query = future.result()
+                    queries.append((query_num, query))
+                except Exception as e:
+                    # Use fallback on error
+                    if inject_pii:
+                        fallback_query = f"Hi, I'm John Smith (john.smith@email.com) and I need help with {topic}"
+                    else:
+                        fallback_query = f"Can you explain {topic}?"
+                    queries.append((query_num, fallback_query))
+                    print(f"⚠️  Query {query_num} generation failed, using fallback")
+
+        # Sort queries back to original order
+        queries.sort(key=lambda x: x[0])
+
+        print(f"✅ Generated {num_queries} queries concurrently ({pii_count} with PII, {num_queries-pii_count} clean)")
         
         print(f"\n⚡ Sending {num_queries} requests with {self.concurrency} concurrent workers...")
         print()
@@ -251,9 +326,10 @@ def main():
     parser = argparse.ArgumentParser(description='Concurrent traffic generator for AI agent testing')
     parser.add_argument('--queries', type=int, default=50, help='Number of queries to send')
     parser.add_argument('--concurrency', type=int, default=10, help='Number of concurrent requests')
-    
+    parser.add_argument('--pii-percentage', type=int, default=15, help='Percentage of queries that should contain PII (0-100)')
+
     args = parser.parse_args()
-    
+
     # Validate concurrency
     if args.concurrency < 1:
         print("❌ Error: concurrency must be at least 1")
@@ -263,8 +339,13 @@ def main():
         response = input("Continue anyway? (y/n): ")
         if response.lower() != 'y':
             return
-    
-    generator = ConcurrentTrafficGenerator(concurrency=args.concurrency)
+
+    # Validate PII percentage
+    if args.pii_percentage < 0 or args.pii_percentage > 100:
+        print("❌ Error: PII percentage must be between 0 and 100")
+        return
+
+    generator = ConcurrentTrafficGenerator(concurrency=args.concurrency, pii_percentage=args.pii_percentage)
     generator.run(args.queries)
 
 if __name__ == "__main__":

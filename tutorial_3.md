@@ -1,17 +1,16 @@
 # Proving ROI with Data-Driven AI Agent Experiments
 
 <div align="center">
-<img src="screenshots/header.jpg" alt="From Guessing to Knowing - Prove ROI with Data-Driven AI Experiments" width="100%"/>
+<img src="screenshots/header.png" alt="From Guessing to Knowing - Prove ROI with Data-Driven AI Experiments" width="100%"/>
 </div>
 
 <br>
 
-## What You'll Learn in 5 Minutes (or Build in 90)
+## What You'll Learn in 5 Minutes (or Build in 30)
 
 > **Key Findings from Our Experiments:**
-> - 🔴 Strict security **decreased** user satisfaction by 39%
-> - 🔴 Claude Opus 4 performed **63% worse** than GPT-4o despite costing 33% more
-> - ✅ Basic configurations often **outperform** complex "improvements"
+> - 🔴 Strict security only **decreased** positive feedback rates by 14%
+> - 🔴 Claude Opus 4 performed **64% worse** than GPT-4o despite costing 33% more
 > - ✅ Data-driven decisions **prevent** expensive mistakes
 
 ## The Problem
@@ -24,9 +23,9 @@ You need data, not opinions. This tutorial shows you how to get it.
 
 ## The Solution: Real Experiments, Real Answers
 
-In 90 minutes, you'll run actual A/B tests that answer:
+In 30 minutes, you'll run actual A/B tests that answer:
 
-**Does strict security kill user satisfaction?**
+**Does strict security hurt positive feedback rates?**
 **Is Claude Opus 4 worth 33% more than GPT-4o?**
 
 *Part 3 of 3: **Chaos to Clarity: Defensible AI Systems That Deliver***
@@ -43,12 +42,12 @@ Follow the complete guide to run your own experiments.
 <summary><strong>Prerequisites for Hands-On Tutorial</strong></summary>
 
 **Required from Previous Parts:**
-- Completed Parts 1 & 2 (multi-agent system with segmentation)
+- Completed Parts [1](README.md) & [2](README.md) (multi-agent system with segmentation)
 - Active LaunchDarkly project with AI Configs
 - API keys: Anthropic, OpenAI, LaunchDarkly
 
 **Investment:**
-- Time: ~90 minutes (25 min setup, 60 min data collection, 5 min analysis)
+- Time: ~30 minutes (15 min setup, 10 min data collection, 5 min analysis)
 - Cost: $25-35 default ($5-10 with `--queries 50`)
 
 </details>
@@ -65,6 +64,10 @@ Follow the complete guide to run your own experiments.
 
 **Note**: The two experiments run independently. Each user participates in both, but the results are analyzed separately.
 
+**Pro tip**: You can stop experiments early once they reach statistical significance. In our case, we ran ~200 queries total and the premium model experiment reached significance first (99.52% confidence that GPT-4o is better). We then stopped that experiment and continued running the security experiment until it also reached significance, maximizing our statistical power while minimizing experiment runtime.
+
+**Experiment Methodology**: Our smart supervisor agent routes queries containing PII to the security agent, while all other queries go to the support agent. All requests generate cost and performance metrics regardless of which agent handles them, ensuring comprehensive tracking for both experiments. We ran the initial 200 queries with the default 15% PII injection rate. After the premium model experiment reached significance, we turned it off and continued the security experiment with `--pii-percentage 100` to maximize the traffic reaching the security agent and accelerate statistical significance.
+
 ## Understanding Your Two Experiments
 
 > **Before:** You guess whether stricter security helps or hurts.
@@ -72,17 +75,16 @@ Follow the complete guide to run your own experiments.
 
 ### **Experiment 1: Security Agent Analysis**
 
-**Question**: Does enhanced security improve safety compliance without significantly harming user satisfaction?
+**Question**: Does enhanced security improve safety compliance without significantly harming positive feedback rates?
 
 **Variations** (50% each):
 - **Control**: Baseline security agent (existing baseline variation)
 - **Treatment**: Enhanced security agent (existing enhanced variation)
 
-**Success Criteria** (measured per user):
-1. ≥10% improvement in positive feedback rate per user
-2. ≤5% cost increase per user
-3. ≤2.0s response latency (completion time p95 per user)
-4. 90% confidence threshold
+**Success Criteria (must meet 90% threshold)**:
+1. ≤15% decrease in positive feedback rates
+2. ≤30% cost increase
+3. ≤30s response latency
 
 ### **Experiment 2: Premium Model Value Analysis**
 
@@ -90,12 +92,11 @@ Follow the complete guide to run your own experiments.
 
 **Variations** (50% each):
 - **Control**: GPT-4o with full tools (current version)
-- **Treatment**: Claude Opus 4 with identical tools (current version)
+- **Treatment**: Claude Opus 4 with identical tools
 
-**Success Criteria** (measured per user):
-- ≥15% satisfaction improvement by Claude Opus 4 (positive feedback rate per user)
-- Cost-value ratio ≥ 0.25 (satisfaction gain % ÷ cost increase % per user)
-- 90% confidence threshold
+**Success Criteria (must meet 90% threshold)**:
+- ≥15% positive feedback rate improvement by Claude Opus 4
+- Cost-value ratio ≥ 0.25 (positive feedback rate gain % ÷ cost increase %)
 
 ## Setting Up Metrics and Experiments
 
@@ -112,11 +113,11 @@ Navigate to **Metrics** in LaunchDarkly and create three custom metrics:
 | **P95 Latency** | `$ld:ai:duration:total` | P95 | Response speed |
 | **Avg Tokens** | `$ld:ai:tokens:total` | Average | Token usage |
 | **Cost/Request** | `ai_cost_per_request` | Average | Dollar cost |
-| **Positive Feedback** ✅ | Built-in | Rate | User satisfaction |
+| **Positive Feedback** ✅ | Built-in | Rate | Positive feedback rate |
 | **Negative Feedback** ✅ | Built-in | Rate | User complaints |
 
 <details>
-<summary><strong>📸 See detailed setup for P95 Latency</strong></summary>
+<summary><strong>See detailed setup for P95 Latency</strong></summary>
 
 1. Event key: `$ld:ai:duration:total`
 2. Type: Value/Size → Numeric, Aggregation: Sum
@@ -152,8 +153,10 @@ This creates the `claude-opus-treatment` variation for the Premium Model Value e
 
 ### **Step 3: Configure Security Agent Experiment**
 
-Navigate to **AI Configs → security-agent → Experiments** tab → **Create experiment**.
+<details>
+<summary>Click for details</summary>
 
+Navigate to <strong>AI Configs → security-agent → Experiments</strong> tab → <strong>Create experiment</strong>
 #### **Experiment Design**
 
 **Experiment type:**
@@ -163,13 +166,13 @@ Navigate to **AI Configs → security-agent → Experiments** tab → **Create e
 
 #### **Hypothesis and Metrics**
 
-**Hypothesis:** `Enhanced security improves safety compliance without significantly harming user satisfaction`
+**Hypothesis:** `Enhanced security improves safety compliance without significantly harming positive feedback rates`
 
 **Randomize by:** `user`
 
 **Metrics:** Click "Select metrics or metric groups" and add:
 1. `Positive feedback rate` → Select first to set as **Primary**
-2. `Negative feedback rate` 
+2. `Negative feedback rate`
 3. `p95_total_user_latency`
 4. `ai_cost_per_request`
 
@@ -178,13 +181,13 @@ Navigate to **AI Configs → security-agent → Experiments** tab → **Create e
 **Flag or AI Config**
 - Click the dropdown and select **security-agent**
 
-**Targeting rule:** 
+**Targeting rule:**
 - Click the dropdown and select **Rule 4**
 - This will configure: `If Context` → `is in Segment` → `Other Paid`
 
 #### **Audience Allocation**
 
-**Variations served outside of this experiment:** 
+**Variations served outside of this experiment:**
 - `Basic Security`
 
 **Sample size:** Set to `100%` of users in this experiment
@@ -194,7 +197,7 @@ Navigate to **AI Configs → security-agent → Experiments** tab → **Create e
 - `Basic Security`: `50%`
 - `Strict Security`: `50%`
 
-**Control:** 
+**Control:**
 - `Basic Security`
 
 #### **Statistical Approach and Success Criteria**
@@ -202,26 +205,25 @@ Navigate to **AI Configs → security-agent → Experiments** tab → **Create e
 **Statistical approach:** `Bayesian`
 **Threshold:** `90%`
 
-Click **"Save"** 
+Click **"Save"**
 Click **"Start experiment"** to launch.
+
+</details>
 
 <br>
 
 <div align="center">
-<img src="screenshots/security_level.png" alt="Security Agent Experiment Configuration" width="50%">
+<img src="screenshots/security_level.png" alt="Security Agent Experiment Configuration" width="75%">
 </div>
 
 <br>
 
-#### **Success Criteria to Monitor**
-- ≥10% improvement in positive feedback rate
-- ≤5% cost increase (track via `ai_cost_per_request` metric)
-- ≤2.0s p95 latency
-- 90% statistical confidence
-
 ### **Step 4: Configure Premium Model Experiment**
 
-Navigate to **AI Configs → support-agent → Experiments** tab → **Create experiment**.
+<details>
+<summary>Click for details</summary>
+
+Navigate to <strong>AI Configs → support-agent → Experiments</strong> tab → <strong>Create experiment</strong>
 
 #### **Experiment Design**
 
@@ -232,7 +234,7 @@ Navigate to **AI Configs → support-agent → Experiments** tab → **Create ex
 
 #### **Hypothesis and Metrics**
 
-**Hypothesis:** `Claude Opus 4 justifies premium cost with superior satisfaction`
+**Hypothesis:** `Claude Opus 4 justifies premium cost with superior positive feedback rate`
 
 **Randomize by:** `user`
 
@@ -254,7 +256,7 @@ Navigate to **AI Configs → support-agent → Experiments** tab → **Create ex
 
 #### **Audience Allocation**
 
-**Variations served outside of this experiment:** 
+**Variations served outside of this experiment:**
 - `other-paid`
 
 **Sample size:** Set to `100%` of users in this experiment
@@ -268,7 +270,7 @@ Navigate to **AI Configs → support-agent → Experiments** tab → **Create ex
 - `international-standard`: `0%`
 - `claude-opus-treatment`: `50%`
 
-**Control:** 
+**Control:**
 - `other-paid`
 
 #### **Statistical Approach and Success Criteria**
@@ -276,34 +278,22 @@ Navigate to **AI Configs → support-agent → Experiments** tab → **Create ex
 **Statistical approach:** `Bayesian`
 **Threshold:** `90%`
 
-Click **"Save"** 
+Click **"Save"**
 Click **"Start experiment"** to launch.
+
+</details>
 
 <br>
 
 <div align="center">
-<img src="screenshots/premium_model.png" alt="Premium Model Value Analysis Experiment Configuration" width="50%">
+<img src="screenshots/premium_model.png" alt="Premium Model Value Analysis Experiment Configuration" width="75%">
 </div>
 
 <br>
 
-#### **Success Criteria to Monitor**
-- ≥15% satisfaction improvement (positive feedback rate)
-- Cost-value ratio ≥ 0.25 (satisfaction % ÷ cost increase %)
-- 90% statistical confidence
-
 ## Understanding Your Experimental Design
 
 **Two Independent Experiments Running Concurrently:**
-```
-Experiment 1: Security Agent (200 users)
-├── 50% Baseline (100 users)
-└── 50% Enhanced (100 users)
-
-Experiment 2: Premium Model (200 users)
-├── 50% GPT-4o (100 users)
-└── 50% Opus 4 (100 users)
-```
 
 Since these are the **same 200 users**, each user experiences:
 - One security variation (baseline OR enhanced)
@@ -313,13 +303,11 @@ Random assignment ensures balance: ~50 users get each combination naturally.
 
 ## Generating Experiment Data
 
-> **The payoff moment**: One hour of automated testing replaces months of debate.
-
 ### **Step 5: Run Traffic Generator**
 
 Start your backend and generate realistic experiment data. Choose between sequential or concurrent traffic generation:
 
-#### **Option A: Concurrent Traffic Generator (Recommended for large datasets)**
+#### **Concurrent Traffic Generator (Recommended for large datasets)**
 
 For faster experiment data generation with parallel requests:
 
@@ -328,7 +316,7 @@ For faster experiment data generation with parallel requests:
 uv run uvicorn api.main:app --reload --port 8000
 
 # Generate experiment data with 10 concurrent requests (separate terminal)
-./run_experiment_concurrent.sh
+uv run python -u tools/concurrent_traffic_generator.py --queries 200 --concurrency 10
 ```
 
 **Configuration**:
@@ -338,14 +326,10 @@ uv run uvicorn api.main:app --reload --port 8000
 - **~40-60 minutes** total runtime (vs 66+ hours sequential for 200 queries)
 - **Logs saved** to `logs/concurrent_experiment_TIMESTAMP.log`
 
-Alternatively, run directly with custom settings:
-```bash
-uv run python -u tools/concurrent_traffic_generator.py --queries 200 --concurrency 10
-```
+<details>
+<summary>For smaller test runs or debugging</summary>
 
-#### **Option B: Sequential Traffic Generator (Simple, one-at-a-time)**
-
-For smaller test runs or debugging:
+#### **Sequential Traffic Generator (Simple, one-at-a-time)**
 
 ```bash
 # Start backend API
@@ -354,8 +338,6 @@ uv run uvicorn api.main:app --reload --port 8000
 # Generate experiment data sequentially (separate terminal)
 python tools/traffic_generator.py --queries 50 --delay 2
 ```
-
-**What Happens (Both Options)**:
 
 **What Happens During Simulation:**
 
@@ -371,9 +353,9 @@ python tools/traffic_generator.py --queries 50 --delay 2
 4. **Automatic tracking**
    All metrics flow to LaunchDarkly in real-time
 
-**Result:** Dual experiments run simultaneously with shared queries for direct comparison.
+</details>
 
-**Progress Example (Concurrent)**:
+**Generation Output**:
 ```
 📚 Analyzing knowledge base...
 ✅ Generated 23 topics
@@ -407,51 +389,32 @@ Average: 13.6s per query (with concurrency)
 
 Once your experiments have collected data from ~100 users per variation, you'll see results in the LaunchDarkly UI. Here's how to interpret them:
 
-### **Security Agent Analysis: Does enhanced security improve safety without significantly impacting user satisfaction?**
+### **1. Security Agent Analysis: Does enhanced security improve safety without significantly impacting positive feedback rates?**
 
-> ## 🔴 VERDICT: Keep Basic Security
+> ## ✅ VERDICT: Switch to Strict Security
 >
-> **Satisfaction:** Strict security scored 63% worse (37.86% vs 62.14%)
-> **Cost:** 27% more expensive ($0.1915 vs $0.1510)
-> **Confidence:** Only 37.86% chance strict is better (need 90%+)
->
-> **Bottom line:** Users preferred helpful responses over aggressive filtering.
+**Positive Feedback:** 14% decrease (8.33% to 7.21%) is within the ≤15% threshold
 
-**The Data That Proves It:**
-
-After 106-109 judge model evaluations per variation, the numbers are conclusive:
-
-**Primary Metric: Positive Feedback Rate**
-- **Basic Security**: 62.14% satisfaction ✅
-- **Strict Security**: 37.86% satisfaction ❌
-- **Impact**: -39% relative decrease
-- **Statistical Confidence**: Only 37.86% chance strict is better (need 90%+)
-
-**Secondary Metrics:**
-| Metric | Basic | Strict | Verdict |
-|--------|-------|--------|---------|
-| Satisfaction | 62.14% 🟢 | 37.86% 🔴 | **-39%** ❌ |
-| Cost/Request | $0.15 | $0.19 | +27% 📈 |
-| P95 Latency | 202ms | 205ms | +1% ✅ |
-| Complaints | 0.93% | 0.45% | -51% ✅ |
-
-**Read across:** Strict security cuts complaints but kills satisfaction
-
-**Key Finding**: The judge model strongly prefers the basic security approach (62% positive feedback) over strict security (38% positive feedback), despite strict security having fewer negative feedback instances.
+**Cost:** 27% increase (.1510 to .1915) is within the  ≤30% limit
 
 **Decision Logic:**
 ```
-IF positive_feedback_probability ≥ 90%
-   AND positive_feedback_rate > control
-   AND cost_increase ≤ 30%
+IF positive_feedback_rate decrease ≤ 15%
+   AND probability_to_beat for positive_feedback_rate ≥ 90%
+   AND cost increase ≤ 30%
+   AND probability_to_beat for cost ≥ 90%
+   AND latency decrease ≤ 30s
+   AND probability_to_beat for latency ≥ 90%
 THEN deploy_strict_security()
 ELSE keep_basic_security()
 ```
 
-**Answer: No - enhanced security significantly harms user satisfaction**
+**Bottom line:** Both criteria met - deploy strict security.
 
-The experiment definitively answers the question: enhanced (strict) security does NOT improve the overall experience. While it technically improves "safety" by reducing negative feedback by 51%, it catastrophically impacts user satisfaction with a 39% drop in positive feedback. The strict security dramatically reduces positive feedback from 62.14% to 37.86%, with only a 37.86% probability of being better than the control (far below the 90% threshold needed for confidence). Additionally, it increases costs by 26.83% without providing corresponding benefits. The judge model clearly prefers helpful, complete responses over strict PII filtering, showing that overly aggressive security measures create a worse user experience overall.
+**Read across:** Strict security cuts complaints and reduces positive feedback an acceptable amount.
 
+
+**The Data That Proves It:**
 <br>
 
 <div align="center">
@@ -459,50 +422,37 @@ The experiment definitively answers the question: enhanced (strict) security doe
 </div>
 
 <br>
-### **Premium Model Value Analysis: Does Claude Opus 4 justify its premium cost with superior user satisfaction?**
+
+### **2. Premium Model Value Analysis: Does Claude Opus 4 justify its premium cost with superior positive feedback rates?**
 
 > ## 🔴 VERDICT: Reject Claude Opus 4
 >
-> **Performance:** 63% worse satisfaction (5.31% vs 14.55%)
-> **Cost:** 33% more expensive ($0.0159 vs $0.0119)
-> **Speed:** 81% slower (223ms vs 123ms)
-> **Probability:** 99.52% that GPT-4o is superior
->
-> **Bottom line:** Premium price delivered worse results on every metric.
+**Performance:** 63% WORSE positive feedback rate (5.31% vs 14.55%) 
 
-**The Numbers Don't Lie:**
+**Probability:** 99.52% that GPT-4o is superior
 
-After 107-108 judge model evaluations per variation:
+**Cost:** 33% more expensive ($0.0159 vs $0.0119)
 
-**Head-to-Head Comparison:**
-- **GPT-4o**: 14.55% positive feedback ✅
-- **Claude Opus 4**: 5.31% positive feedback ❌
-- **Winner**: GPT-4o by a landslide (99.52% probability)
+**Speed:** 81% slower (223ms vs 123ms)
 
-**Performance & Cost Analysis:**
-| Metric | GPT-4o | Opus 4 | Verdict |
-|--------|--------|--------|---------|
-| Satisfaction | 14.55% 🟢 | 5.31% 🔴 | **-63%** ❌ |
-| P95 Latency | 123ms 🟢 | 223ms 🔴 | +81% ❌ |
-| Token Usage | 1,954 🟢 | 3,391 🔴 | +74% ❌ |
-| Cost/Request | $0.012 🟢 | $0.016 🔴 | +33% ❌ |
-| Complaints | 0.91% | 0.45% 🟢 | -50% ✅ |
-
-**Read across:** GPT-4o dominates on performance, speed, and cost
+**Cost-to-value Ratio:** -63%/33% = -.18
 
 **Decision Logic:**
 ```
-IF treatment_feedback_rate > control_feedback_rate
-   AND probability_to_beat ≥ 90%
-   AND latency_increase ≤ 50%
-   AND cost_increase ≤ 40%
+IF positive_feedback_rate increase ≥ 15%
+   AND probability_to_beat for positive_feedback_rate ≥ 90%
+   AND probability_to_beat for cost ≥ 90%
+   AND cost-value ratio increase ≥ .25
 THEN deploy_claude_opus_4()
 ELSE keep_current_model()
 ```
 
-**Answer: No - Claude Opus 4 fails to justify its premium cost**
+**Bottom line:** Premium price delivered worse results on every metric. Experiment was stopped when positive feedbarck rate reached significance.
 
-The experiment conclusively answers the question: Claude Opus 4 does NOT justify its premium pricing with superior satisfaction. In fact, it delivers dramatically worse satisfaction at a higher cost. Claude Opus 4 has a 99.52% probability of being worse than GPT-4o. The positive feedback rate is 63% lower (5.31% vs 14.55%) despite being 33% more expensive. Response times are nearly 2x slower (223ms vs 123ms), which harms the user experience. Additionally, Opus 4 uses 74% more tokens while delivering demonstrably worse results. This is a clear case where the premium model fails on every dimension: cost, performance, and satisfaction. GPT-4o is the obvious choice for paid users.
+**Read across:** GPT-4o dominates on performance, and most likely also on speed, and cost
+
+**The Numbers Don't Lie:**
+
 <br>
 
 <div align="center">
@@ -515,30 +465,30 @@ The experiment conclusively answers the question: Claude Opus 4 does NOT justify
 
 **1. Test Your Assumptions**
 
-Both experiments challenged conventional wisdom. "Stricter security" reduced satisfaction by 39%. "Premium models" performed 63% worse. What seems like obvious improvements often aren't; data beats intuition.
+What seems like obvious improvements often aren't; data beats intuition.
 
 **2. Statistical Rigor Prevents Expensive Mistakes**
 
-Only 37.86% probability that strict security helps vs. 99.52% that GPT-4o beats Opus 4. LaunchDarkly's statistical engine prevents costly decisions based on random variation or wishful thinking.
+LaunchDarkly's statistical engine prevents costly decisions based on random variation or wishful thinking.
 
 **3. Multiple Metrics Reveal Trade-offs**
 
-Primary metrics tell you what to optimize for, but secondary metrics reveal the cost. Strict security did reduce complaints (-51%) but killed overall satisfaction. Always monitor the full picture before deciding.
+Primary metrics tell you what to optimize for, but secondary metrics reveal the cost. Strict security did reduce complaints (-51%) but also reduced positive feedback rates. Always monitor the full picture before deciding.
 
 
 ## Experimental Limitations & Mitigations
 
 **Model-as-Judge Evaluation**
 
-We use Claude to evaluate response quality rather than real users, which represents a limitation of this experimental setup. However, research shows that model-as-judge approaches correlate well with human preferences, as documented in [Anthropic's Constitutional AI paper](https://arxiv.org/abs/2212.08073). To strengthen confidence in these findings, the next step would be to validate results with a smaller human evaluation study, examining 20-30 responses per variation to confirm the model's assessments align with actual user preferences.
+We use Claude to evaluate response quality rather than real users, which represents a limitation of this experimental setup. However, research shows that model-as-judge approaches correlate well with human preferences, as documented in [Anthropic's Constitutional AI paper](https://arxiv.org/abs/2212.08073).
 
 **Sample Size**
 
-With approximately 100 users per variation, we're at the minimum threshold for detecting 15-20% effects reliably. Fortunately, both experiments showed large, clear effects: the security experiment revealed a 39% difference and the model experiment showed a 63% difference. This makes the results conclusive despite the modest sample size. For experiments where you expect smaller effects (under 10%), you should increase the sample to 200-300 users per variation to ensure adequate statistical power.
+With approximately 100 users per variation, we're at the minimum threshold for detecting 15-20% effects reliably. For experiments where you expect smaller effects, you should increase the sample to ensure adequate statistical power.
 
 **Independent Experiments**
 
-LaunchDarkly treats these as two separate experiments rather than a factorial design, which limits our ability to analyze interactions. While random assignment naturally balances security versions across model versions, preventing systematic bias, you cannot analyze interaction effects between security and model choices. For example, we cannot determine if Claude Opus 4 might perform better specifically with strict security settings. If interaction effects are important to your use case, consider running a proper [factorial experiment design](https://en.wikipedia.org/wiki/Factorial_experiment).
+While random assignment naturally balances security versions across model versions, preventing systematic bias, you cannot analyze interaction effects between security and model choices. If interaction effects are important to your use case, consider running a proper [factorial experiment design](https://en.wikipedia.org/wiki/Factorial_experiment).
 
 **Statistical Confidence**
 LaunchDarkly uses **[Bayesian statistics](https://launchdarkly.com/docs/home/experimentation/bayesian)** to calculate confidence, where 90% confidence means there's a 90% probability the true effect is positive. This is NOT the same as p-value < 0.10 from [frequentist tests](https://en.wikipedia.org/wiki/Frequentist_inference). We set the threshold at 90% (rather than 95%) to balance false positives versus false negatives, though for mission-critical features you should consider raising the confidence threshold to 95%.
@@ -546,23 +496,28 @@ LaunchDarkly uses **[Bayesian statistics](https://launchdarkly.com/docs/home/exp
 ## Common Mistakes We Avoided
 
 ❌ **"Let's run the experiment for a week and see"**
-✅ **We defined success criteria upfront** (≥15% improvement, 90% confidence)
+
+✅ **We defined success criteria upfront** (≥15% improvement threshold)
 
 ❌ **"Opus 4 is newer, so it must be better"**
+
 ✅ **We tested the assumption** (turned out to be 63% worse)
 
 ❌ **"This metric looks good enough to ship"**
+
 ✅ **We checked statistical confidence** (37% probability ≠ proof)
 
 ❌ **"We'll analyze the data and decide what it means"**
+
 ✅ **We predefined decision logic** (prevents rationalization)
 
-❌ **"Premium features should help user satisfaction"**
-✅ **We measured actual impact** (strict security actually hurt satisfaction)
+❌ **"Premium features should help positive feedback rates"**
+
+✅ **We measured actual impact** (strict security hurt positive feedback rates)
 
 ## What You've Accomplished
 
-You've built a **data-driven optimization engine** with statistical rigor through falsifiable hypotheses and confidence thresholds. Your predefined success criteria ensure clear decisions and prevent post-hoc rationalization. Every feature investment now has quantified business impact for ROI justification, and you have a framework for continuous optimization through ongoing measurable experimentation.
+You've built a **data-driven optimization engine** with statistical rigor through falsifiable hypotheses and clear success criteria. Your predefined success criteria ensure clear decisions and prevent post-hoc rationalization. Every feature investment now has quantified business impact for ROI justification, and you have a framework for continuous optimization through ongoing measurable experimentation.
 
 ## Troubleshooting
 
@@ -582,15 +537,15 @@ While this tutorial focused on model selection and safety configurations, Launch
 
 **Prompt & Template Experiments**
 
-Test different prompt structures, tones, and instruction sets to optimize output quality. Compare variations in few-shot examples, chain-of-thought reasoning patterns, or response formatting instructions. Measure adherence to output schemas and user satisfaction with different communication styles.
+Test different prompt structures, tones, and instruction sets to optimize output quality. Compare variations in few-shot examples, chain-of-thought reasoning patterns, or response formatting instructions. Measure adherence to output schemas and positive feedback rates with different communication styles.
 
 **RAG Configuration Testing**
 
-Experiment with retrieval parameters including chunk sizes, embedding models, reranking algorithms, and k-values for retrieval. Test different vector databases, similarity thresholds, and hybrid search strategies. Measure retrieval relevance, response accuracy, and latency trade-offs.
+Experiment with retrieval parameters including reranking algorithms, and k-values for retrieval. Test different similarity thresholds, and hybrid search strategies. Measure retrieval relevance, response accuracy, and latency trade-offs.
 
 **Tool & Function Calling Optimization**
 
-Compare different tool exposure strategies, routing thresholds, and fallback behaviors. Test when to use external APIs versus internal knowledge, how to handle tool failures gracefully, and optimal tool selection logic. Measure tool success rates, response completeness, and cost implications.
+Compare different tool exposure strategies, routing thresholds, and fallback behaviors. Test when to use external APIs versus internal knowledge, how to handle tool failures gracefully, and optimal tool selection logic. Measure tool success rates and cost implications.
 
 **Safety Guardrail Calibration**
 
@@ -598,45 +553,15 @@ Beyond our basic vs. strict security example, test different combinations of con
 
 **Cost & Latency Trade-offs**
 
-Run experiments comparing streaming versus batch responses, token budget limits, and caching strategies. Test different model routing rules based on query complexity, user segments, or time-of-day patterns. Measure cost per successful outcome rather than just cost per request.
+Run experiments comparing token budget limits, and caching strategies. Test different model routing rules based on query complexity, user segments, or time-of-day patterns. Measure cost per successful outcome rather than just cost per request.
 
-### **Experimentation Workflow Best Practices**
-
-**Progressive Testing Strategy:**
-
-1. **Offline testing** - Golden datasets, synthetic queries, LLM-as-judge
-   - Catches obvious failures without risking users
-
-2. **Shadow testing** - Replay production traffic behind the scenes
-   - Reveals issues offline testing misses
-
-3. **Canary deployment** - Start with 1-5% of traffic
-   - Expand based on metrics, auto-rollback on degradation
-
-**Advanced Practices:** Moving forward, require statistical proof before deploying any new AI configuration changes. A/B test your prompt engineering modifications to measure instruction variations with concrete outcomes. When model updates become available, compare versions using confidence intervals to ensure improvements are real. Consider exploring advanced experimental designs like [multi-armed bandits](https://en.wikipedia.org/wiki/Multi-armed_bandit) for faster convergence, [sequential analysis](https://en.wikipedia.org/wiki/Sequential_analysis) for early stopping, and [factorial designs](https://en.wikipedia.org/wiki/Factorial_experiment) to understand interaction effects between multiple AI components.
+**Advanced Practices:** Moving forward, require statistical proof before deploying any new AI configuration changes. A/B test your prompt engineering modifications to measure instruction variations with concrete outcomes. When model updates become available, compare versions using confidence intervals to ensure improvements are real. Consider exploring advanced experimental designs like [multi-armed bandits](https://launchdarkly.com/docs/home/multi-armed-bandits) for faster convergence, [sequential analysis](https://en.wikipedia.org/wiki/Sequential_analysis) for early stopping, and [factorial designs](https://docs.launchdarkly.com/guides/experimentation/designing-experiments) to understand interaction effects between multiple AI components.
 
 ## From Chaos to Clarity
 
 Across this three-part series, you've transformed from hardcoded AI configurations to a scientifically rigorous, data-driven optimization engine. **[Part 1](tutorial_1.md)** established your foundation with a dynamic multi-agent [LangGraph](https://langchain-ai.github.io/langgraph/) system controlled by [LaunchDarkly AI Configs](https://launchdarkly.com/ai-config/), eliminating the need for code deployments when adjusting AI behavior. **[Part 2](tutorial_2.md)** added sophisticated targeting with geographic privacy rules, user segmentation by plan tiers, and [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) tool integration for real academic research capabilities. **[Part 3](tutorial_3.md)** completed your journey with statistical experimentation that proves ROI and guides optimization decisions with mathematical confidence rather than intuition.
 
 You now possess a defensible AI system that adapts to changing requirements, scales across user segments, and continuously improves through measured experimentation. Your stakeholders receive concrete evidence for AI investments, your engineering team deploys features with statistical backing, and your users benefit from optimized experiences driven by real data rather than assumptions. The chaos of ad-hoc AI development has given way to clarity through systematic, scientific product development.
-
-## Your Next Steps
-
-### **This Week**
-- Run one small experiment on your production traffic
-- Challenge one assumption with data (e.g., "Is GPT-4 really better than GPT-3.5 for our use case?")
-- Share results with your team - data beats opinions
-
-### **This Month**
-- Build experiment templates for common questions
-- Create a metrics dashboard for ongoing monitoring
-- Document which experiments worked (and which didn't)
-
-### **This Quarter**
-- Establish a culture where no AI change ships without metrics
-- Build a library of proven configurations
-- Use data to justify (or reject) expensive AI investments
 
 ## Resources & Community
 
