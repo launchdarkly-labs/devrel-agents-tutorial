@@ -84,7 +84,7 @@ Follow the complete guide to run your own experiments.
 **Success Criteria (must meet 90% threshold)**:
 1. ≤15% decrease in positive feedback rates
 2. ≤30% cost increase
-3. ≤30s response latency
+3. ≤5s response latency
 
 ### **Experiment 2: Premium Model Value Analysis**
 
@@ -532,23 +532,52 @@ If `ai_cost_per_request` events aren't showing in LaunchDarkly, first verify tha
 
 ## Beyond This Tutorial: Advanced AI Experimentation Patterns
 
-### **Other AI Experimentation Types Available in LaunchDarkly**
+### **Other AI experimentation types you can run in LaunchDarkly**
 
-Even beyond the experiments you ran here, LaunchDarkly AI Configs give you two big buckets of opportunities:
+*Context from earlier:* you ran two experiments:
+- **Security‑agent test** → a **bundle change** (both prompt/instructions **and** model changed).
+- **Premium‑model test** → a **model‑only** change.
 
-**Experiments you can run only AI Config variations**
+AI Configs come in two modes—**prompt‑based** (single‑step completions) and **agent‑based** (multi‑step workflows with tools). Below are additional patterns to explore.
 
-- `Prompt & Template Experiments` – clone a variation and iterate on instructions, tone, or few-shot examples to measure adherence to schemas or qualitative feedback.
-- `Tool & Model Bundles` – toggle `search_v2`, `reranking`, or MCP research tools per segment to validate different tool stacks, available directly through the `tools` array. 
-- `AI Model Parameters` –Iterate on `max_tool_calls`, `temperature` or other parameters.
-- `High-level Cost/Latency Trade-offs` – route cohorts between models such as Haiku vs Sonnet or slim vs premium tool sets to compare outcome quality versus spend.
+---
 
-**Patterns that you can test using LaunchDarkly feature flags and/ or custom metrics**
+#### Experiments you can run **entirely in AI Configs** (no app redeploy)
+- **Prompt & template experiments (prompt‑based or agent instructions)**  
+  Duplicate a variation and iterate on system/assistant messages or agent instructions to measure adherence to schema, tone, or qualitative satisfaction. Use LD Experimentation to tie those variations to product metrics.  
 
-- `Fine-grained RAG tuning` – k-values, similarity thresholds, reranker swaps, and cache policies are currently hard-coded in the tool implementations; expose them via flags if you want to test them.
-- `Tool routing guardrails` – fallback flows, or error-handling heuristics need supporting logic in the agent wrapper before they can be toggled remotely.
-- `Safety guardrail calibration` – moderation thresholds, red-team prompts, and PII sensitivity levers require you to wire dedicated services or parameters into the security agent.
-- `Session budget enforcement` – add enforcement code and guard it with a flag when you are ready to experiment.
+- **Model‑parameter experiments**  
+  In a single model, vary parameters like `temperature` or `max_tokens`, and (optionally) add **custom parameters** you define (for example, an internal `max_tool_calls` or decoding setting) directly on the variation.  
+
+- **Tool‑bundle experiments (agent mode or tool‑enabled completions)**  
+  Attach/detach reusable tools from the **Tools Library** to compare stacks (e.g., `search_v2`, a reranker, or MCP‑exposed research tools) across segments. Keep one variable at a time when possible
+
+- **Cost/latency trade‑offs**  
+  Compare “slim” vs “premium” stacks by segment. Track tokens, time‑to‑first‑token, duration, and satisfaction to decide where higher spend is warranted.
+
+> **Practical notes**
+> - Use **Experimentation** for behavior impact (clicks, task success); use the **Monitoring** tab for LLM‑level metrics (tokens, latency, errors, satisfaction).  
+> - You **can’t** run a guarded rollout and an experiment on the same flag at the same time. Pick one: guarded rollout for risk‑managed releases, experiment for causal measurement.
+---
+
+#### Patterns that **usually need feature flags and/or custom instrumentation**
+- **Fine‑grained RAG tuning**  
+  k‑values, similarity thresholds, chunking, reranker swaps, and cache policy are typically coded inside your retrieval layer. Expose these as flags or AI Config custom parameters if you want to A/B them.
+
+- **Tool‑routing guardrails**  
+  Fallback flows (e.g., retry with a different tool/model on error), escalation rules, or heuristics need logic in your agent/orchestrator. Gate those behaviors behind flags and measure with custom metrics.
+
+- **Safety guardrail calibration**  
+  Moderation thresholds, red‑team prompts, and PII sensitivity levers belong in a dedicated safety service or the agent wrapper. Wire them to flags so you can raise/lower sensitivity by segment (e.g., enterprise vs free).
+
+- **Session budget enforcement**  
+  Monitoring will show token costs and usage, but enforcing per‑session or per‑org budgets (denylist, degrade model, or stop‑tooling) requires application logic. Wrap policies in flags before you experiment.
+
+---
+
+#### Targeting & segmentation ideas (works across all the above)
+- Route by **plan/tier**, **geo**, **device**, or **org** using AI Config targeting rules and percentage rollouts.
+- Keep variations narrow (one change per experiment) to avoid confounding; reserve “bundle” tests for tool‑stack bake‑offs.
 
 **Advanced Practices:** Require statistical evidence before shipping configuration changes. Pair each variation with clear success metrics, then A/B test prompt or tool adjustments and use confidence intervals to confirm improvements. When you introduce the new code paths above, protect them behind feature flags so you can run sequential tests, [multi-armed bandits](https://launchdarkly.com/docs/home/multi-armed-bandits) for faster convergence, or change your [experiment design](https://docs.launchdarkly.com/guides/experimentation/designing-experiments) to understand how prompts, tools, and safety levers interact.
 

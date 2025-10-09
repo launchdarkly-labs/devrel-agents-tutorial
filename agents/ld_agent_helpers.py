@@ -208,7 +208,7 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                             ld_context = config_manager.build_context(user_id, user_context)
 
                             # Track cost with metadata for experiment attribution
-                            config_manager.track_cost_metric(agent_config, ld_context, cost)
+                            config_manager.track_cost_metric(agent_config, ld_context, cost, config_key)
                             log_student(f"COST TRACKING: ${cost:.6f} for {agent_config.model.name}")
 
                 except Exception as e:

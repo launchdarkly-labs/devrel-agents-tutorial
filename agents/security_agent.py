@@ -166,7 +166,7 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
                         ld_context = config_manager.build_context(user_id, user_context_data)
 
                         # Track cost with metadata for experiment attribution
-                        config_manager.track_cost_metric(agent_config, ld_context, cost)
+                        config_manager.track_cost_metric(agent_config, ld_context, cost, "security-agent")
                         log_student(f"COST TRACKING: ${cost:.6f} for {agent_config.model.name}")
 
             # Track success metric

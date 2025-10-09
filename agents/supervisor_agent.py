@@ -186,7 +186,7 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
                         ld_context = config_manager.build_context(user_id, user_context)
 
                         # Track cost with metadata for experiment attribution
-                        config_manager.track_cost_metric(supervisor_config, ld_context, cost)
+                        config_manager.track_cost_metric(supervisor_config, ld_context, cost, "supervisor-agent")
                         log_student(f"COST TRACKING: ${cost:.6f} for {supervisor_config.model.name}")
 
             # Track success metric

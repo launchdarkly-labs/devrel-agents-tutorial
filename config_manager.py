@@ -121,18 +121,24 @@ class FixedConfigManager:
         """Flush metrics to LaunchDarkly"""
         self.ld_client.flush()
 
-    def track_cost_metric(self, agent_config, context, cost):
+    def track_cost_metric(self, agent_config, context, cost, config_key):
         """Track cost metric with AI Config metadata for experiment attribution.
         
         This ensures cost events include trackJsonData so they're properly
         associated with AI Config variations in experiments, matching the
         pattern used by token and feedback tracking.
+        
+        Args:
+            agent_config: The AI config object with tracker
+            context: LaunchDarkly context
+            cost: Cost value in dollars
+            config_key: The AI config key (e.g., 'support-agent', 'security-agent')
         """
         try:
             # Extract metadata from agent_config for experiment attribution
             metadata = {
                 "version": 1,
-                "configKey": agent_config.key if hasattr(agent_config, 'key') else 'unknown',
+                "configKey": config_key,
                 "variationKey": agent_config.tracker._variation_key if hasattr(agent_config.tracker, '_variation_key') else 'unknown',
                 "modelName": agent_config.model.name if hasattr(agent_config, 'model') else 'unknown',
                 "providerName": agent_config.provider.name if hasattr(agent_config, 'provider') else 'unknown'
