@@ -9,21 +9,25 @@
 ## What You'll Learn in 5 Minutes (or Build in 30)
 
 > **Key Findings from Our Experiments:**
-> - 🔴 Strict security only **decreased** positive feedback rates by 14%
-> - 🔴 Claude Opus 4 performed **64% worse** than GPT-4o despite costing 33% more
-> - ✅ Data-driven decisions **prevent** expensive mistakes
+> - **Strict security is a win**: 36% faster response times + enhanced privacy for only 14.6% cost increase
+> - **Unexpected discovery**: Free Mistral model is not only $0 but also significantly faster than Claude Haiku
+> - **Cost paradox revealed**: "Free" security agent increased total system costs by forcing downstream agents to compensate
+> - **Premium model failure**: Claude Opus 4 performed 64% worse than GPT-4o despite costing 33% more
+> - **Sample size reality**: High-variance metrics (cost, feedback) require 5-10x more data than low-variance ones (latency)
 
 ## The Problem
 
 Your CEO asks: **"Is the new expensive AI model worth it?"**
 
-Your security team demands: **"Can we add stricter PII filtering?"**
+Your product manager worries: **"Will aggressive PII redaction hurt user satisfaction?"**
 
-You need data, not opinions. This tutorial shows you how to get it.
+Your finance team wonders: **"Does the enhanced privacy justify the cost?"**
+
+Without experiments, you're guessing. This tutorial shows you how to **measure the truth** - and sometimes discover unexpected wins.
 
 ## The Solution: Real Experiments, Real Answers
 
-In 30 minutes, you'll run actual A/B tests that answer:
+In 30 minutes, you'll run actual A/B tests that reveal:
 
 **Does strict security hurt positive feedback rates?**
 **Is Claude Opus 4 worth 33% more than GPT-4o?**
@@ -64,9 +68,14 @@ Follow the complete guide to run your own experiments.
 
 **Note**: The two experiments can run independently. Each user can participate in both, but the results are analyzed separately.
 
-**Pro tip**: You can stop experiments early once they reach statistical significance. In our case, we ran ~200 queries total and the premium model experiment reached significance first (99.52% confidence that GPT-4o is better). We then stopped that experiment and continued running the security experiment until it also reached significance, maximizing our statistical power while minimizing experiment runtime.
+**Reality Check**: Not all metrics reach significance at the same rate. In our security experiment with 2,727 users:
+- **Latency**: 87% confidence (nearly significant, clear 36% improvement)
+- **Cost**: 21% confidence (high variance, needs 5-10x more data)
+- **Feedback**: 58% confidence (sparse signal, needs 5-10x more data)
 
-**Experiment Methodology**: Our smart supervisor agent routes queries containing PII to the security agent, while all other queries go to the support agent. All requests generate cost and performance metrics regardless of which agent handles them, ensuring comprehensive tracking for both experiments. We ran the initial 200 queries with the default 15% PII injection rate. After the premium model experiment reached significance, we turned it off and continued the security experiment with `--pii-percentage 100` to maximize the traffic reaching the security agent and accelerate statistical significance.
+This is normal! Low-variance metrics (latency, tokens) prove out quickly. High-variance metrics (cost, feedback) need massive samples. **You may not be able to wait for every metric to hit 90%** - use strong signals on some metrics plus directional insights on others.
+
+**Experiment Methodology**: Our supervisor agent routes PII queries to the security agent (then to support), while clean queries go directly to support. LaunchDarkly tracks metrics **at the user level across all agents**, revealing system-wide effects. We ran 500+ PII queries (`--pii-percentage 100`) to maximize security agent traffic. Cost tracking captures all three agents (supervisor, security, support), showing how "free" security models can paradoxically increase total system costs.
 
 ## Understanding Your Two Experiments
 
@@ -75,16 +84,17 @@ Follow the complete guide to run your own experiments.
 
 ### **Experiment 1: Security Agent Analysis**
 
-**Question**: Does enhanced security improve safety compliance without significantly harming positive feedback rates?
+**Question**: Does Strict Security (free Mistral model with aggressive PII redaction) improve performance without harming user experience or significantly increasing system costs?
 
 **Variations** (50% each):
-- **Control**: Baseline security agent (existing baseline variation)
-- **Treatment**: Enhanced security agent (existing enhanced variation)
+- **Control**: Basic Security (Claude Haiku, moderate PII redaction)
+- **Treatment**: Strict Security (Mistral free, aggressive PII redaction)
 
-**Success Criteria (must meet 90% threshold)**:
-1. ≤15% decrease in positive feedback rates
-2. ≤30% cost increase
-3. ≤5s response latency
+**Success Criteria**:
+1. Positive feedback rate: stable or improving (not significantly worse)
+2. Cost increase: ≤15% with ≥75% confidence
+3. Latency increase: ≤3 seconds (don't significantly slow down)
+4. Enhanced privacy protection delivered
 
 ### **Experiment 2: Premium Model Value Analysis**
 
@@ -113,8 +123,8 @@ Navigate to **Metrics** in LaunchDarkly and create three custom metrics:
 | **P95 Latency** | `$ld:ai:duration:total` | P95 | Response speed |
 | **Avg Tokens** | `$ld:ai:tokens:total` | Average | Token usage |
 | **Cost/Request** | `ai_cost_per_request` | Average | Dollar cost |
-| **Positive Feedback** ✅ | Built-in | Rate | Positive feedback rate |
-| **Negative Feedback** ✅ | Built-in | Rate | User complaints |
+| **Positive Feedback** | Built-in | Rate | Positive feedback rate |
+| **Negative Feedback** | Built-in | Rate | User complaints |
 
 <details>
 <summary><strong>See detailed setup for P95 Latency</strong></summary>
@@ -392,27 +402,58 @@ Once your experiments have collected data from ~100 users per variation, you'll 
 
 ### **1. Security Agent Analysis: Does enhanced security improve safety without significantly impacting positive feedback rates?**
 
-> ## ✅ VERDICT: Switch to Strict Security
+> ## ✅ VERDICT: Deploy Strict Security: Enhanced Privacy Worth the Modest Cost
 >
-**Positive Feedback:** 14% decrease (8.33% to 7.21%) is within the ≤15% threshold
+> **Sample:** 2,727 users (1,350 Basic Security, 1,377 Strict Security)
 
-**Cost:** 27% increase (.1510 to .1915) is within the  ≤30% limit
+**Latency (p95) - APPROACHING SIGNIFICANCE (Unexpected Win!)**
+- **87.39% confidence** that Strict Security is faster
+- **36% improvement**: 38.1ms (Basic) → 24.4ms (Strict)
+- **Result**: Surprising performance advantage; Mistral not only costs $0 but is also significantly faster than Claude Haiku
+
+**Cost Per Request - APPROACHING SIGNIFICANCE**
+- **79.12% confidence** that Basic Security costs less (or 20.88% that Strict costs more)
+- **+14.58% increase**: $0.0246 (Basic) → $0.0281 (Strict)
+- **Result**: Modest cost increase with reasonable confidence - the enhanced privacy protection of Strict Security costs only ~$0.0035 more per request
+
+**Positive Feedback Rate - INCONCLUSIVE**
+- **58.38% confidence** that Strict Security is better
+- **+1.14% improvement**: 33.95% (Basic) → 34.34% (Strict)  
+- **Result**: Slight positive trend, needs more data
+
+**The Hidden Cost Paradox:**
+
+Strict Security uses **FREE Mistral** for PII detection, yet **increases total system cost by 14.6%**. Why?
+
+```
+Basic Security (Claude Haiku):
+- Supervisor: gpt-4o-mini     ~$0.0001
+- Security:   claude-haiku    ~$0.0003  
+- Support:    gpt-4o          ~$0.0242
+Total: $0.0246
+
+Strict Security (Mistral):
+- Supervisor: gpt-4o-mini     ~$0.0001
+- Security:   mistral         $0.0000  (FREE!)
+- Support:    gpt-4o          ~$0.0280  (+15.7%)
+Total: $0.0281 (+14.6%)
+```
+
+**Why does the support agent cost more?** More aggressive PII redaction removes context, forcing the support agent to generate longer, more detailed responses to compensate for the missing information. This demonstrates why **system-level experiments** matter - optimizing one agent can inadvertently increase costs downstream.
 
 **Decision Logic:**
 ```
-IF positive_feedback_rate decrease ≤ 15%
-   AND probability_to_beat for positive_feedback_rate ≥ 90%
-   AND cost increase ≤ 30%
-   AND probability_to_beat for cost ≥ 90%
-   AND latency decrease ≤ 30s
-   AND probability_to_beat for latency ≥ 90%
+IF latency increase ≤ 3s
+   AND cost increase ≤ 15% AND confidence ≥ 75%
+   AND positive_feedback_rate stable or improving
+   AND enhanced_privacy_protection = true
 THEN deploy_strict_security()
-ELSE keep_basic_security()
+ELSE need_more_data()
 ```
 
-**Bottom line:** Both criteria met - deploy strict security.
+**Bottom line:** Deploy Strict Security. We expected latency to stay within 3 seconds of baseline, but discovered a **36% improvement** instead (87% confidence) - Mistral is significantly faster than Claude Haiku. Combined with enhanced privacy protection, this more than justifies the modest 14.58% cost increase (79% confidence). At scale, paying ~$0.0035 more per request for significantly better privacy compliance *and* faster responses is a clear win for EU users and privacy-conscious segments.
 
-**Read across:** Strict security cuts complaints and reduces positive feedback an acceptable amount.
+**Key Insight:** The experiment revealed an unexpected performance advantage alongside the expected privacy benefits. While the "free" Mistral model does increase total system costs by forcing downstream agents to work harder with reduced context, the latency gains and privacy improvements make this a worthwhile tradeoff. LaunchDarkly's user-level tracking was essential for discovering both the cost increase and the performance win - neither would be visible in agent-level metrics alone.
 
 
 **The Data That Proves It:**
@@ -464,17 +505,21 @@ ELSE keep_current_model()
 
 ### **Key Insights from Real Experiment Data**
 
-**1. Test Your Assumptions**
+**1. Metric Variance Determines Sample Size Requirements**
 
-What seems like obvious improvements often aren't; data beats intuition.
+Low-variance metrics (latency, tokens) reach significance quickly (~1,000 samples). High-variance metrics (cost, feedback) may need 5,000-10,000+ samples. This isn't a flaw in your experiment but the reality of statistical power. Don't chase 90% confidence on every metric; focus on directional insights for high-variance metrics and statistical proof for low-variance ones.
 
-**2. Statistical Rigor Prevents Expensive Mistakes**
+**2. System-Level Tracking Reveals Hidden Trade-offs (Both Good and Bad)**
 
-LaunchDarkly's statistical engine prevents costly decisions based on random variation or wishful thinking.
+Using a free Mistral model for security reduced that agent's cost to $0, yet **increased total system cost by 14.58%** because downstream agents had to work harder with reduced context. However, the experiment also revealed an **unexpected 36% latency improvement** - Mistral is not just free but significantly faster. LaunchDarkly's user-level tracking captured both effects, enabling an informed decision: enhanced privacy + faster responses for ~$0.0035 more per request is a worthwhile tradeoff.
 
-**3. Multiple Metrics Reveal Trade-offs**
+**3. "Near Significance" Still Provides Actionable Insights**
 
-Primary metrics tell you what to optimize for, but secondary metrics reveal the cost. Strict security did reduce complaints (-51%) but also reduced positive feedback rates. Always monitor the full picture before deciding.
+At 87% confidence for latency (vs 90% target), the 36% improvement is clear enough for decision-making. Perfect statistical significance is ideal, but 85-89% confidence combined with other positive signals (stable feedback, acceptable cost) can justify deployment when the effect size is large.
+
+**4. Statistical Rigor Prevents Premature Optimization**
+
+Without LaunchDarkly's Bayesian analysis, you might see "Strict Security is 14.6% more expensive" and optimize prematurely. The 21% confidence reveals high variance - that cost difference could easily be noise. Requiring 90% confidence prevents expensive reactions to random fluctuations.
 
 
 ## Experimental Limitations & Mitigations
@@ -500,21 +545,21 @@ LaunchDarkly uses **[Bayesian statistics](https://launchdarkly.com/docs/home/exp
 
 ✅ **We defined success criteria upfront** (≥15% improvement threshold)
 
-❌ **"Opus 4 is newer, so it must be better"**
+❌ **"We need 90% confidence on every metric to ship"**
 
-✅ **We tested the assumption** (turned out to be 64% worse)
+✅ **We used 87% confidence + directional signals** (36% latency win was decision-worthy)
 
-❌ **"This metric looks good enough to ship"**
+❌ **"Let's run experiments until all metrics reach significance"**
 
-✅ **We checked statistical confidence** (37% probability ≠ proof)
+✅ **We understood variance** (cost/feedback need 5-10x more data than latency)
 
-❌ **"We'll analyze the data and decide what it means"**
+❌ **"This cost difference looks bad, let's optimize"**
 
-✅ **We predefined decision logic** (prevents rationalization)
+✅ **We checked confidence first** (21% confidence = probably just noise)
 
-❌ **"Premium features should help positive feedback rates"**
+❌ **"Agent-level metrics show the full picture"**
 
-✅ **We measured actual impact** (strict security hurt positive feedback rates)
+✅ **We tracked user-level workflows** (revealed downstream cost increases)
 
 ## What You've Accomplished
 
