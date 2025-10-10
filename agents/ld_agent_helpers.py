@@ -240,12 +240,19 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                                 tool_name = tool_call.name
                                 tool_calls_summary.append(tool_name)
 
-                                # Try to extract details
+                                # Try to extract details with search query
                                 if hasattr(tool_call, 'args'):
-                                    tool_details.append({
-                                        "tool": tool_name,
+                                    detail = {
+                                        "name": tool_name,
                                         "args": tool_call.args
-                                    })
+                                    }
+                                    # Extract search query from args if present
+                                    if isinstance(tool_call.args, dict):
+                                        if 'query' in tool_call.args:
+                                            detail["search_query"] = tool_call.args['query']
+                                        elif 'search_query' in tool_call.args:
+                                            detail["search_query"] = tool_call.args['search_query']
+                                    tool_details.append(detail)
 
                 return {
                     "user_input": user_input,
