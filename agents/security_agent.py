@@ -70,7 +70,7 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
     
     # NOTE: Instructions are fetched on each call using LaunchDarkly pattern
 
-    def call_model(state: AgentState):
+    async def call_model(state: AgentState):
         """
         LANGGRAPH NODE: PII Detection with Structured Output
 
@@ -92,17 +92,15 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
             messages = state["messages"]
 
             # Fetch config dynamically for each call
-            import asyncio
-
             # Get latest config from LaunchDarkly
             user_context = state.get("user_context", {})
             user_id = state.get("user_id", "security_user")
 
-            agent_config = asyncio.run(config_manager.get_config(
+            agent_config = await config_manager.get_config(
                 user_id=user_id,
                 config_key="security-agent",
                 user_context=user_context
-            ))
+            )
 
             if not agent_config.enabled:
                 # Return safe default if config is disabled
@@ -125,20 +123,54 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
             )
 
             # Use structured output for guaranteed PII format
-            structured_model = base_model.with_structured_output(PIIDetectionResponse)
+            # include_raw=True preserves usage metadata for cost tracking
+            structured_model = base_model.with_structured_output(PIIDetectionResponse, include_raw=True)
 
             # Create system message with current instructions from LaunchDarkly
             system_message = SystemMessage(content=agent_config.instructions)
             full_messages = [system_message] + messages
 
-            # Call model with structured output
-            pii_result = structured_model.invoke(full_messages)
+            # Apply rate limiting before LLM call
+            from agents.ld_agent_helpers import _rate_limit_llm_call
+            _rate_limit_llm_call()
 
-            # Track metrics
-            config_manager.track_metrics(
-                agent_config.tracker,
-                lambda: "security_pii_detection_success"
-            )
+            # Call model with structured output
+            if hasattr(structured_model, "ainvoke"):
+                response = await structured_model.ainvoke(full_messages)
+            else:
+                response = structured_model.invoke(full_messages)
+            
+            # Extract parsed result from response
+            pii_result = response["parsed"] if isinstance(response, dict) else response
+            
+            # Extract and track token usage from raw response
+            if isinstance(response, dict) and "raw" in response and hasattr(response["raw"], "usage_metadata"):
+                usage_data = response["raw"].usage_metadata
+                if usage_data:
+                    from ldai.tracker import TokenUsage
+                    token_usage = TokenUsage(
+                        input=usage_data.get("input_tokens", 0),
+                        output=usage_data.get("output_tokens", 0),
+                        total=usage_data.get("total_tokens", 0)
+                    )
+                    agent_config.tracker.track_tokens(token_usage)
+                    log_student(f"SECURITY PII DETECTION TOKENS: {token_usage.total} tokens ({token_usage.input} in, {token_usage.output} out)")
+
+                    # Track cost metric with AI Config metadata for experiment attribution
+                    from utils.cost_calculator import calculate_cost
+                    cost = calculate_cost(agent_config.model.name, token_usage.input, token_usage.output)
+                    if cost > 0:
+                        # Use centralized context builder to ensure exact match with AI Config evaluation
+                        user_id = state.get("user_id", "security_user")
+                        user_context_data = state.get("user_context", {})
+                        ld_context = config_manager.build_context(user_id, user_context_data)
+
+                        # Track cost with metadata for experiment attribution
+                        config_manager.track_cost_metric(agent_config, ld_context, cost, "security-agent")
+                        log_student(f"COST TRACKING: ${cost:.6f} for {agent_config.model.name}")
+
+            # Track success metric
+            agent_config.tracker.track_success()
 
             # Extract structured results
             detected = pii_result.detected
@@ -160,10 +192,8 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
             
             # Track error with LDAI metrics
             try:
-                config_manager.track_metrics(
-                    tracker,
-                    lambda: (_ for _ in ()).throw(e)  # Trigger error tracking
-                )
+                if 'agent_config' in locals() and agent_config and hasattr(agent_config, 'tracker'):
+                    agent_config.tracker.track_error()
             except:
                 pass
             

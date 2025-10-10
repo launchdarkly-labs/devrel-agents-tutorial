@@ -1,9 +1,9 @@
 """
-Shared helper functions for LaunchDarkly AI agents following the proper pattern
+Helper functions for LaunchDarkly AI agents - simplified version
 """
 import asyncio
-import time
 import json
+import time
 from typing import List, Any, Tuple, Optional
 from langchain.chat_models import init_chat_model
 from langgraph.prebuilt import create_react_agent
@@ -38,44 +38,6 @@ def map_provider_to_langchain(provider_name):
     }
     lower_provider = provider_name.lower()
     return provider_mapping.get(lower_provider, lower_provider)
-
-
-
-
-def track_langgraph_metrics(tracker, func):
-    """
-    Track LangGraph agent operations with LaunchDarkly metrics.
-    Based on the pattern from your examples.
-    """
-    try:
-        result = tracker.track_duration_of(func)
-        tracker.track_success()
-
-        # For LangGraph agents, usage_metadata is included on all messages that used AI
-        total_input_tokens = 0
-        total_output_tokens = 0
-        total_tokens = 0
-
-        if "messages" in result:
-            for message in result['messages']:
-                # Check for usage_metadata directly on the message
-                if hasattr(message, "usage_metadata") and message.usage_metadata:
-                    usage_data = message.usage_metadata
-                    total_input_tokens += usage_data.get("input_tokens", 0)
-                    total_output_tokens += usage_data.get("output_tokens", 0)
-                    total_tokens += usage_data.get("total_tokens", 0)
-
-        if total_tokens > 0:
-            token_usage = TokenUsage(
-                input=total_input_tokens,
-                output=total_output_tokens,
-                total=total_tokens
-            )
-            tracker.track_tokens(token_usage)
-    except Exception:
-        tracker.track_error()
-        raise
-    return result
 
 
 async def create_agent_with_fresh_config(
@@ -123,11 +85,9 @@ async def create_agent_with_fresh_config(
                 if 'max_tool_calls' in custom_params:
                     max_tool_calls = custom_params['max_tool_calls']
         except Exception as e:
-            log_student(f"DEBUG: Error extracting max_tool_calls in create_agent_with_fresh_config: {e}")
-
+            log_student(f"DEBUG: Error extracting max_tool_calls: {e}")
 
         # Create React agent with instructions
-        # Note: LangGraph's create_react_agent handles max iterations internally
         agent = create_react_agent(
             model=llm,
             tools=tools,
@@ -137,7 +97,7 @@ async def create_agent_with_fresh_config(
         return agent, agent_config.tracker, False
 
     except Exception as e:
-        log_student(f"Error creating agent {config_key}: {e}")
+        log_student(f"ERROR in create_agent_with_fresh_config: {e}")
         return None, None, True
 
 
@@ -157,9 +117,9 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
         def __init__(self):
             self.max_tool_calls = 15  # Default value
 
-        def invoke(self, request_data: dict) -> dict:
+        async def ainvoke(self, request_data: dict) -> dict:
             """
-            Main agent invocation - fetches config and executes
+            Async invocation - fetches config and executes without blocking event loop
             """
             try:
                 # Extract request parameters
@@ -169,13 +129,13 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                 messages = request_data.get("messages", [])
 
                 # Create agent with config
-                agent, tracker, disabled = asyncio.run(create_agent_with_fresh_config(
+                agent, tracker, disabled = await create_agent_with_fresh_config(
                     config_manager=config_manager,
                     config_key=config_key,
                     user_id=user_id,
                     user_context=user_context,
                     tools=tools
-                ))
+                )
 
                 if disabled:
                     log_student(f"{config_key}: AI Config is disabled")
@@ -194,151 +154,139 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                     from langchain_core.messages import HumanMessage
                     agent_messages = [HumanMessage(content=user_input)]
 
-                # Prepare initial state for agent
-                initial_state = {
-                    "messages": agent_messages
-                }
+                # Build state
+                initial_state = {"messages": agent_messages}
+                prev_message_count = len(agent_messages)
 
-                # Get max_tool_calls from LaunchDarkly config by fetching it fresh
-                agent_config = asyncio.run(config_manager.get_config(
+                # Get agent configuration for tracking
+                agent_config = await config_manager.get_config(
                     user_id=user_id,
                     config_key=config_key,
                     user_context=user_context
-                ))
+                )
 
-                max_tool_calls = 5  # Default
-
-                # Extract max_tool_calls from LaunchDarkly config
-                # Use same path as get_tools_list: model.parameters.custom
-                if agent_config:
-                    try:
-                        config_dict = agent_config.to_dict()
-                        log_student(f"DEBUG: LaunchDarkly config keys: {list(config_dict.keys())}")
-                        
-                        # Check model.parameters.custom (same structure as tools)
-                        if 'model' in config_dict and 'parameters' in config_dict['model']:
-                            params = config_dict['model']['parameters']
-                            
-                            # Custom parameters are at the same level as tools
-                            if 'custom' in params and params['custom']:
-                                custom_params = params['custom']
-                                log_student(f"DEBUG: Found custom params: {list(custom_params.keys())}")
-                                
-                                if 'max_tool_calls' in custom_params:
-                                    max_tool_calls = custom_params['max_tool_calls']
-                                    log_student(f"DEBUG: Found max_tool_calls={max_tool_calls} in LaunchDarkly")
-                            else:
-                                log_student(f"DEBUG: No custom params in model.parameters, using default={max_tool_calls}")
-                        else:
-                            log_student(f"DEBUG: No model.parameters found, using default max_tool_calls={max_tool_calls}")
-                    except Exception as e:
-                        log_student(f"DEBUG: Error extracting max_tool_calls: {e}, using default={max_tool_calls}")
-
-                # Apply rate limiting before LLM calls
+                # Apply rate limiting before LLM call
                 _rate_limit_llm_call()
 
-                # Create shared tool call counter for both limit enforcement and LaunchDarkly metrics
-                tool_counter = {"calls": 0, "names": []}
+                # Execute agent with tracking
+                start_time = time.time()
+                try:
+                    # Execute agent
+                    response = await agent.ainvoke(initial_state)
 
-                def create_limited_tool(tool):
-                    """Create a tool that respects LaunchDarkly max_tool_calls limit"""
-                    original_run = tool._run
+                    # Track success and latency
+                    tracker.track_success()
+                    latency_ms = int((time.time() - start_time) * 1000)
+                    if hasattr(tracker, 'track_latency_ms'):
+                        tracker.track_latency_ms(latency_ms)
 
-                    def limited_run(*args, **kwargs):
-                        if tool_counter["calls"] >= max_tool_calls:
-                            log_student(f"DEBUG: Tool '{tool.name}' blocked - LaunchDarkly max_tool_calls limit ({max_tool_calls}) reached")
-                            return f"Tool usage limit reached ({max_tool_calls} calls). Please provide your best answer based on available information."
+                    # Extract token usage from new messages
+                    new_messages = response['messages'][prev_message_count:]
+                    total_input = 0
+                    total_output = 0
 
-                        tool_counter["calls"] += 1
-                        tool_counter["names"].append(tool.name)
-                        log_student(f"DEBUG: Tool call {tool_counter['calls']}/{max_tool_calls}: {tool.name}")
-                        return original_run(*args, **kwargs)
+                    for msg in new_messages:
+                        if hasattr(msg, 'usage_metadata') and msg.usage_metadata:
+                            total_input += msg.usage_metadata.get('input_tokens', 0)
+                            total_output += msg.usage_metadata.get('output_tokens', 0)
 
-                    tool._run = limited_run
-                    return tool
+                    # Track tokens if found
+                    if total_input > 0 or total_output > 0:
+                        token_usage = TokenUsage(
+                            input=total_input,
+                            output=total_output,
+                            total=total_input + total_output
+                        )
+                        tracker.track_tokens(token_usage)
+                        log_student(f"AGENT TOKENS: {token_usage.total} tokens ({token_usage.input} in, {token_usage.output} out)")
 
-                # Create tools with LaunchDarkly limit enforcement
-                limited_tools = [create_limited_tool(tool) for tool in tools]
+                        # Track cost metric with AI Config metadata for experiment attribution
+                        from utils.cost_calculator import calculate_cost
+                        cost = calculate_cost(agent_config.model.name, total_input, total_output)
+                        if cost > 0:
+                            # Use centralized context builder to ensure exact match with AI Config evaluation
+                            ld_context = config_manager.build_context(user_id, user_context)
 
-                # Create agent with limited tools and natural recursion
-                from langchain.chat_models import init_chat_model
-                langchain_provider = map_provider_to_langchain(agent_config.provider.name)
-                llm = init_chat_model(
-                    model=agent_config.model.name,
-                    model_provider=langchain_provider,
-                )
+                            # Track cost with metadata for experiment attribution
+                            config_manager.track_cost_metric(agent_config, ld_context, cost, config_key)
+                            log_student(f"COST TRACKING: ${cost:.6f} for {agent_config.model.name}")
 
-                agent = create_react_agent(
-                    model=llm,
-                    tools=limited_tools,
-                    prompt=agent_config.instructions
-                )
+                except Exception as e:
+                    tracker.track_error()
+                    raise
 
-                log_student(f"DEBUG: Executing agent with LaunchDarkly max_tool_calls={max_tool_calls}, tools={len(tools)}")
+                # Extract new messages
+                new_messages = response['messages'][prev_message_count:]
 
-                # Execute agent with natural recursion limits
-                response = track_langgraph_metrics(
-                    tracker,
-                    lambda: agent.invoke(initial_state)
-                )
-
-                # Update the response with our accurate tool count for LaunchDarkly metrics
-                actual_tool_count = tool_counter["calls"]
-                log_student(f"DEBUG: Agent completed - LaunchDarkly tool count: {actual_tool_count}/{max_tool_calls}")
-
-                # Extract final response and tool calls
-                final_response = response["messages"][-1].content if response["messages"] else ""
-
-                tool_calls = []
+                # Parse response
+                ai_response = ""
+                tool_calls_summary = []
                 tool_details = []
-                for message in response["messages"]:
-                    if hasattr(message, 'tool_calls') and message.tool_calls:
-                        for tool_call in message.tool_calls:
-                            tool_name = tool_call.get('name', 'unknown')
-                            tool_args = tool_call.get('args', {})
-                            tool_calls.append(tool_name)
 
-                            # Extract search query from tool arguments
-                            search_query = ""
-                            
-                            # Try direct query fields first
-                            if 'query' in tool_args:
-                                search_query = tool_args['query']
-                            elif 'search_query' in tool_args:
-                                search_query = tool_args['search_query']
-                            elif 'q' in tool_args:
-                                search_query = tool_args['q']
-                            # Handle MCP tools with 'args' array containing dict with 'query'
-                            elif 'args' in tool_args and isinstance(tool_args['args'], list) and len(tool_args['args']) > 0:
-                                first_arg = tool_args['args'][0]
-                                if isinstance(first_arg, dict) and 'query' in first_arg:
-                                    search_query = first_arg['query']
-                            # Handle nested kwargs structure
-                            elif 'kwargs' in tool_args and isinstance(tool_args['kwargs'], dict):
-                                search_query = tool_args['kwargs'].get('query', '')
-                            
-                            # Convert to string if needed
-                            if search_query and not isinstance(search_query, str):
-                                search_query = str(search_query)
+                for msg in new_messages:
+                    # Get AI message content
+                    if hasattr(msg, 'content') and msg.content:
+                        if isinstance(msg.content, list):
+                            for content_item in msg.content:
+                                if hasattr(content_item, 'text'):
+                                    ai_response += content_item.text + " "
+                        else:
+                            ai_response += str(msg.content) + " "
 
-                            tool_details.append({
-                                "name": tool_name,
-                                "search_query": search_query if search_query else None,
-                                "args": tool_args
-                            })
+                    # Track tool calls
+                    if hasattr(msg, 'tool_calls') and msg.tool_calls:
+                        for tool_call in msg.tool_calls:
+                            if hasattr(tool_call, 'name'):
+                                tool_name = tool_call.name
+                                tool_calls_summary.append(tool_name)
+
+                                # Try to extract details
+                                if hasattr(tool_call, 'args'):
+                                    tool_details.append({
+                                        "tool": tool_name,
+                                        "args": tool_call.args
+                                    })
 
                 return {
                     "user_input": user_input,
-                    "response": final_response,
-                    "tool_calls": tool_calls,
+                    "response": ai_response.strip() if ai_response else "I understand your question. Let me help you with that.",
+                    "tool_calls": tool_calls_summary,
                     "tool_details": tool_details,
-                    "messages": response["messages"]
+                    "messages": response['messages']
                 }
 
             except Exception as e:
-                log_student(f"Error in {config_key} agent: {e}")
+                log_student(f"ERROR in {config_key} ainvoke: {e}")
+                import traceback
+                log_student(f"Traceback: {traceback.format_exc()}")
                 return {
                     "user_input": user_input,
+                    "response": f"I apologize, but I encountered an error: {e}",
+                    "tool_calls": [],
+                    "tool_details": [],
+                    "messages": []
+                }
+
+        def invoke(self, request_data: dict) -> dict:
+            """
+            Synchronous invocation - runs async code in new event loop
+            """
+            try:
+                # Try to run in existing event loop first
+                try:
+                    loop = asyncio.get_running_loop()
+                    # We're in an async context, create task
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(asyncio.run, self.ainvoke(request_data))
+                        return future.result()
+                except RuntimeError:
+                    # No event loop, create one
+                    return asyncio.run(self.ainvoke(request_data))
+            except Exception as e:
+                log_student(f"SYNC INVOKE ERROR in {config_key}: {e}")
+                return {
+                    "user_input": request_data.get("user_input", ""),
                     "response": f"I apologize, but I encountered an error: {e}",
                     "tool_calls": [],
                     "tool_details": [],

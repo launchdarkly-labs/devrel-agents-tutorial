@@ -4,7 +4,7 @@ from langchain_core.messages import HumanMessage, AIMessage, BaseMessage, System
 from .support_agent import create_support_agent
 from .security_agent import create_security_agent
 from config_manager import FixedConfigManager as ConfigManager
-from utils.logger import log_student
+from utils.logger import log_student, log_debug
 from pydantic import BaseModel
 
 def trim_message_history(messages: List[BaseMessage], max_messages: int = 10) -> List[BaseMessage]:
@@ -137,12 +137,6 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             user_id = state.get("user_id", "supervisor_user")
             user_context = state.get("user_context", {})
 
-            # Track PII pre-screening start
-            config_manager.track_metrics(
-                supervisor_config.tracker,
-                lambda: "supervisor_pii_prescreen_start"
-            )
-
             # Create PII pre-screening model with structured output
             from config_manager import map_provider_to_langchain
             langchain_provider = map_provider_to_langchain(supervisor_config.provider.name)
@@ -153,21 +147,50 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
                 temperature=0.1
             )
 
-            prescreen_model = base_model.with_structured_output(PIIPreScreening)
+            # Use include_raw=True to preserve usage metadata for cost tracking
+            prescreen_model = base_model.with_structured_output(PIIPreScreening, include_raw=True)
 
             # Get pre-screening prompt from LaunchDarkly config
             prescreen_prompt = supervisor_config.instructions
 
             screening_message = HumanMessage(content=f"{prescreen_prompt}\n\nUser Input: {user_input}")
 
-            # Get structured pre-screening result
-            screening_result = prescreen_model.invoke([screening_message])
+            # Apply rate limiting before LLM call
+            from agents.ld_agent_helpers import _rate_limit_llm_call
+            _rate_limit_llm_call()
 
-            # Track successful pre-screening
-            config_manager.track_metrics(
-                supervisor_config.tracker,
-                lambda: f"supervisor_pii_prescreen_success_{screening_result.recommended_route}"
-            )
+            # Get structured pre-screening result with raw response
+            response = prescreen_model.invoke([screening_message])
+            screening_result = response["parsed"] if isinstance(response, dict) else response
+            
+            # Extract and track token usage from raw response
+            if isinstance(response, dict) and "raw" in response and hasattr(response["raw"], "usage_metadata"):
+                usage_data = response["raw"].usage_metadata
+                if usage_data:
+                    from ldai.tracker import TokenUsage
+                    token_usage = TokenUsage(
+                        input=usage_data.get("input_tokens", 0),
+                        output=usage_data.get("output_tokens", 0),
+                        total=usage_data.get("total_tokens", 0)
+                    )
+                    supervisor_config.tracker.track_tokens(token_usage)
+                    log_student(f"PII PRESCREEN TOKENS: {token_usage.total} tokens ({token_usage.input} in, {token_usage.output} out)")
+
+                    # Track cost metric with AI Config metadata for experiment attribution
+                    from utils.cost_calculator import calculate_cost
+                    cost = calculate_cost(supervisor_config.model.name, token_usage.input, token_usage.output)
+                    if cost > 0:
+                        # Use centralized context builder to ensure exact match with AI Config evaluation
+                        user_id = state.get("user_id", "supervisor_user")
+                        user_context = state.get("user_context", {})
+                        ld_context = config_manager.build_context(user_id, user_context)
+
+                        # Track cost with metadata for experiment attribution
+                        config_manager.track_cost_metric(supervisor_config, ld_context, cost, "supervisor-agent")
+                        log_student(f"COST TRACKING: ${cost:.6f} for {supervisor_config.model.name}")
+
+            # Track success metric
+            supervisor_config.tracker.track_success()
 
             # Log the intelligent decision
             log_student(f"ROUTING: {screening_result.recommended_route} ({screening_result.confidence:.1f}) - {screening_result.reasoning}")
@@ -186,12 +209,9 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
 
         except Exception as e:
             # Fallback to security agent for safety
-            config_manager.track_metrics(
-                supervisor_config.tracker,
-                lambda: (_ for _ in ()).throw(e)
-            )
-
-            log_student(f"PII PRE-SCREENING ERROR: Defaulting to security agent for safety")
+            log_student(f"PII PRE-SCREENING ERROR: {type(e).__name__}: {str(e)}")
+            log_debug(f"PII PRE-SCREENING ERROR DETAIL: {e}")
+            log_student(f"FALLBACK: Defaulting to security agent for safety")
             return {
                 "current_agent": "security_agent",
                 "workflow_stage": "security_processing",
@@ -224,11 +244,6 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             support_response = state.get("support_response", "")
 
             # Track supervisor decision-making process
-            config_manager.track_metrics(
-                supervisor_config.tracker,
-                lambda: "supervisor_decision_start"
-            )
-
             # Enhanced routing logic with intelligent pre-screening
             if workflow_stage == "pii_prescreen":
                 next_agent = "pii_prescreen"
@@ -246,24 +261,13 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
                 # All workflow stages should be handled above - default to complete
                 next_agent = "complete"
             # Track successful supervisor decision
-            config_manager.track_metrics(
-                supervisor_config.tracker,
-                lambda: f"supervisor_decision_success_{next_agent}"
-            )
-
             return {"current_agent": next_agent}
 
         except Exception as e:
 
             # Track supervisor error with LDAI metrics
-            config_manager.track_metrics(
-                supervisor_config.tracker,
-                lambda: (_ for _ in ()).throw(e)  # Trigger error tracking
-            )
-
-            # Fallback to security agent for safety
             return {"current_agent": "security_agent"}
-    def security_node(state: SupervisorState):
+    async def security_node(state: SupervisorState):
         """
         LANGGRAPH NODE: Security Agent Orchestration
 
@@ -288,11 +292,6 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
         try:
             
             # Track supervisor orchestration start for security agent
-            config_manager.track_metrics(
-                supervisor_config.tracker,
-                lambda: "supervisor_orchestrating_security_start"
-            )
-            
             # Prepare security agent input
             security_input = {
                 "user_input": state["user_input"],
@@ -304,14 +303,12 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             }
             
             # Execute security agent
-            result = security_agent.invoke(security_input)
+            if hasattr(security_agent, "ainvoke"):
+                result = await security_agent.ainvoke(security_input)
+            else:
+                result = security_agent.invoke(security_input)
             
             # Track successful supervisor orchestration for security agent
-            config_manager.track_metrics(
-                supervisor_config.tracker,
-                lambda: "supervisor_orchestrating_security_success"
-            )
-            
             # After security processing, route to support with sanitized data
             new_stage = "post_security_support"
 
@@ -349,15 +346,17 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             }
             
         except Exception as e:
-            
             # Track error with LDAI metrics
-            config_manager.track_metrics(
-                supervisor_config.tracker,
-                lambda: (_ for _ in ()).throw(e)  # Trigger error tracking
-            )
-            raise
-    
-    def support_node(state: SupervisorState):
+            if 'supervisor_config' in locals() and supervisor_config and hasattr(supervisor_config, 'tracker'):
+                supervisor_config.tracker.track_error()
+
+            return {
+                "messages": [AIMessage(content=f"Security agent error: {e}")],
+                "workflow_stage": "error",
+                "security_cleared": False
+            }
+
+    async def support_node(state: SupervisorState):
         """
         LANGGRAPH NODE: Support Agent Orchestration
 
@@ -382,11 +381,6 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
         try:
             
             # Track supervisor orchestration start for support agent
-            config_manager.track_metrics(
-                supervisor_config.tracker,
-                lambda: "supervisor_orchestrating_support_start"
-            )
-            
             # Use processed (potentially redacted) text if available
             processed_input = state.get("processed_user_input", state["user_input"])
 
@@ -443,15 +437,13 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             }
             
             # Execute support agent
-            result = support_agent.invoke(support_input)
+            if hasattr(support_agent, "ainvoke"):
+                result = await support_agent.ainvoke(support_input)
+            else:
+                result = support_agent.invoke(support_input)
             
             # Track successful supervisor orchestration for support agent
             tool_calls = result.get("tool_calls", [])
-            config_manager.track_metrics(
-                supervisor_config.tracker,
-                lambda: f"supervisor_orchestrating_support_success_tools_{len(tool_calls)}"
-            )
-            
             support_response = result["response"]
 
             tool_details = result.get('tool_details', [])
@@ -465,14 +457,17 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             }
             
         except Exception as e:
-            
             # Track error with LDAI metrics
-            config_manager.track_metrics(
-                supervisor_config.tracker,
-                lambda: (_ for _ in ()).throw(e)  # Trigger error tracking
-            )
-            raise
-    
+            if 'supervisor_config' in locals() and supervisor_config and hasattr(supervisor_config, 'tracker'):
+                supervisor_config.tracker.track_error()
+
+            return {
+                "messages": [AIMessage(content=f"Support agent error: {e}")],
+                "support_response": f"Error processing request: {e}",
+                "support_tool_calls": [],
+                "support_tool_details": [],
+                "workflow_stage": "error"
+            }
 
     def route_decision(state: SupervisorState) -> Literal["pii_prescreen", "security_agent", "support_agent", "complete"]:
         """
@@ -509,11 +504,6 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             
             # Track supervisor workflow completion
             support_tool_calls = state.get("support_tool_calls", [])
-            config_manager.track_metrics(
-                supervisor_config.tracker,
-                lambda: f"supervisor_workflow_complete_tools_{len(support_tool_calls)}"
-            )
-            
             support_response = state.get("support_response", "")
             
             if support_response:
@@ -534,12 +524,6 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
         except Exception as e:
             
             # Track supervisor final formatting error
-            config_manager.track_metrics(
-                supervisor_config.tracker,
-                lambda: (_ for _ in ()).throw(e)  # Trigger error tracking
-            )
-            
-            # Return error response
             return {
                 "final_response": f"I apologize, but I encountered an error finalizing the response: {e}",
                 "actual_tool_calls": [],
