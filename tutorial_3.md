@@ -4,7 +4,7 @@
 <img src="screenshots/header.png" alt="From Guessing to Knowing - Prove ROI with Data-Driven AI Experiments" width="100%"/>
 </div>
 
-<br>
+<br />
 
 ## What You'll Learn in 5 Minutes (or Build in 30)
 
@@ -220,13 +220,13 @@ Click **"Start experiment"** to launch.
 
 </details>
 
-<br>
+<br />
 
 <div align="center">
 <img src="screenshots/security_level.png" alt="Security Agent Experiment Configuration" width="75%">
 </div>
 
-<br>
+<br />
 
 ### **Step 4: Configure Premium Model Experiment**
 
@@ -293,13 +293,13 @@ Click **"Start experiment"** to launch.
 
 </details>
 
-<br>
+<br />
 
 <div align="center">
 <img src="screenshots/premium_model.png" alt="Premium Model Value Analysis Experiment Configuration" width="75%">
 </div>
 
-<br>
+<br />
 
 ## Understanding Your Experimental Design
 
@@ -457,13 +457,13 @@ ELSE need_more_data()
 
 
 **The Data That Proves It:**
-<br>
+<br />
 
 <div align="center">
 <img src="screenshots/security_results.png" alt="Security Level Experiment Results" width="75%"/>
 </div>
 
-<br>
+<br />
 
 ### **2. Premium Model Value Analysis: Does Claude Opus 4 justify its premium cost with superior positive feedback rates?**
 
@@ -495,13 +495,13 @@ ELSE keep_current_model()
 
 **The Numbers Don't Lie:**
 
-<br>
+<br />
 
 <div align="center">
 <img src="screenshots/premium_results.png" alt="Premium Model Value Analysis Results" width="75%"/>
 </div>
 
-<br>
+<br />
 
 ### **Key Insights from Real Experiment Data**
 
