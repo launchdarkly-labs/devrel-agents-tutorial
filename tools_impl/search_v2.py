@@ -80,14 +80,18 @@ class SearchToolV2(BaseTool):
                 )
 
             # Build concise human summary + machine-readable JSON
-            summary_lines = [f"Found {len(results)} relevant document(s):", ""]
+            summary_lines = [f"📚 Found {len(results)} relevant document(s):\n"]
             items = []
-            for (doc, score, metadata) in results:
-                # brief snippet for readability
+            for idx, (doc, score, metadata) in enumerate(results, 1):
+                # brief snippet for readability - shortened to 200 chars
                 snippet = (doc or "").strip().replace("\n", " ")
-                if len(snippet) > 400:
-                    snippet = snippet[:400] + f"... (+{len((doc or '')) - 400} chars)"
-                summary_lines.append(f"[Relevance: {score:.3f}] {snippet}")
+                if len(snippet) > 200:
+                    snippet = snippet[:200] + "..."
+                
+                # Format more cleanly with number and indentation
+                summary_lines.append(f"{idx}. [Score: {score:.2f}]")
+                summary_lines.append(f"   {snippet}\n")
+                
                 items.append({
                     "text": (doc or ""),
                     "score": float(score),
@@ -102,8 +106,8 @@ class SearchToolV2(BaseTool):
                 "items": items
             }
 
-            # Return: short human summary first, then fenced JSON the model can pass to reranking
-            return "\n".join(summary_lines) + "\n\n```json\n" + __import__("json").dumps(payload, ensure_ascii=False) + "\n```"
+            # Return: clean human summary + compact JSON footer for tool chaining
+            return "\n".join(summary_lines) + f"\n---\n_Found {len(items)} results for: \"{query}\"_"
 
         except RuntimeError as e:
             # Embeddings not initialized, or explicit init errors

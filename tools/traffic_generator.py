@@ -1,226 +1,321 @@
 #!/usr/bin/env python3
 """
-Traffic Generator
+Simple Traffic Generator with AI
+
+1. Analyze knowledge base for topics
+2. Generate queries using random topic/complexity
+3. Send to API
+4. Get AI feedback on response
+5. Send feedback to API
 
 Usage:
-    python tools/traffic_generator.py --queries 50 --delay 2
-    python tools/traffic_generator.py --queries 100 --delay 1 --verbose
+    python traffic_generator.py --queries 50 --delay 2
 """
 
-import json
 import requests
 import time
-import random
 import argparse
+import random
 import os
-from pathlib import Path
 from dotenv import load_dotenv
+from anthropic import Anthropic
 
-# Load environment variables
 load_dotenv()
 
-# Configuration from environment variables with defaults
-API_HOST = os.getenv('API_HOST', 'localhost')
-API_PORT = os.getenv('API_PORT', '8000')
-API_BASE_URL = f"http://{API_HOST}:{API_PORT}"
-USERS_FILE = "data/fake_users.json"
-QUERIES_FILE = "data/sample_queries.json"
-
-def load_json_file(filename):
-    """Load a JSON file - helper function to keep things simple"""
-    try:
-        with open(filename, 'r') as f:
-            return json.load(f)
-    except Exception as e:
-        print(f" ERROR: Couldn't load {filename}: {e}")
-        return None
-
-def send_chat_request(user, query_data):
-    """Send a single chat request - returns the response or None if failed"""
-    try:
-        # Build the request - this is what gets sent to our AI agent
-        request_data = {
-            "user_id": user["id"],
-            "message": query_data["query"],
-            "user_context": {
-                "country": user["country"],
-                "region": user["region"], 
-                "plan": user["plan"]
-            }
+class TrafficGenerator:
+    def __init__(self, pii_percentage=15):
+        self.api_base_url = f"http://{os.getenv('API_HOST', 'localhost')}:{os.getenv('API_PORT', '8000')}"
+        self.claude = Anthropic(api_key=os.getenv('ANTHROPIC_API_KEY'))
+        self.pii_percentage = pii_percentage
+        
+        # User context for API calls
+        self.user_context = {
+            "country": "US",
+            "plan": "paid", 
+            "region": "other"
         }
         
-        print(f"🤖 SENDING: {user['id']} from {user['country']} asks: '{query_data['query'][:50]}...'")
+        # Unique user ID counter
+        self.session_id = int(time.time())
+        self.user_counter = 0
+
+    def get_user_id(self):
+        """Generate unique user ID"""
+        self.user_counter += 1
+        return f"user_{self.session_id}_{self.user_counter}"
+
+    def analyze_knowledge_base(self):
+        """Ask Claude to analyze KB and return topics"""
+        print("Analyzing knowledge base...")
         
-        # Make the API call
-        response = requests.post(f"{API_BASE_URL}/chat", json=request_data, timeout=60)
-        
-        if response.status_code == 200:
-            result = response.json()
-            print(f" SUCCESS: Got {len(result['response'])} chars, used {len(result['tool_calls'])} tools")
-            return result
-        else:
-            print(f" ERROR: Status {response.status_code}")
-            return None
+        try:
+            response = self.claude.messages.create(
+                model="claude-3-5-sonnet-latest",
+                max_tokens=800,
+                messages=[{
+                    "role": "user",
+                    "content": "List 15 technical topics that users would ask about regarding LaunchDarkly, feature flags, A/B testing, or deployment strategies. Just return a simple list of topics."
+                }]
+            )
             
-    except Exception as e:
-        print(f" REQUEST FAILED: {e}")
-        return None
-
-def simulate_feedback(response_data, query_data):
-    """Simulate only user thumbs up/down decision - based on realistic user behavior"""
-
-    # Simple baseline satisfaction rate (mimics real user feedback patterns)
-    base_satisfaction_rate = 0.75  # 75% baseline satisfaction
-
-    # Adjust satisfaction based on actual metrics we track in the UI:
-
-    # 1. Response quality indicators (what users actually see)
-    response_text = response_data["response"].lower()
-    response_length = len(response_data["response"])
-    tools_used = response_data["tool_calls"]
-
-    satisfaction_modifier = 0
-
-    # Obvious quality issues that users notice
-    if response_length < 50:
-        satisfaction_modifier -= 0.3  # Very short responses are unsatisfying
-    elif any(phrase in response_text for phrase in ["i don't know", "i can't help", "sorry, i cannot"]):
-        satisfaction_modifier -= 0.4  # Users don't like "can't help" responses
-
-    # Positive indicators users notice
-    if len(tools_used) > 0 and query_data.get("type") == "research":
-        satisfaction_modifier += 0.1  # Users like when research tools are used for research queries
-
-    # Final satisfaction rate with randomness to simulate individual user preferences
-    final_satisfaction_rate = base_satisfaction_rate + satisfaction_modifier + random.uniform(-0.1, 0.1)
-    final_satisfaction_rate = max(0.1, min(0.9, final_satisfaction_rate))  # Keep between 10-90%
-
-    thumbs_up = random.random() < final_satisfaction_rate
-
-    return {
-        "thumbs_up": thumbs_up,
-        "satisfaction_rate": final_satisfaction_rate  # For debugging only
-    }
-
-def send_feedback(response_data, user_id, query_data, feedback_data):
-    """Send feedback to the API using the new format"""
-    try:
-        # Convert thumbs up/down to positive/negative
-        feedback_type = "positive" if feedback_data["thumbs_up"] else "negative"
-        
-        feedback_request = {
-            "user_id": user_id,
-            "message_id": f"sim_{response_data.get('id', 'unknown')}_{int(time.time())}",
-            "user_query": query_data["query"],
-            "ai_response": response_data["response"],
-            "feedback": feedback_type,
-            "variation_key": response_data.get("variation_key", "unknown"),
-            "model": response_data.get("model", "unknown"),
-            "tool_calls": response_data.get("tool_calls", []),
-            "source": "simulated"
-        }
-        
-        response = requests.post(f"{API_BASE_URL}/feedback", json=feedback_request, timeout=10)
-        
-        if response.status_code == 200:
-            print(f"👍 FEEDBACK: {user_id} gave {'👍' if feedback_data['thumbs_up'] else '👎'} "
-                  f"(rating: {feedback_data['rating']}/5) - {', '.join(feedback_data['reasons'])}")
-            return True
-        else:
-            print(f" FEEDBACK FAILED: Status {response.status_code} - {response.text}")
-            return False
+            # Parse topics from response
+            topics_text = response.content[0].text
+            topics = [line.strip().strip('-•*123456789.') for line in topics_text.split('\n') if line.strip()]
+            topics = [t for t in topics if len(t) > 3][:15]  # Clean and limit to 15
             
-    except Exception as e:
-        print(f" FEEDBACK ERROR: {e}")
-        return False
+            if not topics:
+                raise ValueError("No topics extracted")
+                
+            print(f"Found {len(topics)} topics")
+            return topics
+            
+        except Exception as e:
+            print(f"KB analysis failed, using defaults: {e}")
+            return [
+                "feature flags", "A/B testing", "user targeting",
+                "rollout strategies", "SDK integration", "metrics",
+                "deployment", "configuration", "debugging"
+            ]
 
-def flush_metrics():
-    """Tell LaunchDarkly to send metrics immediately"""
-    try:
-        response = requests.post(f"{API_BASE_URL}/admin/flush", timeout=10)
-        if response.status_code == 200:
-            print(" METRICS: Flushed to LaunchDarkly")
-            return True
+    def generate_query(self, topic, complexity, inject_pii=False):
+        """Generate a query about the topic at given complexity, optionally with PII"""
+        if inject_pii:
+            prompt = f"""Generate a single question about "{topic}" at {complexity} level that includes realistic PII.
+Include at least one of these PII types (pick randomly):
+- Email address (e.g., john.smith@company.com)
+- Phone number (e.g., 555-123-4567)
+- Full name (e.g., John Smith, Sarah Johnson)
+- Address (e.g., 123 Main St, New York, NY)
+- Company name (e.g., Acme Corp, Globex Inc)
+- Title/role (e.g., Product Manager, DevOps Engineer)
+
+Make it sound natural, like a real user asking about their specific situation.
+Just return the question, nothing else.
+
+Complexity guide:
+- basic: Simple what/how questions
+- intermediate: Configuration or best practices
+- advanced: Complex scenarios or architecture"""
         else:
-            print(f" FLUSH FAILED: Status {response.status_code}")
-            return False
-    except Exception as e:
-        print(f" FLUSH ERROR: {e}")
-        return False
+            prompt = f"""Generate a single question about "{topic}" at {complexity} level.
+Just return the question, nothing else.
+
+Complexity guide:
+- basic: Simple what/how questions
+- intermediate: Configuration or best practices
+- advanced: Complex scenarios or architecture"""
+
+        try:
+            response = self.claude.messages.create(
+                model="claude-3-5-sonnet-latest",
+                max_tokens=150,
+                messages=[{"role": "user", "content": prompt}]
+            )
+            return response.content[0].text.strip()
+        except:
+            # Fallback query
+            if inject_pii:
+                pii_templates = {
+                    "basic": f"What is {topic} for my account john.smith@company.com?",
+                    "intermediate": f"How do I configure {topic} for user Sarah Johnson at 555-123-4567?",
+                    "advanced": f"What's the best {topic} architecture for our team at 123 Main St, New York?"
+                }
+                return pii_templates[complexity]
+            else:
+                templates = {
+                    "basic": f"What is {topic}?",
+                    "intermediate": f"How do I configure {topic}?",
+                    "advanced": f"What's the best architecture for {topic} at scale?"
+                }
+                return templates[complexity]
+
+    def send_chat(self, query):
+        """Send query to API and get response"""
+        user_id = self.get_user_id()
+        
+        try:
+            # Add user_id to context
+            full_context = {**self.user_context, "user": user_id}
+
+            response = requests.post(
+                f"{self.api_base_url}/chat",
+                json={
+                    "message": query,
+                    "user_id": user_id,
+                    "user_context": full_context
+                },
+                timeout=2000
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                return {
+                    "success": True,
+                    "user_id": user_id,
+                    "conversation_id": data.get("id"),  # Use "id" field from response
+                    "response": data.get("response", ""),
+                    "variation_key": data.get("variation_key"),
+                    "model": data.get("model"),
+                    "tool_calls": data.get("tool_calls", [])  # Add tool_calls from response
+                }
+            else:
+                return {"success": False}
+                
+        except Exception as e:
+            print(f"  Chat error: {e}")
+            return {"success": False}
+
+    def evaluate_response(self, query, response):
+        """Ask Claude to evaluate if user would give feedback"""
+        prompt = f"""Based on this Q&A, would a user give feedback?
+
+Question: {query[:200]}
+Answer: {response[:500]}
+
+Reply with ONLY one of these:
+- positive (good answer, user would thumbs up)
+- negative (poor answer, user would thumbs down)  
+- none (okay answer, user wouldn't bother rating)
+
+Most users don't give feedback unless the answer is notably good or bad."""
+
+        try:
+            response = self.claude.messages.create(
+                model="claude-3-5-sonnet-latest",
+                max_tokens=10,
+                messages=[{"role": "user", "content": prompt}],
+                timeout=2
+            )
+            
+            feedback = response.content[0].text.strip().lower()
+            if "positive" in feedback:
+                return "positive"
+            elif "negative" in feedback:
+                return "negative"
+            else:
+                return "none"
+                
+        except:
+            return "none"  # Default to no feedback on error
+
+    def send_feedback(self, chat_data, query, feedback_type):
+        """Send feedback to API"""
+        if feedback_type == "none" or not chat_data["success"]:
+            return
+            
+        try:
+            requests.post(
+                f"{self.api_base_url}/feedback",
+                json={
+                    "user_id": chat_data["user_id"],
+                    "message_id": chat_data["conversation_id"],
+                    "user_query": query,
+                    "ai_response": chat_data["response"],
+                    "feedback": feedback_type,
+                    "variation_key": chat_data.get("variation_key", "unknown"),
+                    "model": chat_data.get("model", "unknown"),
+                    "tool_calls": chat_data.get("tool_calls", []),  # Add required tool_calls field
+                    "source": "simulated",
+                    "user_context": self.user_context  # Add context for LaunchDarkly targeting
+                },
+                timeout=10
+            )
+        except:
+            pass  # Ignore feedback errors
+
+    def run(self, num_queries, delay):
+        """Main execution loop"""
+        print(f"\n🚀 DEBUG: Starting {num_queries} queries with {delay}s delay\n")
+
+        # Step 1: Get topics from knowledge base
+        print("🔍 DEBUG: Step 1 - Analyzing knowledge base...")
+        topics = self.analyze_knowledge_base()
+        print(f"✅ DEBUG: Got {len(topics)} topics: {topics[:3]}...")
+        complexities = ["basic", "intermediate", "advanced"]
+
+        # Step 2: Generate and process queries
+        print(f"🔍 DEBUG: Step 2 - Starting loop for {num_queries} queries...")
+        for i in range(num_queries):
+            print(f"\n🔍 DEBUG: Loop iteration {i+1}/{num_queries} starting...")
+
+            # Random selection
+            topic = random.choice(topics)
+            complexity = random.choice(complexities)
+
+            # Use configurable PII percentage
+            inject_pii = random.random() < (self.pii_percentage / 100.0)
+            pii_indicator = " [PII]" if inject_pii else ""
+
+            print(f"🔍 DEBUG: Selected topic='{topic}', complexity='{complexity}', inject_pii={inject_pii}")
+
+            print(f"\n[{i+1}/{num_queries}] {topic} ({complexity}){pii_indicator}")
+
+            # Generate query
+            print("🔍 DEBUG: Calling generate_query...")
+            query = self.generate_query(topic, complexity, inject_pii)
+            print(f"✅ DEBUG: Generated query: {query[:50]}...")
+            print(f"  Q: {query[:80]}...")
+
+            # Add small delay to prevent Claude API rate limiting
+            print("🔍 DEBUG: Adding 1s delay before API calls...")
+            time.sleep(1)
+
+            # Send to API
+            print("🔍 DEBUG: Calling send_chat...")
+            chat_data = self.send_chat(query)
+            print(f"✅ DEBUG: send_chat returned: success={chat_data['success']}")
+
+            if chat_data["success"]:
+                print(f"  A: {chat_data['response'][:80]}...")
+
+                # Add small delay before evaluation
+                print("🔍 DEBUG: Adding 1s delay before evaluation...")
+                time.sleep(1)
+
+                # Evaluate response
+                print("🔍 DEBUG: Calling evaluate_response...")
+                feedback = self.evaluate_response(query, chat_data["response"])
+                print(f"✅ DEBUG: evaluate_response returned: {feedback}")
+
+                if feedback == "positive":
+                    print("  👍 Positive feedback")
+                elif feedback == "negative":
+                    print("  👎 Negative feedback")
+                else:
+                    print("  😐 No feedback")
+
+                # Send feedback to API
+                print("🔍 DEBUG: Calling send_feedback...")
+                self.send_feedback(chat_data, query, feedback)
+                print("✅ DEBUG: send_feedback completed")
+            else:
+                print("  ❌ API call failed")
+
+            print(f"🔍 DEBUG: Loop iteration {i+1}/{num_queries} completed")
+
+            # Delay between requests
+            if delay > 0 and i < num_queries - 1:
+                print(f"🔍 DEBUG: Sleeping for {delay}s...")
+                time.sleep(delay)
+
+        print(f"\n🔍 DEBUG: Loop completed, reached end of run() method")
+        print("\n✅ Complete\n")
 
 def main():
-    """Main function - this is where everything happens"""
-    
-    # Parse command line arguments
-    parser = argparse.ArgumentParser(description="Generate traffic for LaunchDarkly AI Config demo")
-    parser.add_argument("--queries", type=int, default=20, help="Number of queries to send")
-    parser.add_argument("--delay", type=float, default=2.0, help="Seconds between requests")
-    parser.add_argument("--verbose", action="store_true", help="Show more details")
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--queries', type=int, default=50, help='Number of queries')
+    parser.add_argument('--delay', type=float, default=2.0, help='Delay between queries')
+    parser.add_argument('--pii-percentage', type=int, default=15, help='Percentage of queries that should contain PII (0-100)')
+
     args = parser.parse_args()
-    
-    # Load our data files
-    print("📁 LOADING: Reading fake users and sample queries...")
-    users_data = load_json_file(USERS_FILE)
-    queries_data = load_json_file(QUERIES_FILE)
-    
-    if not users_data or not queries_data:
-        print("💥 FATAL: Couldn't load data files. Make sure they exist!")
+
+    # Validate PII percentage
+    if args.pii_percentage < 0 or args.pii_percentage > 100:
+        print("❌ Error: PII percentage must be between 0 and 100")
         return
-    
-    users = users_data["users"]
-    queries = queries_data["queries"]
-    
-    print(f" LOADED: {len(users)} fake users, {len(queries)} sample queries")
-    print(f" PLAN: Sending {args.queries} requests with {args.delay}s delays")
-    print("=" * 60)
-    
-    # Keep track of results
-    total_requests = 0
-    successful_requests = 0
-    successful_feedback = 0
-    thumbs_up_count = 0
-    
-    # Main loop - send requests one by one
-    for i in range(args.queries):
-        print(f"\n📈 REQUEST {i+1}/{args.queries}")
-        
-        # Pick a random user and query
-        user = random.choice(users)
-        query = random.choice(queries)
-        
-        # Send the chat request
-        total_requests += 1
-        response_data = send_chat_request(user, query)
-        
-        if response_data:
-            successful_requests += 1
-            
-            # Simulate user feedback
-            feedback = simulate_feedback(response_data, query)
-            
-            # Send the feedback
-            if send_feedback(response_data, user["id"], query, feedback):
-                successful_feedback += 1
-                if feedback["thumbs_up"]:
-                    thumbs_up_count += 1
-        
-        # Wait before next request (unless it's the last one)
-        if i < args.queries - 1:
-            time.sleep(args.delay)
-    
-    # Flush metrics to LaunchDarkly
-    print(f"\n FLUSHING: Sending metrics to LaunchDarkly...")
-    flush_metrics()
-    
-    # Show final results
-    print("\n" + "=" * 60)
-    print(" FINAL RESULTS:")
-    print(f"   Total requests: {total_requests}")
-    print(f"   Successful requests: {successful_requests} ({successful_requests/total_requests*100:.1f}%)")
-    print(f"   Successful feedback: {successful_feedback}")
-    print(f"   Thumbs up: {thumbs_up_count}/{successful_feedback} ({thumbs_up_count/successful_feedback*100:.1f}%)" if successful_feedback > 0 else "   Thumbs up: 0%")
-    print("\n DONE! Check your LaunchDarkly dashboard for metrics.")
-    print("🎉 TIP: It may take 1-2 minutes for metrics to appear in LaunchDarkly.")
+
+    generator = TrafficGenerator(pii_percentage=args.pii_percentage)
+    generator.run(args.queries, args.delay)
 
 if __name__ == "__main__":
     main()
