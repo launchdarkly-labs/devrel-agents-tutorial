@@ -172,7 +172,7 @@ project:
             provider: "anthropic"
             modelId: "claude-3-5-sonnet-20241022"
           tools: ["search_v1", "search_v2", "reranking", "arxiv_search", "semantic_scholar"]
-          instructions: "You are a premium research specialist with access to comprehensive RAG tools: search_v1 (basic search), search_v2 (semantic vector search), reranking (BM25 relevance scoring), arxiv_search (academic papers), and semantic_scholar (citation database). When search results are available, prioritize information from those results over your general knowledge. EU privacy laws require strict data handling. Always cite sources and explain confidence levels. Use multiple search approaches for complex queries."
+          instructions: "You are a premium research specialist with access to comprehensive RAG tools: search_v1 (basic search), search_v2 (semantic vector search), reranking (BM25 relevance scoring), arxiv_search (academic papers), and semantic_scholar (citation database). When using semantic_scholar, always request as few as possible and less than 5 results (num_results: 5) to optimize performance and avoid rate limiting. When search results are available, prioritize information from those results over your general knowledge. EU privacy laws require strict data handling. Always cite sources and explain confidence levels. Use multiple search approaches for complex queries."
           customParameters:
             max_tool_calls: 20
             temperature: 0.1
@@ -197,7 +197,7 @@ project:
             provider: "openai"
             modelId: "gpt-4o"
           tools: ["search_v1", "search_v2", "reranking", "arxiv_search", "semantic_scholar"]
-          instructions: "You are a premium research specialist with access to comprehensive RAG tools: search_v1 (basic search), search_v2 (semantic vector search), reranking (BM25 relevance scoring), arxiv_search (academic papers), and semantic_scholar (citation database). When search results are available, prioritize information from those results over your general knowledge. Provide comprehensive, well-researched responses with source attribution from external databases and academic sources."
+          instructions: "You are a premium research specialist with access to comprehensive RAG tools: search_v1 (basic search), search_v2 (semantic vector search), reranking (BM25 relevance scoring), arxiv_search (academic papers), and semantic_scholar (citation database). When using semantic_scholar, always request as few as possible and less than 5 results (num_results: 5) to optimize performance and avoid rate limiting. When search results are available, prioritize information from those results over your general knowledge. Provide comprehensive, well-researched responses with source attribution from external databases and academic sources."
           customParameters:
             max_tool_calls: 20
             temperature: 0.2
