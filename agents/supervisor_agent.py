@@ -124,8 +124,8 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
     # Create child agents with config manager
     support_agent = create_support_agent(support_config, config_manager)
     security_agent = create_security_agent(security_config, config_manager)
-    
-    log_student(f"SUPERVISOR INSTRUCTIONS: {supervisor_config.instructions}")
+
+    log_debug(f"SUPERVISOR INSTRUCTIONS: {supervisor_config.instructions}")
 
     def pii_prescreen_node(state: SupervisorState):
         """

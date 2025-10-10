@@ -789,9 +789,13 @@ with st.sidebar:
     
     if selected_user_id != st.session_state.user_id:
         st.session_state.user_id = selected_user_id
+        # Clear both message histories when switching users
+        st.session_state.messages = []
+        st.session_state.sanitized_messages = []
         st.rerun()
     
     if st.button("Clear Chat"):
         st.session_state.messages = []
+        st.session_state.sanitized_messages = []
         st.rerun()
     
