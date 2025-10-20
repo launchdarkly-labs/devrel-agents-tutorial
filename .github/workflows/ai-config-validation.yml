@@ -1,0 +1,239 @@
+name: AI Config Validation
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'LaunchDarkly environment to validate against'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+          - development
+
+jobs:
+  validate-configs:
+    name: Validate AI Configs
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: |
+          uv sync --frozen
+          uv pip install -e ../ld-aic-cicd
+
+      - name: Run AI Config validation
+        env:
+          LD_SDK_KEY: ${{ secrets.LD_SDK_KEY }}
+          LD_API_KEY: ${{ secrets.LD_API_KEY }}
+          LD_PROJECT_KEY: ${{ secrets.LD_PROJECT_KEY }}
+        run: |
+          # Use ld-aic-cicd framework to validate our AI configs
+          uv run ld-aic validate \
+            --environment ${{ github.event.inputs.environment || 'production' }} \
+            --config-keys "supervisor-agent,support-agent,security-agent" \
+            --report validation-report.json \
+            --fail-on-error
+
+      - name: Upload validation report
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: validation-report
+          path: validation-report.json
+
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const report = JSON.parse(fs.readFileSync('validation-report.json', 'utf8'));
+
+            let comment = '## 🔍 AI Config Validation Results\n\n';
+            comment += `**Environment:** ${report.environment}\n`;
+            comment += `**Total Configs:** ${report.total_configs}\n\n`;
+
+            // Count statuses
+            const configs = Object.values(report.configs);
+            const valid = configs.filter(c => c.valid).length;
+            const errors = configs.filter(c => c.errors.length > 0).length;
+            const warnings = configs.filter(c => c.warnings.length > 0).length;
+
+            // Summary
+            comment += '### Summary\n';
+            comment += `✅ Valid: ${valid}\n`;
+            comment += `❌ Errors: ${errors}\n`;
+            comment += `⚠️ Warnings: ${warnings}\n\n`;
+
+            // Details for problematic configs
+            if (errors > 0 || warnings > 0) {
+              comment += '### Issues Found\n';
+              for (const [key, config] of Object.entries(report.configs)) {
+                if (config.errors.length > 0 || config.warnings.length > 0) {
+                  comment += `\n**${key}**\n`;
+                  config.errors.forEach(e => comment += `- ❌ ${e}\n`);
+                  config.warnings.forEach(w => comment += `- ⚠️ ${w}\n`);
+                }
+              }
+            }
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  evaluate-configs:
+    name: Evaluate AI Configs with Judge
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: |
+          uv sync --frozen
+          uv pip install -e ../ld-aic-cicd
+
+      - name: Run judge evaluations on support-agent
+        if: secrets.OPENAI_API_KEY != '' || secrets.ANTHROPIC_API_KEY != ''
+        env:
+          LD_SDK_KEY: ${{ secrets.LD_SDK_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -f "test_data/ai_config_evaluation.yaml" ]; then
+            echo "🤖 Running judge evaluation for support-agent..."
+            uv run ld-aic judge \
+              --config-key support-agent \
+              --dataset test_data/ai_config_evaluation.yaml \
+              --judge-model gpt-4o-mini \
+              --min-score 7.0 \
+              --output evaluation-support-agent.json
+          else
+            echo "⚠️ No evaluation dataset found at test_data/ai_config_evaluation.yaml"
+          fi
+
+      - name: Run judge evaluations on security-agent
+        if: secrets.OPENAI_API_KEY != '' || secrets.ANTHROPIC_API_KEY != ''
+        env:
+          LD_SDK_KEY: ${{ secrets.LD_SDK_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -f "test_data/ai_config_evaluation.yaml" ]; then
+            echo "🤖 Running judge evaluation for security-agent..."
+            uv run ld-aic judge \
+              --config-key security-agent \
+              --dataset test_data/ai_config_evaluation.yaml \
+              --judge-model gpt-4o-mini \
+              --min-score 7.0 \
+              --output evaluation-security-agent.json
+          fi
+
+      - name: Upload evaluation results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: evaluation-results
+          path: |
+            evaluation-*.json
+
+  sync-production:
+    name: Sync Production Configs
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: |
+          uv sync --frozen
+          uv pip install -e ../ld-aic-cicd
+
+      - name: Sync production configs
+        env:
+          LD_API_KEY: ${{ secrets.LD_API_KEY }}
+          LD_PROJECT_KEY: ${{ secrets.LD_PROJECT_KEY }}
+        run: |
+          mkdir -p configs
+          uv run ld-aic sync \
+            --environment production \
+            --output-dir configs \
+            --format json \
+            --generate-module
+
+      - name: Check for drift
+        run: |
+          # Check if there are changes to commit
+          git diff --exit-code configs/ || echo "DRIFT_DETECTED=true" >> $GITHUB_ENV
+
+      - name: Create PR for config updates
+        if: env.DRIFT_DETECTED == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'Sync AI configs from production'
+          title: 'Sync AI Configs from Production'
+          body: |
+            ## 🔄 Production Config Sync
+
+            This PR updates the local AI config defaults to match production.
+
+            ### AI Configs Synced
+            - `supervisor-agent` - Multi-agent workflow orchestration
+            - `support-agent` - RAG + MCP research capabilities
+            - `security-agent` - PII detection and compliance
+
+            ### Changes
+            - Updated config snapshots in `configs/`
+            - Regenerated `configs/production_defaults.py`
+
+            Please review the changes to ensure they are expected.
+          branch: sync/production-configs
+          delete-branch: true
