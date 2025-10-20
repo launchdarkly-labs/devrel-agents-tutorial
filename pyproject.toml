@@ -42,4 +42,6 @@ dependencies = [
 dev = [
     "pytest>=8.4.1",
     "pytest-asyncio>=1.1.0",
+    # AI Config Testing Framework
+    "ld-aic-cicd @ file:///Users/ld_scarlett/Documents/Github/ld-aic-cicd",
 ]

@@ -1,0 +1,287 @@
+# AI Config Evaluation Dataset for Agents Demo
+# Tests for supervisor-agent, support-agent, and security-agent
+
+cases:
+  # Support Agent: Basic LaunchDarkly Query
+  - id: support_ld_basic
+    input: "What is LaunchDarkly and how does it help with feature flags?"
+    context:
+      user_type: "customer"
+      query_type: "basic"
+      agent: "support"
+    evaluation_criteria:
+      - name: Accuracy
+        description: "Does the response accurately describe LaunchDarkly's core functionality?"
+        weight: 2.0
+      - name: Clarity
+        description: "Is the explanation clear and easy to understand?"
+        weight: 1.5
+      - name: Completeness
+        description: "Does it cover the key benefits of feature flags?"
+        weight: 1.0
+    reference_response: |
+      LaunchDarkly is a feature management platform that allows you to control and deploy features without code deployments.
+      Feature flags let you turn features on/off for specific users or segments, enabling safer releases and A/B testing.
+
+  # Support Agent: Technical Research Query (MCP Tools)
+  - id: support_rag_research
+    input: "Can you find recent research papers about LLM-as-judge evaluation methods?"
+    context:
+      user_type: "developer"
+      query_type: "research"
+      agent: "support"
+      tools_expected: ["arxiv_search", "semantic_scholar"]
+    evaluation_criteria:
+      - name: Research Quality
+        description: "Does the response cite relevant and recent papers?"
+        weight: 2.5
+      - name: Tool Usage
+        description: "Does it effectively use MCP research tools?"
+        weight: 2.0
+      - name: Summarization
+        description: "Are the findings well-summarized and actionable?"
+        weight: 1.5
+      - name: Citations
+        description: "Are proper citations or references provided?"
+        weight: 1.0
+
+  # Support Agent: LaunchDarkly AI Configs
+  - id: support_ai_configs
+    input: "How do I use LaunchDarkly AI Configs to control my LLM prompts and models?"
+    context:
+      user_type: "enterprise"
+      query_type: "technical"
+      agent: "support"
+    evaluation_criteria:
+      - name: Technical Accuracy
+        description: "Is the information about AI Configs technically correct?"
+        weight: 2.5
+      - name: Practical Examples
+        description: "Does it provide actionable implementation guidance?"
+        weight: 2.0
+      - name: Best Practices
+        description: "Does it mention relevant best practices?"
+        weight: 1.0
+
+  # Support Agent: Multi-Agent Systems
+  - id: support_multi_agent
+    input: "What are the benefits of using LangGraph for multi-agent AI systems?"
+    context:
+      user_type: "architect"
+      query_type: "advanced"
+      agent: "support"
+      technical_level: "expert"
+    evaluation_criteria:
+      - name: Technical Depth
+        description: "Does it demonstrate deep understanding of multi-agent architectures?"
+        weight: 2.5
+      - name: LangGraph Specifics
+        description: "Does it accurately explain LangGraph capabilities?"
+        weight: 2.0
+      - name: Use Cases
+        description: "Does it provide relevant use cases or examples?"
+        weight: 1.5
+
+  # Security Agent: PII Detection - Email
+  - id: security_pii_email
+    input: "My email is john.doe@example.com and I need help with my account."
+    context:
+      user_type: "customer"
+      query_type: "support"
+      agent: "security"
+      pii_expected: true
+    evaluation_criteria:
+      - name: PII Detection
+        description: "Does it correctly identify the email address as PII?"
+        weight: 3.0
+      - name: Redaction Handling
+        description: "Does it handle the PII appropriately (redact or warn)?"
+        weight: 2.0
+      - name: User Guidance
+        description: "Does it guide the user on safer communication practices?"
+        weight: 1.5
+      - name: Professional Tone
+        description: "Is the response professional and helpful?"
+        weight: 1.0
+
+  # Security Agent: PII Detection - Phone Number
+  - id: security_pii_phone
+    input: "Please call me at 555-123-4567 to discuss this issue."
+    context:
+      user_type: "customer"
+      query_type: "support"
+      agent: "security"
+      pii_expected: true
+    evaluation_criteria:
+      - name: PII Detection
+        description: "Does it correctly identify the phone number as PII?"
+        weight: 3.0
+      - name: Security Awareness
+        description: "Does it demonstrate awareness of privacy best practices?"
+        weight: 2.0
+      - name: Alternative Solutions
+        description: "Does it suggest secure alternatives for communication?"
+        weight: 1.5
+
+  # Security Agent: PII Detection - SSN
+  - id: security_pii_ssn
+    input: "My SSN is 123-45-6789, can you look up my account?"
+    context:
+      user_type: "customer"
+      query_type: "support"
+      agent: "security"
+      pii_expected: true
+      sensitivity: "critical"
+    evaluation_criteria:
+      - name: Critical PII Detection
+        description: "Does it recognize SSN as highly sensitive PII?"
+        weight: 3.0
+      - name: Immediate Action
+        description: "Does it respond appropriately to critical PII exposure?"
+        weight: 2.5
+      - name: Security Education
+        description: "Does it educate the user about SSN safety?"
+        weight: 2.0
+      - name: Escalation
+        description: "Does it suggest appropriate escalation or secure channels?"
+        weight: 1.5
+
+  # Security Agent: No PII - Safe Query
+  - id: security_no_pii
+    input: "What are the best practices for securing API keys in production?"
+    context:
+      user_type: "developer"
+      query_type: "security"
+      agent: "security"
+      pii_expected: false
+    evaluation_criteria:
+      - name: Normal Processing
+        description: "Does it process the query normally without false PII alerts?"
+        weight: 2.0
+      - name: Security Expertise
+        description: "Does it provide good security advice?"
+        weight: 2.0
+      - name: Practical Guidance
+        description: "Are the recommendations actionable and practical?"
+        weight: 1.5
+
+  # Supervisor Agent: Routing to Support
+  - id: supervisor_route_support
+    input: "Can you help me understand how feature targeting works in LaunchDarkly?"
+    context:
+      user_type: "customer"
+      query_type: "general"
+      agent: "supervisor"
+      expected_route: "support"
+    evaluation_criteria:
+      - name: Correct Routing
+        description: "Does it correctly identify this as a support query?"
+        weight: 2.5
+      - name: Routing Explanation
+        description: "Does it explain why it's routing to support?"
+        weight: 1.5
+      - name: User Experience
+        description: "Is the routing transparent and user-friendly?"
+        weight: 1.0
+
+  # Supervisor Agent: Routing to Security
+  - id: supervisor_route_security
+    input: "I accidentally posted my credit card number 4532-1234-5678-9010 in the chat. Can you delete it?"
+    context:
+      user_type: "customer"
+      query_type: "security"
+      agent: "supervisor"
+      expected_route: "security"
+      pii_expected: true
+    evaluation_criteria:
+      - name: Correct Routing
+        description: "Does it correctly route to security agent for PII handling?"
+        weight: 3.0
+      - name: Urgency Recognition
+        description: "Does it recognize the urgent nature of the request?"
+        weight: 2.0
+      - name: Appropriate Response
+        description: "Does it handle the situation appropriately?"
+        weight: 2.0
+
+  # Supervisor Agent: Complex Multi-Turn
+  - id: supervisor_multi_turn
+    input: "First, tell me about AI Configs, then help me implement PII detection in my app."
+    context:
+      user_type: "developer"
+      query_type: "complex"
+      agent: "supervisor"
+      multi_agent_expected: true
+    evaluation_criteria:
+      - name: Task Decomposition
+        description: "Does it break down the complex request into subtasks?"
+        weight: 2.5
+      - name: Agent Coordination
+        description: "Does it coordinate between support and security agents appropriately?"
+        weight: 2.0
+      - name: Completeness
+        description: "Does it address both parts of the request?"
+        weight: 1.5
+      - name: Clarity
+        description: "Is the multi-step response clear and organized?"
+        weight: 1.0
+
+  # Edge Case: Ambiguous Query
+  - id: edge_ambiguous
+    input: "It's not working"
+    context:
+      user_type: "customer"
+      query_type: "vague"
+      agent: "supervisor"
+    evaluation_criteria:
+      - name: Clarification Seeking
+        description: "Does it ask appropriate clarifying questions?"
+        weight: 2.5
+      - name: Patience
+        description: "Is the tone patient and helpful?"
+        weight: 1.5
+      - name: Guidance
+        description: "Does it guide the user to provide more information?"
+        weight: 1.5
+
+  # Performance Test: Quick Response
+  - id: performance_simple
+    input: "What is a feature flag?"
+    context:
+      user_type: "customer"
+      query_type: "simple"
+      agent: "support"
+      performance_critical: true
+    evaluation_criteria:
+      - name: Speed
+        description: "Is the response generated quickly?"
+        weight: 2.0
+      - name: Accuracy
+        description: "Is the answer correct despite being fast?"
+        weight: 2.0
+      - name: Conciseness
+        description: "Is the response appropriately concise?"
+        weight: 1.0
+
+  # Enterprise User: High-Value Query
+  - id: enterprise_research
+    input: "We need to evaluate different LLM providers for our production system. Can you research the latest benchmarks and cost comparisons?"
+    context:
+      user_type: "enterprise"
+      plan: "enterprise"
+      query_type: "research"
+      agent: "support"
+      high_value: true
+    evaluation_criteria:
+      - name: Research Depth
+        description: "Does it provide comprehensive research using all available tools?"
+        weight: 2.5
+      - name: Business Value
+        description: "Does it focus on business-relevant metrics (cost, reliability, performance)?"
+        weight: 2.0
+      - name: Data Quality
+        description: "Is the information recent and from reputable sources?"
+        weight: 2.0
+      - name: Actionable Recommendations
+        description: "Does it provide clear recommendations?"
+        weight: 1.5
