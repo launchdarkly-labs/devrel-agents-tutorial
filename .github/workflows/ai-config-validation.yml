@@ -203,8 +203,7 @@ jobs:
             --evaluator examples.agents_demo_evaluator:AgentsDemoEvaluator \
             --threshold 7.0 \
             --report test-report.json \
-            --skip-sync \
-            --verbose
+            --skip-sync
 
           TEST_EXIT_CODE=$?
 
