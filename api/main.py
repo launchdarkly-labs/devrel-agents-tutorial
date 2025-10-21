@@ -15,6 +15,11 @@ app = FastAPI()
 
 agent_service = AgentService()
 
+@app.get("/health")
+async def health():
+    """Health check endpoint for monitoring"""
+    return {"status": "ok"}
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     # Capture all console output during request processing
