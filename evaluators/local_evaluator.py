@@ -81,11 +81,12 @@ class AgentsDemoEvaluator(LocalEvaluator):
                 "context": context_attributes
             }
 
+            url = f"{self.api_url}/chat"
+            print(f"DEBUG: Calling {url} with payload: {payload}")
+
             # Make HTTP request to the chat endpoint
-            response = await self.client.post(
-                f"{self.api_url}/chat",
-                json=payload
-            )
+            response = await self.client.post(url, json=payload)
+            print(f"DEBUG: Got response status: {response.status_code}")
 
             latency_ms = (time.time() - start_time) * 1000
 
@@ -131,12 +132,14 @@ class AgentsDemoEvaluator(LocalEvaluator):
             )
 
         except Exception as e:
+            import traceback
+            error_details = f"Error calling API: {type(e).__name__}: {str(e)}\nTraceback: {traceback.format_exc()}"
             return EvaluationResult(
                 response="",
                 latency_ms=0,
                 variation="error",
                 config_key=config_key,
-                error=f"Error calling API: {str(e)}"
+                error=error_details
             )
 
     async def cleanup(self):
