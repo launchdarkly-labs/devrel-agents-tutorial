@@ -198,29 +198,29 @@ jobs:
           # Test with httpx (Python)
           echo "🐍 Testing /chat endpoint with httpx..."
           .venv/bin/python << 'PYTHON_SCRIPT'
-import httpx
-import asyncio
+          import httpx
+          import asyncio
 
-async def test():
-    client = httpx.AsyncClient(timeout=10.0)
-    try:
-        response = await client.post(
-            'http://127.0.0.1:8000/chat',
-            json={'message': 'test', 'user_id': 'test-user', 'user_context': {}}
-        )
-        print(f'HTTPx test - Status: {response.status_code}')
-        print(f'HTTPx test - Response length: {len(response.text)}')
-        data = response.json()
-        print(f'HTTPx test - Has response field: {"response" in data}')
-    except Exception as e:
-        print(f'HTTPx test FAILED: {type(e).__name__}: {str(e)}')
-        import traceback
-        traceback.print_exc()
-    finally:
-        await client.aclose()
+          async def test():
+              client = httpx.AsyncClient(timeout=10.0)
+              try:
+                  response = await client.post(
+                      'http://127.0.0.1:8000/chat',
+                      json={'message': 'test', 'user_id': 'test-user', 'user_context': {}}
+                  )
+                  print(f'HTTPx test - Status: {response.status_code}')
+                  print(f'HTTPx test - Response length: {len(response.text)}')
+                  data = response.json()
+                  print(f'HTTPx test - Has response field: {"response" in data}')
+              except Exception as e:
+                  print(f'HTTPx test FAILED: {type(e).__name__}: {str(e)}')
+                  import traceback
+                  traceback.print_exc()
+              finally:
+                  await client.aclose()
 
-asyncio.run(test())
-PYTHON_SCRIPT
+          asyncio.run(test())
+          PYTHON_SCRIPT
 
           echo "🧪 Running AI Config test suite with judge evaluations..."
           echo "Working directory: $(pwd)"
