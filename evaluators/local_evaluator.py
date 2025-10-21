@@ -73,12 +73,12 @@ class AgentsDemoEvaluator(LocalEvaluator):
             # {
             #   "message": "user question",
             #   "user_id": "user-123",  # optional
-            #   "context": {...}        # LaunchDarkly context attributes
+            #   "user_context": {...}    # LaunchDarkly context attributes
             # }
             payload = {
                 "message": test_input,
                 "user_id": context_attributes.get("key", "test-user"),
-                "context": context_attributes
+                "user_context": context_attributes
             }
 
             url = f"{self.api_url}/chat"
