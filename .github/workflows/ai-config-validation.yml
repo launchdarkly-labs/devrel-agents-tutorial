@@ -166,6 +166,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           PYTHONPATH: ${{ github.workspace }}
+          CI_SAFE_MODE: true
         run: |
           # NOTE: The evaluator (evaluators/local_evaluator.py) expects the API on port 8000
           # If you change the port here, update the port in the evaluator as well
@@ -239,6 +240,16 @@ jobs:
           echo "🛑 Stopping API..."
           kill $API_PID 2>/dev/null || true
 
+          # If tests failed, dump API logs for debugging
+          if [ $TEST_EXIT_CODE -ne 0 ]; then
+            echo "===== /tmp/agents-demo-api.log ====="
+            if [ -f /tmp/agents-demo-api.log ]; then
+              tail -n 500 /tmp/agents-demo-api.log || true
+            else
+              echo "No API log found at /tmp/agents-demo-api.log"
+            fi
+          fi
+
           exit $TEST_EXIT_CODE
 
       - name: Upload test report
@@ -254,6 +265,13 @@ jobs:
         with:
           name: judge-evaluation-logs
           path: logs/judge_evaluations/**
+
+      - name: Upload API server log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-server-log
+          path: /tmp/agents-demo-api.log
 
   sync-production:
     name: Sync Production Configs
