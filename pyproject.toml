@@ -45,3 +45,6 @@ dev = [
     # AI Config Testing Framework
     "ld-aic-cicd @ file:///Users/ld_scarlett/Documents/Github/ld-aic-cicd",
 ]
+
+[tool.setuptools]
+packages = ["api", "agents"]
