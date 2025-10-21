@@ -7,18 +7,19 @@ import time
 import ldclient
 from ldclient import Context
 from ldai.client import LDAIClient, LDAIAgentConfig, LDAIAgentDefaults, ModelConfig
-from ldai.tracker import TokenUsage, FeedbackKind
+from ldai.tracker import FeedbackKind
 from dotenv import load_dotenv
 from utils.logger import log_student, log_debug
-from utils.cost_calculator import calculate_cost
+import boto3
 
 load_dotenv()
 
 def map_provider_to_langchain(provider_name):
     """Map LaunchDarkly provider names to LangChain provider names."""
     provider_mapping = {
+        'anthropic': 'bedrock',   # CHANGED: Route through Bedrock
+        'bedrock': 'bedrock',     # NEW: Explicit Bedrock provider
         'gemini': 'google_genai',
-        'anthropic': 'anthropic', 
         'openai': 'openai',
         'mistral': 'mistralai'
     }
@@ -31,9 +32,12 @@ class FixedConfigManager:
         self.sdk_key = os.getenv('LD_SDK_KEY')
         if not self.sdk_key:
             raise ValueError("LD_SDK_KEY environment variable is required")
-        
+
         self._initialize_launchdarkly_client()
         self._initialize_ai_client()
+
+        # ADD THIS: Initialize AWS Bedrock session
+        self._initialize_bedrock_session()
     
     def _initialize_launchdarkly_client(self):
         """Initialize LaunchDarkly client"""
@@ -53,6 +57,166 @@ class FixedConfigManager:
     def _initialize_ai_client(self):
         """Initialize AI client"""
         self.ai_client = LDAIClient(self.ld_client)
+
+    def _initialize_bedrock_session(self):
+        """Initialize AWS Bedrock session if AUTH_METHOD=sso"""
+        auth_method = os.getenv('AUTH_METHOD', 'api-key').lower()
+
+        if auth_method != 'sso':
+            self.boto3_session = None
+            log_debug("AUTH_METHOD not set to 'sso', Bedrock unavailable")
+            return
+
+        try:
+            # Use default AWS profile (whatever user is logged in as)
+            aws_region = os.getenv('AWS_REGION', 'us-east-1')
+            self.boto3_session = boto3.Session(region_name=aws_region)  # No profile_name!
+            self.aws_region = aws_region
+
+            # Test current SSO session
+            sts = self.boto3_session.client('sts')
+            identity = sts.get_caller_identity()
+            user_name = identity['Arn'].split('/')[-1]
+            account = identity['Account']
+            log_student(f"AWS: Connected via SSO as {user_name} (Account: {account})")
+
+        except Exception as e:
+            log_student(f"AWS SSO session not available: {e}")
+            log_student("Run: aws sso login")  # Don't specify profile
+            raise
+
+    def validate_bedrock_access(self):
+        """Validate Bedrock access and model availability for Bedrock-only deployment."""
+        if not self.boto3_session:
+            raise ValueError("Bedrock session not initialized. Set AUTH_METHOD=sso and run: aws sso login")
+
+        try:
+            # Test Bedrock service access
+            bedrock_client = self.boto3_session.client('bedrock', region_name=self.aws_region)
+
+            # List available foundation models to verify access
+            response = bedrock_client.list_foundation_models()
+            available_models = [model['modelId'] for model in response.get('modelSummaries', [])]
+
+            # Check for Claude models specifically
+            claude_models = [model for model in available_models if 'anthropic.claude' in model]
+            if claude_models:
+                log_student(f"BEDROCK VALIDATION: ✓ Found {len(claude_models)} Claude models available")
+                log_debug(f"BEDROCK VALIDATION: Available Claude models: {claude_models[:3]}...")  # Show first 3
+            else:
+                log_student("BEDROCK VALIDATION: ⚠️  No Claude models found. Request access in AWS console.")
+
+            # Check for Titan embeddings
+            titan_models = [model for model in available_models if 'amazon.titan-embed' in model]
+            if titan_models:
+                log_student(f"BEDROCK VALIDATION: ✓ Found {len(titan_models)} Titan embedding models")
+                log_debug(f"BEDROCK VALIDATION: Available Titan models: {titan_models}")
+            else:
+                log_student("BEDROCK VALIDATION: ⚠️  No Titan embedding models found. Request access in AWS console.")
+
+            log_student(f"BEDROCK VALIDATION: ✓ Successfully validated access to {len(available_models)} total models")
+            return True
+
+        except Exception as e:
+            log_student(f"BEDROCK VALIDATION: ✗ Failed to validate Bedrock access: {e}")
+            if 'AccessDenied' in str(e):
+                log_student("BEDROCK VALIDATION: Request Bedrock model access in AWS Console")
+            return False
+
+    def validate_hybrid_configuration(self):
+        """
+        Validate hybrid provider configurations and provide guidance.
+
+        Returns dict with validation results, warnings, and recommendations.
+        """
+        auth_method = os.getenv('AUTH_METHOD', 'api-key').lower()
+        embedding_provider = os.getenv('EMBEDDING_PROVIDER', '').lower()
+        has_openai = bool(os.getenv('OPENAI_API_KEY'))
+        has_anthropic = bool(os.getenv('ANTHROPIC_API_KEY'))
+
+        # Determine embedding and chat providers
+        if embedding_provider == 'openai':
+            embedding_provider_actual = 'openai'
+        elif embedding_provider == 'bedrock':
+            embedding_provider_actual = 'bedrock'
+        elif auth_method == 'sso' and not has_openai:
+            embedding_provider_actual = 'bedrock'
+        elif has_openai:
+            embedding_provider_actual = 'openai'
+        else:
+            embedding_provider_actual = 'openai'  # Default
+
+        # Chat provider (determined by AUTH_METHOD)
+        if auth_method == 'sso':
+            chat_provider = 'bedrock'
+        else:
+            chat_provider = 'api-keys'
+
+        result = {
+            "valid": True,
+            "configuration": {
+                "chat_provider": chat_provider,
+                "embedding_provider": embedding_provider_actual,
+                "auth_method": auth_method,
+                "embedding_explicit": bool(embedding_provider)
+            },
+            "warnings": [],
+            "recommendations": []
+        }
+
+        # Validate hybrid scenarios
+        if chat_provider == 'bedrock' and embedding_provider_actual == 'openai':
+            # Hybrid: Bedrock chat + OpenAI embeddings
+            if not has_openai:
+                result["valid"] = False
+                result["warnings"].append(
+                    "Hybrid config requires OPENAI_API_KEY for OpenAI embeddings"
+                )
+            else:
+                result["recommendations"].append(
+                    "✅ Hybrid setup: Bedrock chat models with OpenAI embeddings"
+                )
+                log_debug("HYBRID: Bedrock chat + OpenAI embeddings configuration detected")
+
+        elif chat_provider == 'api-keys' and embedding_provider_actual == 'bedrock':
+            # Hybrid: API keys chat + Bedrock embeddings
+            if not self.boto3_session:
+                result["valid"] = False
+                result["warnings"].append(
+                    "Hybrid config requires AWS SSO for Bedrock embeddings. Run: aws sso login"
+                )
+            elif not (has_anthropic or has_openai):
+                result["valid"] = False
+                result["warnings"].append(
+                    "Hybrid config requires API keys for chat models (ANTHROPIC_API_KEY or OPENAI_API_KEY)"
+                )
+            else:
+                result["recommendations"].append(
+                    "✅ Hybrid setup: Direct API chat models with Bedrock embeddings"
+                )
+                log_debug("HYBRID: API-key chat + Bedrock embeddings configuration detected")
+
+        elif chat_provider == 'bedrock' and embedding_provider_actual == 'bedrock':
+            # Full Bedrock
+            result["recommendations"].append(
+                "✅ Full Bedrock setup: Both chat and embeddings use AWS Bedrock"
+            )
+            log_debug("HYBRID: Full Bedrock configuration detected")
+
+        elif chat_provider == 'api-keys' and embedding_provider_actual == 'openai':
+            # Full API keys
+            result["recommendations"].append(
+                "✅ Full API setup: Both chat and embeddings use direct APIs"
+            )
+            log_debug("HYBRID: Full API-key configuration detected")
+
+        # Additional validation
+        if not embedding_provider and chat_provider != embedding_provider_actual:
+            result["recommendations"].append(
+                f"💡 Consider setting EMBEDDING_PROVIDER={embedding_provider_actual} to make configuration explicit"
+            )
+
+        return result
     
     def build_context(self, user_id: str, user_context: dict = None) -> Context:
         """Build a LaunchDarkly context with consistent attributes.
@@ -94,7 +258,7 @@ class FixedConfigManager:
         try:
             # Return the AI Config object directly
             result = self.ai_client.agent(agent_config, ld_user_context)
-            log_debug(f"CONFIG MANAGER: Got result from LaunchDarkly")
+            log_debug("CONFIG MANAGER: Got result from LaunchDarkly")
             
             # Debug the actual configuration received (basic info only)
             try:
@@ -176,9 +340,9 @@ class FixedConfigManager:
         """Close LaunchDarkly client"""
         try:
             self.ld_client.flush()
-        except:
+        except Exception:
             pass
         try:
             self.ld_client.close()
-        except:
+        except Exception:
             pass

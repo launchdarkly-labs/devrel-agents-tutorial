@@ -1,8 +1,8 @@
 """
 Cost Calculator for AI Model Usage
 
-Calculates costs for token usage across different AI model providers.
-Includes comprehensive pricing for all models used in the codebase.
+Hybrid pricing: exact match → normalize inference profiles → pattern match by tier → return $0
+Handles new Bedrock models automatically via pattern matching (Opus/Sonnet/Haiku tiers).
 """
 
 # Model pricing per 1 million tokens (in USD)
@@ -37,29 +37,90 @@ MODEL_PRICING = {
 }
 
 
+def get_pricing_by_pattern(model_name: str) -> dict:
+    """
+    Pattern match model tier for pricing (Opus/Sonnet/Haiku/GPT-4).
+
+    Handles new Bedrock models automatically without code changes.
+    Returns None if no pattern matches.
+    """
+    # Normalize: lowercase and remove common prefixes
+    normalized = model_name.lower()
+    normalized = normalized.replace('us.', '').replace('eu.', '').replace('ap.', '')
+    normalized = normalized.replace('ca.', '').replace('sa.', '').replace('af.', '').replace('me.', '')
+    normalized = normalized.replace('anthropic.', '').replace('amazon.', '').replace('meta.', '')
+
+    # Anthropic Claude - Match by tier
+    if 'opus' in normalized:
+        return {"input": 15.00, "output": 75.00}  # Opus tier (flagship)
+    elif 'sonnet' in normalized or 'claude-4' in normalized:
+        return {"input": 3.00, "output": 15.00}   # Sonnet tier (balanced)
+    elif 'haiku' in normalized:
+        return {"input": 0.25, "output": 1.25}    # Haiku tier (fast)
+
+    # OpenAI - Match by tier
+    elif 'gpt-4o-mini' in normalized:
+        return {"input": 0.15, "output": 0.60}    # GPT-4o-mini
+    elif 'gpt-4' in normalized or 'gpt4' in normalized:
+        return {"input": 6.00, "output": 18.00}   # GPT-4 tier
+
+    # Mistral - Free tier
+    elif 'mistral' in normalized:
+        return {"input": 0.0, "output": 0.0}      # Free tier
+
+    # No pattern match
+    return None
+
+
 def calculate_cost(model_name: str, input_tokens: int, output_tokens: int) -> float:
     """
     Calculate cost in USD for token usage.
 
-    Args:
-        model_name: Name of the AI model
-        input_tokens: Number of input tokens used
-        output_tokens: Number of output tokens generated
-
-    Returns:
-        Total cost in USD (rounded to 6 decimal places)
+    Hybrid strategy: exact match → normalize → pattern match → $0
+    Handles new Bedrock models automatically via tier matching.
     """
-    if model_name not in MODEL_PRICING:
-        print(f"⚠️  COST CALCULATOR WARNING: Unknown model '{model_name}'")
-        print(f"   Available models: {list(MODEL_PRICING.keys())}")
+    pricing = None
+    lookup_name = model_name
+    match_type = None
+
+    # Step 1: Try exact match in pricing table
+    if model_name in MODEL_PRICING:
+        pricing = MODEL_PRICING[model_name]
+        lookup_name = model_name
+        match_type = "exact"
+
+    # Step 2: Try normalizing Bedrock inference profiles
+    elif model_name not in MODEL_PRICING:
+        from utils.bedrock_helpers import is_inference_profile_id, extract_base_model_from_inference_profile
+
+        if is_inference_profile_id(model_name):
+            lookup_name = extract_base_model_from_inference_profile(model_name)
+            if lookup_name in MODEL_PRICING:
+                pricing = MODEL_PRICING[lookup_name]
+                match_type = "normalized"
+
+    # Step 3: Try pattern-based fallback
+    if pricing is None:
+        pricing = get_pricing_by_pattern(model_name)
+        if pricing is not None:
+            lookup_name = model_name
+            match_type = "pattern"
+
+    # Step 4: Graceful degradation - return 0 for unknown models
+    if pricing is None:
+        print(f"💡 COST CALCULATOR: No pricing available for '{model_name}' (cost tracking skipped)")
         return 0.0
 
-    pricing = MODEL_PRICING[model_name]
+    # Calculate cost
     input_cost = (input_tokens / 1_000_000) * pricing["input"]
     output_cost = (output_tokens / 1_000_000) * pricing["output"]
     total_cost = input_cost + output_cost
-    
-    print(f"COST CALCULATED: ${total_cost:.6f} for {model_name} ({input_tokens} in, {output_tokens} out)")
+
+    # Log calculation with match type for transparency
+    if match_type == "pattern":
+        print(f"COST CALCULATED: ${total_cost:.6f} for {model_name} ({input_tokens} in, {output_tokens} out) [pattern match]")
+    else:
+        print(f"COST CALCULATED: ${total_cost:.6f} for {lookup_name} ({input_tokens} in, {output_tokens} out)")
 
     return round(total_cost, 6)  # Round to 6 decimal places for precision
 

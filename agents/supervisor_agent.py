@@ -119,7 +119,6 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
     
     # Import needed modules for model creation
     from langchain.chat_models import init_chat_model
-    from config_manager import map_provider_to_langchain
     
     # Create child agents with config manager
     support_agent = create_support_agent(support_config, config_manager)
@@ -138,14 +137,38 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             user_context = state.get("user_context", {})
 
             # Create PII pre-screening model with structured output
-            from config_manager import map_provider_to_langchain
-            langchain_provider = map_provider_to_langchain(supervisor_config.provider.name)
+            from agents.ld_agent_helpers import map_provider_to_langchain, create_bedrock_chat_model
+            from utils.bedrock_helpers import normalize_bedrock_provider
+            import os
 
-            base_model = init_chat_model(
-                model=supervisor_config.model.name,
-                model_provider=langchain_provider,
-                temperature=0.1
-            )
+            # Normalize provider name to handle bedrock:anthropic format
+            normalized_provider = normalize_bedrock_provider(supervisor_config.provider.name)
+            langchain_provider = map_provider_to_langchain(normalized_provider)
+
+            # Handle Bedrock vs direct API routing
+            if langchain_provider == 'bedrock':
+                auth_method = os.getenv('AUTH_METHOD', 'api-key').lower()
+                if auth_method == 'sso' and hasattr(config_manager, 'boto3_session') and config_manager.boto3_session:
+                    base_model = create_bedrock_chat_model(
+                        model_id=supervisor_config.model.name,
+                        session=config_manager.boto3_session,
+                        region=config_manager.aws_region,
+                        temperature=0.1
+                    )
+                else:
+                    # Fall back to direct anthropic API
+                    fallback_provider = 'anthropic' if supervisor_config.provider.name.lower() == 'anthropic' else langchain_provider
+                    base_model = init_chat_model(
+                        model=supervisor_config.model.name,
+                        model_provider=fallback_provider,
+                        temperature=0.1
+                    )
+            else:
+                base_model = init_chat_model(
+                    model=supervisor_config.model.name,
+                    model_provider=langchain_provider,
+                    temperature=0.1
+                )
 
             # Use include_raw=True to preserve usage metadata for cost tracking
             prescreen_model = base_model.with_structured_output(PIIPreScreening, include_raw=True)
@@ -211,7 +234,7 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             # Fallback to security agent for safety
             log_student(f"PII PRE-SCREENING ERROR: {type(e).__name__}: {str(e)}")
             log_debug(f"PII PRE-SCREENING ERROR DETAIL: {e}")
-            log_student(f"FALLBACK: Defaulting to security agent for safety")
+            log_student("FALLBACK: Defaulting to security agent for safety")
             return {
                 "current_agent": "security_agent",
                 "workflow_stage": "security_processing",
@@ -238,7 +261,7 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
         - Tracks metrics for LaunchDarkly optimization
         """
         try:
-            messages = state["messages"]
+            state["messages"]
             workflow_stage = state.get("workflow_stage", "pii_prescreen")  # Start with intelligent pre-screening
             security_cleared = state.get("security_cleared", False)
             support_response = state.get("support_response", "")
@@ -251,10 +274,10 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
                 next_agent = "security_agent"
             elif workflow_stage == "direct_support" and not support_response:
                 next_agent = "support_agent"
-                log_student(f"BYPASS: Direct to support (no PII detected)")
+                log_student("BYPASS: Direct to support (no PII detected)")
             elif workflow_stage == "post_security_support" and not support_response:
                 next_agent = "support_agent"
-                log_student(f"SECURED: Routing to support with sanitized data")
+                log_student("SECURED: Routing to support with sanitized data")
             elif support_response:
                 next_agent = "complete"
             else:
@@ -263,7 +286,7 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             # Track successful supervisor decision
             return {"current_agent": next_agent}
 
-        except Exception as e:
+        except Exception:
 
             # Track supervisor error with LDAI metrics
             return {"current_agent": "security_agent"}
