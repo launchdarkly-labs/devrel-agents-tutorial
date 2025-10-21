@@ -165,11 +165,21 @@ jobs:
           LD_SDK_KEY: ${{ secrets.LD_SDK_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           echo "🚀 Starting agents-demo API on port 8000..."
+          echo "Working directory: $(pwd)"
+          echo "PYTHONPATH: $PYTHONPATH"
           .venv/bin/python -m uvicorn api.main:app --port 8000 > /tmp/agents-demo-api.log 2>&1 &
           API_PID=$!
           echo "API_PID=$API_PID" >> $GITHUB_ENV
+
+          # Give it 2 seconds to start
+          sleep 2
+
+          # Show early logs immediately
+          echo "📋 Initial API logs:"
+          cat /tmp/agents-demo-api.log || echo "No logs yet"
 
           # Wait for API to be ready (max 30 seconds)
           echo "Waiting for API to start..."
@@ -205,6 +215,7 @@ jobs:
           LD_SDK_KEY: ${{ secrets.LD_SDK_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PYTHONPATH: ${{ github.workspace }}
         run: |
           echo "🧪 Running AI Config test suite with judge evaluations..."
           .venv/bin/ld-aic test \
