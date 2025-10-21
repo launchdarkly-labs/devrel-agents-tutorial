@@ -38,7 +38,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv sync --frozen
+          uv sync --frozen --no-dev
           uv pip install git+https://x-access-token:${{ secrets.GH_PAT }}@github.com/launchdarkly-labs/scarlett_ai_configs_ci_cd-.git@feature/initial-implementation
 
       - name: Validate required secrets
@@ -137,7 +137,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv sync --frozen
+          uv sync --frozen --no-dev
           uv pip install git+https://x-access-token:${{ secrets.GH_PAT }}@github.com/launchdarkly-labs/scarlett_ai_configs_ci_cd-.git@feature/initial-implementation
 
       - name: Validate required secrets
@@ -239,7 +239,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv sync --frozen
+          uv sync --frozen --no-dev
           uv pip install git+https://x-access-token:${{ secrets.GH_PAT }}@github.com/launchdarkly-labs/scarlett_ai_configs_ci_cd-.git@feature/initial-implementation
 
       - name: Validate required secrets
