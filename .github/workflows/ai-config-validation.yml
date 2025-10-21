@@ -39,7 +39,19 @@ jobs:
       - name: Install dependencies
         run: |
           uv sync --frozen
-          uv pip install -e ../ld-aic-cicd
+          uv pip install git+https://github.com/launchdarkly-labs/scarlett_ai_configs_ci_cd-.git
+
+      - name: Validate required secrets
+        run: |
+          if [ -z "${{ secrets.LD_SDK_KEY }}" ]; then
+            echo "::error::Missing required secret: LD_SDK_KEY"
+            exit 1
+          fi
+          if [ -z "${{ secrets.LD_API_KEY }}" ]; then
+            echo "::error::Missing required secret: LD_API_KEY"
+            exit 1
+          fi
+          echo "✅ Required secrets are configured"
 
       - name: Run AI Config validation
         env:
@@ -126,51 +138,85 @@ jobs:
       - name: Install dependencies
         run: |
           uv sync --frozen
-          uv pip install -e ../ld-aic-cicd
+          uv pip install git+https://github.com/launchdarkly-labs/scarlett_ai_configs_ci_cd-.git
 
-      - name: Run judge evaluations on support-agent
-        if: secrets.OPENAI_API_KEY != '' || secrets.ANTHROPIC_API_KEY != ''
+      - name: Validate required secrets
+        run: |
+          # Check LaunchDarkly secrets
+          if [ -z "${{ secrets.LD_SDK_KEY }}" ]; then
+            echo "::error::Missing required secret: LD_SDK_KEY"
+            exit 1
+          fi
+
+          # Check at least one AI provider API key is set
+          if [ -z "${{ secrets.OPENAI_API_KEY }}" ] && [ -z "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
+            echo "::error::At least one AI provider API key required: OPENAI_API_KEY or ANTHROPIC_API_KEY"
+            exit 1
+          fi
+
+          echo "✅ Required secrets are configured"
+
+      - name: Start agents-demo API
         env:
           LD_SDK_KEY: ${{ secrets.LD_SDK_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          if [ -f "test_data/ai_config_evaluation.yaml" ]; then
-            echo "🤖 Running judge evaluation for support-agent..."
-            uv run ld-aic judge \
-              --config-key support-agent \
-              --dataset test_data/ai_config_evaluation.yaml \
-              --judge-model gpt-4o-mini \
-              --min-score 7.0 \
-              --output evaluation-support-agent.json
-          else
-            echo "⚠️ No evaluation dataset found at test_data/ai_config_evaluation.yaml"
-          fi
+          echo "🚀 Starting agents-demo API on port 8000..."
+          uv run uvicorn api.main:app --port 8000 > /tmp/agents-demo-api.log 2>&1 &
+          API_PID=$!
+          echo "API_PID=$API_PID" >> $GITHUB_ENV
 
-      - name: Run judge evaluations on security-agent
-        if: secrets.OPENAI_API_KEY != '' || secrets.ANTHROPIC_API_KEY != ''
+          # Wait for API to be ready (max 30 seconds)
+          echo "Waiting for API to start..."
+          for i in {1..30}; do
+            if curl -s http://localhost:8000/health >/dev/null 2>&1 || curl -s http://localhost:8000 >/dev/null 2>&1; then
+              echo "✅ API is ready!"
+              break
+            fi
+            if ! kill -0 $API_PID 2>/dev/null; then
+              echo "❌ API process died. Logs:"
+              cat /tmp/agents-demo-api.log
+              exit 1
+            fi
+            sleep 1
+          done
+
+      - name: Run full test suite with judge evaluations
         env:
           LD_SDK_KEY: ${{ secrets.LD_SDK_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          if [ -f "test_data/ai_config_evaluation.yaml" ]; then
-            echo "🤖 Running judge evaluation for security-agent..."
-            uv run ld-aic judge \
-              --config-key security-agent \
-              --dataset test_data/ai_config_evaluation.yaml \
-              --judge-model gpt-4o-mini \
-              --min-score 7.0 \
-              --output evaluation-security-agent.json
-          fi
+          echo "🧪 Running AI Config test suite with judge evaluations..."
+          uv run ld-aic test \
+            --config-keys "supervisor-agent,support-agent,security-agent" \
+            --environment production \
+            --evaluation-dataset test_data/ai_config_evaluation.yaml \
+            --evaluator examples.agents_demo_evaluator:AgentsDemoEvaluator \
+            --threshold 7.0 \
+            --report test-report.json \
+            --skip-sync
 
-      - name: Upload evaluation results
+      - name: Stop agents-demo API
+        if: always()
+        run: |
+          echo "🛑 Stopping API..."
+          kill $API_PID 2>/dev/null || true
+
+      - name: Upload test report
         if: always()
         uses: actions/upload-artifact@v3
         with:
-          name: evaluation-results
-          path: |
-            evaluation-*.json
+          name: test-report
+          path: test-report.json
+
+      - name: Upload judge evaluation logs
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: judge-evaluation-logs
+          path: logs/judge_evaluations/**
 
   sync-production:
     name: Sync Production Configs
@@ -194,7 +240,19 @@ jobs:
       - name: Install dependencies
         run: |
           uv sync --frozen
-          uv pip install -e ../ld-aic-cicd
+          uv pip install git+https://github.com/launchdarkly-labs/scarlett_ai_configs_ci_cd-.git
+
+      - name: Validate required secrets
+        run: |
+          if [ -z "${{ secrets.LD_API_KEY }}" ]; then
+            echo "::error::Missing required secret: LD_API_KEY"
+            exit 1
+          fi
+          if [ -z "${{ secrets.LD_PROJECT_KEY }}" ]; then
+            echo "::error::Missing required secret: LD_PROJECT_KEY"
+            exit 1
+          fi
+          echo "✅ Required secrets are configured"
 
       - name: Sync production configs
         env:
