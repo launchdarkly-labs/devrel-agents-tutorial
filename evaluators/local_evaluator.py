@@ -5,9 +5,14 @@ LocalEvaluator Implementation for agents-demo Project
 This evaluator makes HTTP requests to the agents-demo FastAPI backend
 to generate AI responses using LaunchDarkly AI configs.
 
+CONFIGURATION:
+    - API URL: Defaults to http://127.0.0.1:8000
+    - If your API runs on a different port, update line 36 below
+    - The GitHub Actions workflow starts the API on port 8000
+
 Usage:
     1. Start the agents-demo backend: `uvicorn api.main:app --reload --port 8000`
-    2. Run tests: `ld-aic test --evaluator examples.agents_demo_evaluator:AgentsDemoEvaluator`
+    2. Run tests: `ld-aic test --evaluator evaluators.local_evaluator:AgentsDemoEvaluator`
 """
 import os
 import time
