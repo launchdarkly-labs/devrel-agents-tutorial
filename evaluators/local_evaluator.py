@@ -82,11 +82,9 @@ class AgentsDemoEvaluator(LocalEvaluator):
             }
 
             url = f"{self.api_url}/chat"
-            print(f"DEBUG: Calling {url} with payload: {payload}")
 
             # Make HTTP request to the chat endpoint
             response = await self.client.post(url, json=payload)
-            print(f"DEBUG: Got response status: {response.status_code}")
 
             latency_ms = (time.time() - start_time) * 1000
 
@@ -101,24 +99,32 @@ class AgentsDemoEvaluator(LocalEvaluator):
                 )
 
             # Parse response
-            # Expected format: {"response": "...", "metadata": {...}}
+            # API returns: {"response": "...", "variation_key": "...", "agent_configurations": [...]}
             response_data = response.json()
             response_text = response_data.get("response", "")
-            metadata = response_data.get("metadata", {})
+            variation_key = response_data.get("variation_key", "unknown")
 
-            # Extract which agent/variation was used from metadata
-            variation = metadata.get("agent", "unknown")
-            agent_used = metadata.get("final_agent", variation)
+            # Get the final agent from agent_configurations
+            agent_configs = response_data.get("agent_configurations", [])
+            final_agent = "unknown"
+            if agent_configs:
+                try:
+                    # Handle both dict and object responses
+                    last_config = agent_configs[-1]
+                    final_agent = last_config.get("agent_name", "unknown") if isinstance(last_config, dict) else last_config.agent_name
+                except (KeyError, AttributeError, IndexError):
+                    final_agent = "unknown"
 
             return EvaluationResult(
                 response=response_text,
                 latency_ms=latency_ms,
-                variation=variation,
+                variation=variation_key,
                 config_key=config_key,
                 metadata={
-                    "agent_used": agent_used,
+                    "final_agent": final_agent,
                     "http_status": response.status_code,
-                    **metadata  # Include all metadata from response
+                    "model": response_data.get("model", "unknown"),
+                    "agent_configurations": agent_configs
                 }
             )
 
