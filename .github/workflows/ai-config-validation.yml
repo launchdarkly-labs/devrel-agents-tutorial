@@ -168,7 +168,7 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           echo "🚀 Starting agents-demo API on port 8000..."
-          .venv/bin/python -m uvicorn api.main:app --port 8000 > /tmp/agents-demo-api.log 2>&1 &
+          .venv/bin/python -m uvicorn api.main:app --host 0.0.0.0 --port 8000 > /tmp/agents-demo-api.log 2>&1 &
           API_PID=$!
 
           # Wait for API to be ready (max 30 seconds)
@@ -186,7 +186,16 @@ jobs:
             sleep 1
           done
 
+          # Test the /chat endpoint directly
+          echo "🔍 Testing /chat endpoint..."
+          curl -X POST http://localhost:8000/chat \
+            -H "Content-Type: application/json" \
+            -d '{"message":"test","user_id":"test-user","user_context":{}}' \
+            || echo "Chat endpoint test failed"
+
           echo "🧪 Running AI Config test suite with judge evaluations..."
+          echo "Working directory: $(pwd)"
+          echo "Test data file exists: $(test -f test_data/ai_config_evaluation.yaml && echo 'YES' || echo 'NO')"
           .venv/bin/ld-aic test \
             --config-keys "supervisor-agent,support-agent,security-agent" \
             --environment production \
@@ -194,7 +203,8 @@ jobs:
             --evaluator examples.agents_demo_evaluator:AgentsDemoEvaluator \
             --threshold 7.0 \
             --report test-report.json \
-            --skip-sync
+            --skip-sync \
+            --verbose
 
           TEST_EXIT_CODE=$?
 
