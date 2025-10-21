@@ -62,8 +62,7 @@ jobs:
           LD_PROJECT_KEY: ${{ secrets.LD_PROJECT_KEY }}
         run: |
           # Use ld-aic-cicd framework to validate our AI configs
-          source .venv/bin/activate
-          ld-aic validate \
+          .venv/bin/ld-aic validate \
             --environment ${{ github.event.inputs.environment || 'production' }} \
             --config-keys "supervisor-agent,support-agent,security-agent" \
             --report validation-report.json \
@@ -168,8 +167,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           echo "🚀 Starting agents-demo API on port 8000..."
-          source .venv/bin/activate
-          uvicorn api.main:app --port 8000 > /tmp/agents-demo-api.log 2>&1 &
+          .venv/bin/python -m uvicorn api.main:app --port 8000 > /tmp/agents-demo-api.log 2>&1 &
           API_PID=$!
           echo "API_PID=$API_PID" >> $GITHUB_ENV
 
@@ -195,8 +193,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           echo "🧪 Running AI Config test suite with judge evaluations..."
-          source .venv/bin/activate
-          ld-aic test \
+          .venv/bin/ld-aic test \
             --config-keys "supervisor-agent,support-agent,security-agent" \
             --environment production \
             --evaluation-dataset test_data/ai_config_evaluation.yaml \
@@ -269,8 +266,7 @@ jobs:
           LD_PROJECT_KEY: ${{ secrets.LD_PROJECT_KEY }}
         run: |
           mkdir -p configs
-          source .venv/bin/activate
-          ld-aic sync \
+          .venv/bin/ld-aic sync \
             --environment production \
             --output-dir configs \
             --format json \
