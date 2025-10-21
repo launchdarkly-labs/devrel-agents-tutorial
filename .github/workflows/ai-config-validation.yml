@@ -38,6 +38,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          uv venv
           uv pip install .
           uv pip install git+https://x-access-token:${{ secrets.GH_PAT }}@github.com/launchdarkly-labs/scarlett_ai_configs_ci_cd-.git@feature/initial-implementation
 
@@ -137,6 +138,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          uv venv
           uv pip install .
           uv pip install git+https://x-access-token:${{ secrets.GH_PAT }}@github.com/launchdarkly-labs/scarlett_ai_configs_ci_cd-.git@feature/initial-implementation
 
@@ -239,6 +241,7 @@ jobs:
 
       - name: Install dependencies
         run: |
+          uv venv
           uv pip install .
           uv pip install git+https://x-access-token:${{ secrets.GH_PAT }}@github.com/launchdarkly-labs/scarlett_ai_configs_ci_cd-.git@feature/initial-implementation
 
