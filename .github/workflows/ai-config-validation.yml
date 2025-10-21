@@ -173,9 +173,11 @@ jobs:
 
           # Wait for API to be ready (max 30 seconds)
           echo "Waiting for API to start..."
+          API_READY=false
           for i in {1..30}; do
-            if curl -s http://localhost:8000/health >/dev/null 2>&1 || curl -s http://localhost:8000 >/dev/null 2>&1; then
+            if curl -s http://localhost:8000/health >/dev/null 2>&1; then
               echo "✅ API is ready!"
+              API_READY=true
               break
             fi
             if ! kill -0 $API_PID 2>/dev/null; then
@@ -183,8 +185,20 @@ jobs:
               cat /tmp/agents-demo-api.log
               exit 1
             fi
+            echo "  Attempt $i/30..."
             sleep 1
           done
+
+          # Final verification
+          if [ "$API_READY" = false ]; then
+            echo "❌ API failed to start after 30 seconds. Logs:"
+            cat /tmp/agents-demo-api.log
+            exit 1
+          fi
+
+          # Show API startup logs for debugging
+          echo "📋 API startup logs:"
+          head -20 /tmp/agents-demo-api.log
 
       - name: Run full test suite with judge evaluations
         env:
