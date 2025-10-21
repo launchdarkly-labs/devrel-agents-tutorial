@@ -160,7 +160,7 @@ jobs:
 
           echo "✅ Required secrets are configured"
 
-      - name: Start agents-demo API
+      - name: Run tests with API
         env:
           LD_SDK_KEY: ${{ secrets.LD_SDK_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -168,26 +168,14 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
         run: |
           echo "🚀 Starting agents-demo API on port 8000..."
-          echo "Working directory: $(pwd)"
-          echo "PYTHONPATH: $PYTHONPATH"
           .venv/bin/python -m uvicorn api.main:app --port 8000 > /tmp/agents-demo-api.log 2>&1 &
           API_PID=$!
-          echo "API_PID=$API_PID" >> $GITHUB_ENV
-
-          # Give it 2 seconds to start
-          sleep 2
-
-          # Show early logs immediately
-          echo "📋 Initial API logs:"
-          cat /tmp/agents-demo-api.log || echo "No logs yet"
 
           # Wait for API to be ready (max 30 seconds)
           echo "Waiting for API to start..."
-          API_READY=false
           for i in {1..30}; do
             if curl -s http://localhost:8000/health >/dev/null 2>&1; then
               echo "✅ API is ready!"
-              API_READY=true
               break
             fi
             if ! kill -0 $API_PID 2>/dev/null; then
@@ -195,28 +183,9 @@ jobs:
               cat /tmp/agents-demo-api.log
               exit 1
             fi
-            echo "  Attempt $i/30..."
             sleep 1
           done
 
-          # Final verification
-          if [ "$API_READY" = false ]; then
-            echo "❌ API failed to start after 30 seconds. Logs:"
-            cat /tmp/agents-demo-api.log
-            exit 1
-          fi
-
-          # Show API startup logs for debugging
-          echo "📋 API startup logs:"
-          head -20 /tmp/agents-demo-api.log
-
-      - name: Run full test suite with judge evaluations
-        env:
-          LD_SDK_KEY: ${{ secrets.LD_SDK_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          PYTHONPATH: ${{ github.workspace }}
-        run: |
           echo "🧪 Running AI Config test suite with judge evaluations..."
           .venv/bin/ld-aic test \
             --config-keys "supervisor-agent,support-agent,security-agent" \
@@ -227,11 +196,12 @@ jobs:
             --report test-report.json \
             --skip-sync
 
-      - name: Stop agents-demo API
-        if: always()
-        run: |
+          TEST_EXIT_CODE=$?
+
           echo "🛑 Stopping API..."
           kill $API_PID 2>/dev/null || true
+
+          exit $TEST_EXIT_CODE
 
       - name: Upload test report
         if: always()
