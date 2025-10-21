@@ -200,7 +200,7 @@ jobs:
             --config-keys "supervisor-agent,support-agent,security-agent" \
             --environment production \
             --evaluation-dataset test_data/ai_config_evaluation.yaml \
-            --evaluator examples.agents_demo_evaluator:AgentsDemoEvaluator \
+            --evaluator evaluators.local_evaluator:AgentsDemoEvaluator \
             --threshold 7.0 \
             --report test-report.json \
             --skip-sync
