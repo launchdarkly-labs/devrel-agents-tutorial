@@ -100,7 +100,16 @@ class AgentsDemoEvaluator(LocalEvaluator):
 
             # Parse response
             # API returns: {"response": "...", "variation_key": "...", "agent_configurations": [...]}
-            response_data = response.json()
+            try:
+                response_data = response.json()
+            except Exception as json_error:
+                return EvaluationResult(
+                    response="",
+                    latency_ms=latency_ms,
+                    variation="error",
+                    config_key=config_key,
+                    error=f"Failed to parse JSON response: {type(json_error).__name__}: {str(json_error)}\nResponse text: {response.text[:500]}"
+                )
             response_text = response_data.get("response", "")
             variation_key = response_data.get("variation_key", "unknown")
 
@@ -139,6 +148,8 @@ class AgentsDemoEvaluator(LocalEvaluator):
 
         except Exception as e:
             import traceback
+            print(f"EXCEPTION IN EVALUATOR: {type(e).__name__}: {str(e)}")
+            print(f"TRACEBACK: {traceback.format_exc()}")
             error_details = f"Error calling API: {type(e).__name__}: {str(e)}\nTraceback: {traceback.format_exc()}"
             return EvaluationResult(
                 response="",
