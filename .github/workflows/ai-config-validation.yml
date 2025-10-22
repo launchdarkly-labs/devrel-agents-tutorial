@@ -1,8 +1,16 @@
 name: AI Config Validation
 
+# Security Notes:
+# - pull_request_target is used to prevent external PRs from accessing secrets without approval
+# - External PRs require manual environment approval before secrets are exposed
+# - .env file is cleaned up after each run to prevent secret leakage
+# - Artifacts are sanitized before upload
+
 on:
-  pull_request:
+  # Use pull_request_target to prevent external PRs from accessing secrets
+  pull_request_target:
     branches: [main]
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches: [main, enable-ai-config-tests]
   workflow_dispatch:
@@ -21,10 +29,16 @@ jobs:
   validate-configs:
     name: Validate AI Configs
     runs-on: ubuntu-latest
+    # Require manual approval for external PRs to prevent secret exposure
+    environment:
+      name: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.fork && 'external-pr' || 'ci' }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          # For pull_request_target, checkout the PR code not the base
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v3
@@ -122,10 +136,16 @@ jobs:
     name: Evaluate AI Configs with Judge
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    # Require manual approval for external PRs to prevent secret exposure
+    environment:
+      name: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.fork && 'external-pr' || 'ci' }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          # For pull_request_target, checkout the PR code not the base
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v3
@@ -168,6 +188,7 @@ jobs:
           .venv/bin/python initialize_embeddings.py
 
       - name: Run tests with API
+        id: run-tests
         env:
           LD_SDK_KEY: ${{ secrets.LD_SDK_KEY }}
           LD_API_KEY: ${{ secrets.LD_API_KEY }}
@@ -289,8 +310,15 @@ jobs:
               echo "No API log found at /tmp/agents-demo-api.log"
             fi
           fi
-
+          
           exit $TEST_EXIT_CODE
+
+      - name: Cleanup secrets
+        if: always()
+        run: |
+          # Remove .env file containing secrets
+          rm -f .env
+          echo "🧹 Cleaned up .env file"
 
       - name: Upload test report
         if: always()
