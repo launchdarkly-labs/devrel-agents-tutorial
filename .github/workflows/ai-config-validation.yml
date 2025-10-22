@@ -227,15 +227,21 @@ jobs:
           echo "🧪 Running AI Config test suite with judge evaluations..."
           echo "Working directory: $(pwd)"
           echo "Test data file exists: $(test -f test_data/ai_config_evaluation.yaml && echo 'YES' || echo 'NO')"
-          # Pass all required env vars to ld-aic test subprocess
-          # - LD_SDK_KEY: for ld-aic framework to initialize LD client
-          # - ANTHROPIC_API_KEY/OPENAI_API_KEY/MISTRAL_API_KEY: for our API to make LLM calls
-          # - CI_SAFE_MODE: to disable flaky external tools
-          LD_SDK_KEY="${LD_SDK_KEY}" \
-          ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
-          OPENAI_API_KEY="${OPENAI_API_KEY}" \
-          MISTRAL_API_KEY="${MISTRAL_API_KEY}" \
-          CI_SAFE_MODE="${CI_SAFE_MODE}" \
+          
+          # Export all env vars so they're inherited by subprocesses
+          export LD_SDK_KEY="${LD_SDK_KEY}"
+          export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}"
+          export OPENAI_API_KEY="${OPENAI_API_KEY}"
+          export MISTRAL_API_KEY="${MISTRAL_API_KEY}"
+          export CI_SAFE_MODE="${CI_SAFE_MODE}"
+          
+          # Debug: verify env vars are set
+          echo "🔍 Env vars check:"
+          echo "  LD_SDK_KEY: ${LD_SDK_KEY:0:10}... (${#LD_SDK_KEY} chars)"
+          echo "  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:+SET}"
+          echo "  OPENAI_API_KEY: ${OPENAI_API_KEY:+SET}"
+          echo "  MISTRAL_API_KEY: ${MISTRAL_API_KEY:+SET}"
+          
           .venv/bin/ld-aic test \
             --config-keys "supervisor-agent,support-agent,security-agent" \
             --environment production \
