@@ -193,7 +193,7 @@ async def create_agent_with_fresh_config(
         )
 
         if not agent_config.enabled:
-            default_recursion_limit = 15 * 3 + 10  # Default: 15 tool calls * 3 + headroom
+            default_recursion_limit = 5 * 3 + 10  # Default: 5 tool calls * 3 + headroom
             return None, None, True, default_recursion_limit
 
         # Map provider and create LangChain model
@@ -247,7 +247,7 @@ async def create_agent_with_fresh_config(
             log_student(f"ROUTING: Using {langchain_provider} for {agent_config.model.name}")
 
         # Extract max_tool_calls from LaunchDarkly config
-        max_tool_calls = 15  # Default value
+        max_tool_calls = 5  # Default value
         try:
             config_dict = agent_config.to_dict()
             if 'model' in config_dict and 'custom' in config_dict['model'] and config_dict['model']['custom']:
@@ -279,7 +279,7 @@ async def create_agent_with_fresh_config(
 
     except Exception as e:
         log_student(f"ERROR in create_agent_with_fresh_config: {e}")
-        default_recursion_limit = 15 * 3 + 10  # Default: 15 tool calls * 3 + headroom
+        default_recursion_limit = 5 * 3 + 10  # Default: 5 tool calls * 3 + headroom
         return None, None, True, default_recursion_limit
 
 
@@ -295,7 +295,7 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
 
     class LaunchDarklyAgent:
         def __init__(self):
-            self.max_tool_calls = 15  # Default value
+            self.max_tool_calls = 5  # Default value
 
         async def ainvoke(self, request_data: dict) -> dict:
             """
