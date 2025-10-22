@@ -3,6 +3,7 @@ Dynamic Tool Factory for LaunchDarkly AI Configuration
 Recreates the dynamic tool loading that was lost in the architecture change
 """
 from typing import Dict, List, Any, Optional
+import os
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field, create_model
 from utils.logger import log_student, log_debug, log_verbose
@@ -288,6 +289,10 @@ def _create_mcp_tool_wrapper(mcp_tool, ld_name: str):
 
 def _create_dynamic_mcp_tool(tool_name: str, tool_config: Dict[str, Any]) -> Optional[BaseTool]:
     """Create MCP tool with LaunchDarkly configuration using working wrapper pattern"""
+    # Disable MCP tools in CI safe mode to reduce flakiness while preserving core functionality
+    if os.getenv("CI_SAFE_MODE", "").lower() in {"1", "true", "yes"}:
+        log_debug(f"CI_SAFE_MODE enabled: skipping MCP tool {tool_name}")
+        return None
     try:
         from tools_impl.mcp_research_tools import MCPResearchTools
         import asyncio
@@ -355,6 +360,13 @@ def create_dynamic_tools_from_launchdarkly(config) -> List[BaseTool]:
     This replaces the hardcoded tool instantiation.
     """
     tools_list, tool_configs = extract_tool_configs_from_launchdarkly(config)
+
+    # In CI safe mode, skip network-dependent MCP tools while keeping local tools
+    if os.getenv("CI_SAFE_MODE", "").lower() in {"1", "true", "yes"}:
+        original = list(tools_list)
+        tools_list = [t for t in tools_list if t not in ["arxiv_search", "semantic_scholar"]]
+        if original != tools_list:
+            log_debug(f"CI_SAFE_MODE: filtered tools {set(original) - set(tools_list)}")
 
     available_tools = []
 

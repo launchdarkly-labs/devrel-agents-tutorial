@@ -13,6 +13,11 @@ app = FastAPI()
 
 agent_service = AgentService()
 
+@app.get("/health")
+async def health():
+    """Health check endpoint for monitoring"""
+    return {"status": "ok"}
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     # Capture all console output during request processing
@@ -53,8 +58,21 @@ async def chat(request: ChatRequest):
             import traceback
             log_student(f"API ERROR: {e}")
             log_debug(f"API ERROR TRACEBACK: {traceback.format_exc()}")
-            # Even on error, return the logs we captured
-            raise
+            # Return error response instead of raising to ensure client gets details
+            from .models import ChatResponse as CR
+            error_response = CR(
+                id="error",
+                response=f"Server error: {type(e).__name__}: {str(e)}",
+                tool_calls=[],
+                variation_key="error",
+                model="error",
+                agent_configurations=[],
+                console_logs=console_logs + [
+                    f"API EXCEPTION: {type(e).__name__}: {str(e)}",
+                    f"TRACEBACK: {traceback.format_exc()[:1000]}"
+                ]
+            )
+            return error_response
 
 
 @app.post("/admin/flush")

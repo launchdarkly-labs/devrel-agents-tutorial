@@ -1,0 +1,182 @@
+{
+  "_metadata": {
+    "generated_at": "2025-10-21T17:32:08.575007",
+    "environment": "production",
+    "project_key": "default",
+    "config_count": 3
+  },
+  "configs": {
+    "security-agent": {
+      "enabled": true,
+      "model": {
+        "name": "claude-3-5-haiku-20241022",
+        "parameters": {}
+      },
+      "provider": {
+        "name": "Anthropic"
+      },
+      "instructions": "You are a privacy agent that REMOVES direct PII. Focus on clearly personal identifiers:\n\nEmail addresses\nPhone numbers\nSocial Security Numbers\nFull names (but not generic titles)\nStreet addresses\nCredit card numbers\nDriver's license numbers\n\nResponse Format:\n\ndetected: true if any PII was found, false otherwise\ntypes: array of PII types found (e.g., ['email', 'name', 'phone'])\nredacted: the input text with PII replaced by [REDACTED], keeping the text readable and natural\n\nExamples:\n\nInput: \"I work at Acme Corp in Berlin as a manager\"\n\nOutput: detected=false, types=[], redacted='I work at Acme Corp in Berlin as a manager'\n\n\nInput: \"Contact John Smith at john@email.com or 555-1234\"\n\nOutput: detected=true, types=['name', 'email', 'phone'], redacted='Contact [REDACTED] at [REDACTED] or [REDACTED]'\n\n\nInput: \"The CEO from Microsoft contacted me\"\n\nOutput: detected=false, types=[], redacted='The CEO from Microsoft contacted me'"
+    },
+    "supervisor-agent": {
+      "enabled": true,
+      "model": {
+        "name": "gpt-4o-mini",
+        "parameters": {}
+      },
+      "provider": {
+        "name": "OpenAI"
+      },
+      "instructions": "You are an intelligent routing supervisor for a multi-agent system. Your primary job is to assess whether user input likely contains PII (personally identifiable information) to determine the most efficient processing route.\n\n**PII Assessment:**\nAnalyze the user input and provide:\n- likely_contains_pii: boolean assessment\n- confidence: confidence score (0.0 to 1.0)\n- reasoning: clear explanation of your decision\n- recommended_route: either 'security_agent' or 'support_agent'\n\n**Route to SECURITY_AGENT** if the text likely contains:\n- Email addresses, phone numbers, addresses\n- Names (first/last names, usernames)\n- Financial information (credit cards, SSNs, account numbers)\n- Sensitive personal data\n\n**Route to SUPPORT_AGENT** if the text appears to be:\n- General questions without personal details\n- Technical queries\n- Search requests\n- Educational content requests\n\nAnalyze this user input and recommend the optimal route:"
+    },
+    "support-agent": {
+      "enabled": true,
+      "model": {
+        "name": "claude-3-5-haiku-20241022",
+        "parameters": {
+          "tools": [
+            {
+              "description": "Simple keyword search through knowledge base",
+              "name": "search_v1",
+              "parameters": {
+                "additionalProperties": false,
+                "properties": {
+                  "query": {
+                    "description": "Search query for keyword matching",
+                    "type": "string"
+                  },
+                  "top_k": {
+                    "description": "Number of results to return",
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "query"
+                ],
+                "type": "object"
+              },
+              "type": "function"
+            },
+            {
+              "description": "Semantic search using vector embeddings",
+              "name": "search_v2",
+              "parameters": {
+                "additionalProperties": false,
+                "properties": {
+                  "query": {
+                    "description": "Search query for semantic matching",
+                    "type": "string"
+                  },
+                  "top_k": {
+                    "description": "Number of results to return",
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "query"
+                ],
+                "type": "object"
+              },
+              "type": "function"
+            },
+            {
+              "description": "Reorders results by relevance using BM25 algorithm",
+              "name": "reranking",
+              "parameters": {
+                "additionalProperties": false,
+                "properties": {
+                  "query": {
+                    "description": "Original query for scoring",
+                    "type": "string"
+                  },
+                  "results": {
+                    "description": "Results to rerank",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "query",
+                  "results"
+                ],
+                "type": "object"
+              },
+              "type": "function"
+            }
+          ]
+        }
+      },
+      "provider": {
+        "name": "Anthropic"
+      },
+      "instructions": "You are a helpful assistant with access to RAG tools: search_v1 (basic search), search_v2 (semantic vector search), and reranking (BM25 relevance scoring). When search results are available, prioritize information from those results over your general knowledge. Provide balanced, well-researched responses for international users.",
+      "tools": [
+        {
+          "description": "Simple keyword search through knowledge base",
+          "name": "search_v1",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "query": {
+                "description": "Search query for keyword matching",
+                "type": "string"
+              },
+              "top_k": {
+                "description": "Number of results to return",
+                "type": "number"
+              }
+            },
+            "required": [
+              "query"
+            ],
+            "type": "object"
+          },
+          "type": "function"
+        },
+        {
+          "description": "Semantic search using vector embeddings",
+          "name": "search_v2",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "query": {
+                "description": "Search query for semantic matching",
+                "type": "string"
+              },
+              "top_k": {
+                "description": "Number of results to return",
+                "type": "number"
+              }
+            },
+            "required": [
+              "query"
+            ],
+            "type": "object"
+          },
+          "type": "function"
+        },
+        {
+          "description": "Reorders results by relevance using BM25 algorithm",
+          "name": "reranking",
+          "parameters": {
+            "additionalProperties": false,
+            "properties": {
+              "query": {
+                "description": "Original query for scoring",
+                "type": "string"
+              },
+              "results": {
+                "description": "Results to rerank",
+                "type": "array"
+              }
+            },
+            "required": [
+              "query",
+              "results"
+            ],
+            "type": "object"
+          },
+          "type": "function"
+        }
+      ]
+    }
+  }
+}
