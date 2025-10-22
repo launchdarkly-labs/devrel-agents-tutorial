@@ -165,6 +165,7 @@ jobs:
           LD_SDK_KEY: ${{ secrets.LD_SDK_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
           PYTHONPATH: ${{ github.workspace }}
           CI_SAFE_MODE: true
         run: |
@@ -228,11 +229,12 @@ jobs:
           echo "Test data file exists: $(test -f test_data/ai_config_evaluation.yaml && echo 'YES' || echo 'NO')"
           # Pass all required env vars to ld-aic test subprocess
           # - LD_SDK_KEY: for ld-aic framework to initialize LD client
-          # - ANTHROPIC_API_KEY/OPENAI_API_KEY: for our API to make LLM calls
+          # - ANTHROPIC_API_KEY/OPENAI_API_KEY/MISTRAL_API_KEY: for our API to make LLM calls
           # - CI_SAFE_MODE: to disable flaky external tools
           LD_SDK_KEY="${LD_SDK_KEY}" \
           ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
           OPENAI_API_KEY="${OPENAI_API_KEY}" \
+          MISTRAL_API_KEY="${MISTRAL_API_KEY}" \
           CI_SAFE_MODE="${CI_SAFE_MODE}" \
           .venv/bin/ld-aic test \
             --config-keys "supervisor-agent,support-agent,security-agent" \
