@@ -163,6 +163,8 @@ jobs:
       - name: Run tests with API
         env:
           LD_SDK_KEY: ${{ secrets.LD_SDK_KEY }}
+          LD_API_KEY: ${{ secrets.LD_API_KEY }}
+          LD_PROJECT_KEY: ${{ secrets.LD_PROJECT_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
@@ -230,6 +232,8 @@ jobs:
           
           # Export all env vars so they're inherited by subprocesses
           export LD_SDK_KEY="${LD_SDK_KEY}"
+          export LD_API_KEY="${LD_API_KEY}"
+          export LD_PROJECT_KEY="${LD_PROJECT_KEY}"
           export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}"
           export OPENAI_API_KEY="${OPENAI_API_KEY}"
           export MISTRAL_API_KEY="${MISTRAL_API_KEY}"
