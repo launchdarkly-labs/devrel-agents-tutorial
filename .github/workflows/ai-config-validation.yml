@@ -253,6 +253,39 @@ jobs:
           echo "  OPENAI_API_KEY: ${OPENAI_API_KEY:+SET}"
           echo "  MISTRAL_API_KEY: ${MISTRAL_API_KEY:+SET}"
           
+          # Test: verify evaluator can be imported and called
+          echo "🧪 Testing evaluator import and basic call..."
+          .venv/bin/python << 'EVAL_TEST'
+import sys
+import asyncio
+sys.path.insert(0, '.')
+
+try:
+    from evaluators.local_evaluator import AgentsDemoEvaluator
+    print("✅ Evaluator imported successfully")
+    
+    evaluator = AgentsDemoEvaluator()
+    print(f"✅ Evaluator instantiated: {evaluator.api_url}")
+    
+    # Test a simple call
+    async def test():
+        result = await evaluator.evaluate_case(
+            config_key="test",
+            test_input="hello",
+            context_attributes={"test": "value"}
+        )
+        print(f"✅ Evaluator call completed: error={result.error is not None}, response_len={len(result.response)}")
+        if result.error:
+            print(f"   Error details: {result.error[:200]}")
+    
+    asyncio.run(test())
+except Exception as e:
+    import traceback
+    print(f"❌ Evaluator test FAILED: {type(e).__name__}: {e}")
+    traceback.print_exc()
+    sys.exit(1)
+EVAL_TEST
+          
           .venv/bin/ld-aic test \
             --config-keys "supervisor-agent,support-agent,security-agent" \
             --environment production \
