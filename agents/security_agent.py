@@ -114,10 +114,24 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
 
             # Create model with structured output and up-to-date instructions
             from config_manager import map_provider_to_langchain
-            langchain_provider = map_provider_to_langchain(agent_config.provider.name)
+            # Prefer OpenAI in CI safe mode when Anthropic is unavailable, but keep defaults otherwise
+            import os
+            def _select_provider_and_model(default_provider: str, default_model: str) -> tuple[str, str]:
+                ci = os.getenv("CI_SAFE_MODE", "").lower() in {"1", "true", "yes"}
+                anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+                openai_key = os.getenv("OPENAI_API_KEY")
+                if ci and (not anthropic_key) and openai_key:
+                    return ("openai", "gpt-4o-mini")
+                return (default_provider, default_model)
+
+            selected_provider, selected_model = _select_provider_and_model(
+                agent_config.provider.name,
+                agent_config.model.name
+            )
+            langchain_provider = map_provider_to_langchain(selected_provider)
 
             base_model = init_chat_model(
-                model=agent_config.model.name,
+                model=selected_model,
                 model_provider=langchain_provider,
                 temperature=0.0
             )

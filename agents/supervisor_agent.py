@@ -127,6 +127,21 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
 
     log_debug(f"SUPERVISOR INSTRUCTIONS: {supervisor_config.instructions}")
 
+    def _select_provider_and_model(default_provider: str, default_model: str) -> tuple[str, str]:
+        """Select provider/model for CI while preserving full functionality.
+
+        If CI_SAFE_MODE is set and Anthropic is unavailable but OpenAI is available,
+        prefer OpenAI to avoid external connectivity issues while still exercising LLMs.
+        """
+        import os
+        ci = os.getenv("CI_SAFE_MODE", "").lower() in {"1", "true", "yes"}
+        anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+        openai_key = os.getenv("OPENAI_API_KEY")
+
+        if ci and (not anthropic_key) and openai_key:
+            return ("openai", "gpt-4o-mini")
+        return (default_provider, default_model)
+
     def pii_prescreen_node(state: SupervisorState):
         """
         Analyze user input to determine if it likely contains PII.
@@ -139,10 +154,14 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
 
             # Create PII pre-screening model with structured output
             from config_manager import map_provider_to_langchain
-            langchain_provider = map_provider_to_langchain(supervisor_config.provider.name)
+            selected_provider, selected_model = _select_provider_and_model(
+                supervisor_config.provider.name,
+                supervisor_config.model.name
+            )
+            langchain_provider = map_provider_to_langchain(selected_provider)
 
             base_model = init_chat_model(
-                model=supervisor_config.model.name,
+                model=selected_model,
                 model_provider=langchain_provider,
                 temperature=0.1
             )
