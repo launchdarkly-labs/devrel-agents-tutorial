@@ -261,7 +261,6 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
         - Tracks metrics for LaunchDarkly optimization
         """
         try:
-            state["messages"]
             workflow_stage = state.get("workflow_stage", "pii_prescreen")  # Start with intelligent pre-screening
             security_cleared = state.get("security_cleared", False)
             support_response = state.get("support_response", "")

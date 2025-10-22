@@ -294,9 +294,6 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
         tools = []
 
     class LaunchDarklyAgent:
-        def __init__(self):
-            self.max_tool_calls = 5  # Default value
-
         async def ainvoke(self, request_data: dict) -> dict:
             """
             Async invocation - fetches config and executes without blocking event loop
