@@ -160,6 +160,13 @@ jobs:
 
           echo "✅ Required secrets are configured"
 
+      - name: Initialize vector embeddings
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          echo "📚 Initializing vector embeddings for search tools..."
+          .venv/bin/python initialize_embeddings.py
+
       - name: Run tests with API
         env:
           LD_SDK_KEY: ${{ secrets.LD_SDK_KEY }}
