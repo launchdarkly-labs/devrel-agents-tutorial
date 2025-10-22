@@ -36,7 +36,7 @@ class FixedConfigManager:
         self._initialize_launchdarkly_client()
         self._initialize_ai_client()
 
-        # ADD THIS: Initialize AWS Bedrock session
+        # Initialize AWS Bedrock session for SSO authentication
         self._initialize_bedrock_session()
     
     def _initialize_launchdarkly_client(self):
@@ -68,10 +68,23 @@ class FixedConfigManager:
             return
 
         try:
-            # Use default AWS profile (whatever user is logged in as)
+            # Initialize AWS session with optional profile support
             aws_region = os.getenv('AWS_REGION', 'us-east-1')
-            self.boto3_session = boto3.Session(region_name=aws_region)  # No profile_name!
+            aws_profile = os.getenv('AWS_PROFILE')
+
+            # Create session with profile if specified, otherwise use default credentials
+            if aws_profile:
+                self.boto3_session = boto3.Session(
+                    region_name=aws_region,
+                    profile_name=aws_profile
+                )
+                log_debug(f"AWS: Using profile '{aws_profile}' in region {aws_region}")
+            else:
+                self.boto3_session = boto3.Session(region_name=aws_region)
+                log_debug(f"AWS: Using default credentials in region {aws_region}")
+
             self.aws_region = aws_region
+            self.aws_profile = aws_profile
 
             # Test current SSO session
             sts = self.boto3_session.client('sts')
@@ -82,7 +95,10 @@ class FixedConfigManager:
 
         except Exception as e:
             log_student(f"AWS SSO session not available: {e}")
-            log_student("Run: aws sso login")  # Don't specify profile
+
+            # Provide helpful login command with profile if specified
+            profile_hint = f" --profile {os.getenv('AWS_PROFILE')}" if os.getenv('AWS_PROFILE') else ""
+            log_student(f"Run: aws sso login{profile_hint}")
             raise
 
     def validate_bedrock_access(self):
