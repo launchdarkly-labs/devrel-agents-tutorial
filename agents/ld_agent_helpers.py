@@ -1,18 +1,82 @@
 """
-Helper functions for LaunchDarkly AI agents - simplified version
+LaunchDarkly AI agent helpers.
+
+Creates agents with dynamic configuration from LaunchDarkly AI Configs.
+Routes between Bedrock (SSO) and direct API providers based on AUTH_METHOD.
 """
 import asyncio
-import json
 import time
-from typing import List, Any, Tuple, Optional
+import os
+from typing import List, Any, Tuple
 from langchain.chat_models import init_chat_model
 from langgraph.prebuilt import create_react_agent
 from ldai.tracker import TokenUsage
 from utils.logger import log_student
+from langchain_aws import ChatBedrockConverse
+import boto3
+
+# Exception for max tool calls exceeded
+class MaxToolCallsExceeded(Exception):
+    """Raised when agent exceeds max_tool_calls limit from LaunchDarkly"""
+    pass
+
+
+# Tool call counter for tracking invocations
+class ToolCallCounter:
+    """Shared counter for tracking tool invocations across all tools"""
+    def __init__(self, max_calls: int):
+        self.count = 0
+        self.max_calls = max_calls
+
+    def increment(self):
+        """Increment counter and raise exception if limit exceeded"""
+        self.count += 1
+        if self.count > self.max_calls:
+            raise MaxToolCallsExceeded(
+                f"Tool call limit of {self.max_calls} exceeded. "
+                f"Please simplify your request or increase max_tool_calls in LaunchDarkly config."
+            )
+
 
 # Simple rate limiter to prevent hitting API limits
 _last_llm_call_time = 0
 _min_call_interval = 1.0  # 1 second between LLM calls
+
+def create_bedrock_chat_model(model_id: str, session: boto3.Session, region: str, **kwargs):
+    """
+    Create ChatBedrockConverse model with auto-correction.
+
+    Auto-corrects direct model IDs to inference profiles.
+    Region from BEDROCK_INFERENCE_REGION env var or AWS_REGION.
+    """
+    try:
+        from utils.bedrock_helpers import ensure_bedrock_inference_profile
+
+        # Auto-correct to inference profile if needed
+        corrected_model_id = ensure_bedrock_inference_profile(model_id, region)
+
+        log_student(f"BEDROCK: Creating model {corrected_model_id} in region {region}")
+
+        # Create Bedrock client using the provided session
+        bedrock_client = session.client(
+            service_name='bedrock-runtime',
+            region_name=region
+        )
+
+        # Create the ChatBedrockConverse model
+        model = ChatBedrockConverse(
+            client=bedrock_client,
+            model_id=corrected_model_id,
+            region_name=region,
+            **kwargs
+        )
+
+        log_student(f"BEDROCK: Successfully created {corrected_model_id}")
+        return model
+
+    except Exception as e:
+        log_student(f"BEDROCK ERROR: Failed to create model {model_id}: {e}")
+        raise
 
 def _rate_limit_llm_call():
     """Simple rate limiter for LLM calls"""
@@ -31,13 +95,77 @@ def _rate_limit_llm_call():
 def map_provider_to_langchain(provider_name):
     """Map LaunchDarkly provider names to LangChain provider names."""
     provider_mapping = {
+        'anthropic': 'bedrock',   # CHANGED: Route through Bedrock
+        'bedrock': 'bedrock',     # NEW: Explicit Bedrock provider
         'gemini': 'google_genai',
-        'anthropic': 'anthropic',
         'openai': 'openai',
         'mistral': 'mistralai'
     }
     lower_provider = provider_name.lower()
     return provider_mapping.get(lower_provider, lower_provider)
+
+
+def wrap_tool_with_counter(tool: Any, counter: ToolCallCounter) -> Any:
+    """
+    Wrap a tool to track invocation count.
+
+    Each time the tool is called, the counter is incremented.
+    If max_tool_calls is exceeded, MaxToolCallsExceeded is raised.
+
+    Uses a closure-based approach to avoid pickling issues.
+    """
+    from langchain_core.tools import StructuredTool
+
+    # Store original methods
+    original_run = tool._run if hasattr(tool, '_run') else None
+    original_arun = tool._arun if hasattr(tool, '_arun') else None
+
+    def counted_run(**kwargs) -> str:
+        """Wrapped synchronous execution"""
+        counter.increment()
+
+        # Extract and log search query if present
+        query_info = ""
+        if 'query' in kwargs:
+            query_info = f" | Query: '{kwargs['query']}'"
+        elif 'search_query' in kwargs:
+            query_info = f" | Query: '{kwargs['search_query']}'"
+
+        log_student(f"TOOL CALL #{counter.count}/{counter.max_calls}: {tool.name}{query_info}")
+
+        if original_run:
+            return original_run(**kwargs)
+        else:
+            raise NotImplementedError(f"Tool {tool.name} has no _run method")
+
+    async def counted_arun(**kwargs) -> str:
+        """Wrapped asynchronous execution"""
+        counter.increment()
+
+        # Extract and log search query if present
+        query_info = ""
+        if 'query' in kwargs:
+            query_info = f" | Query: '{kwargs['query']}'"
+        elif 'search_query' in kwargs:
+            query_info = f" | Query: '{kwargs['search_query']}'"
+
+        log_student(f"TOOL CALL #{counter.count}/{counter.max_calls}: {tool.name}{query_info}")
+
+        if original_arun:
+            return await original_arun(**kwargs)
+        elif original_run:
+            return original_run(**kwargs)
+        else:
+            raise NotImplementedError(f"Tool {tool.name} has no run method")
+
+    # Create new StructuredTool with wrapped methods
+    return StructuredTool(
+        name=tool.name,
+        description=tool.description,
+        func=counted_run,
+        coroutine=counted_arun if original_arun or original_run else None,
+        args_schema=tool.args_schema if hasattr(tool, 'args_schema') else None
+    )
 
 
 async def create_agent_with_fresh_config(
@@ -46,14 +174,12 @@ async def create_agent_with_fresh_config(
     user_id: str,
     user_context: dict,
     tools: List[Any] = None
-) -> Tuple[Any, Any, bool]:
+) -> Tuple[Any, Any, bool, int]:
     """
-    Create a LangChain agent with LaunchDarkly AI config.
+    Create LangChain agent with LaunchDarkly AI Config.
 
-    Returns:
-        - agent: The created React agent
-        - tracker: LaunchDarkly tracker for metrics
-        - disabled: True if the config is disabled
+    Routes to Bedrock (AUTH_METHOD=sso) or direct API based on config.
+    Returns: (agent, tracker, disabled, max_tool_calls)
     """
     if tools is None:
         tools = []
@@ -67,14 +193,58 @@ async def create_agent_with_fresh_config(
         )
 
         if not agent_config.enabled:
-            return None, None, True
+            default_recursion_limit = 5 * 3 + 10  # Default: 5 tool calls * 3 + headroom
+            return None, None, True, default_recursion_limit
 
         # Map provider and create LangChain model
-        langchain_provider = map_provider_to_langchain(agent_config.provider.name)
-        llm = init_chat_model(
-            model=agent_config.model.name,
-            model_provider=langchain_provider,
-        )
+        from utils.bedrock_helpers import normalize_bedrock_provider
+
+        # Normalize provider name to handle bedrock:anthropic format
+        normalized_provider = normalize_bedrock_provider(agent_config.provider.name)
+        langchain_provider = map_provider_to_langchain(normalized_provider)
+
+        # Check if we need to use Bedrock
+        if langchain_provider == 'bedrock':
+            # Get AUTH_METHOD to determine routing
+            auth_method = os.getenv('AUTH_METHOD', 'api-key').lower()
+
+            if auth_method == 'sso':
+                # Use Bedrock with SSO authentication
+                if not hasattr(config_manager, 'boto3_session') or not config_manager.boto3_session:
+                    raise ValueError("Bedrock authentication requires AWS SSO session. Run: aws sso login")
+
+                # Use model ID directly from LaunchDarkly AI Config (FR-006 compliance)
+                bedrock_model_id = agent_config.model.name
+
+                # 🚨 DEBUG: Log what we received from LaunchDarkly
+                log_student("DEBUG: LaunchDarkly AI Config details:")
+                log_student(f"  - Provider: {agent_config.provider.name}")
+                log_student(f"  - Model ID: {bedrock_model_id}")
+                log_student(f"  - Region: {config_manager.aws_region}")
+
+                # Create Bedrock model using our factory
+                llm = create_bedrock_chat_model(
+                    model_id=bedrock_model_id,
+                    session=config_manager.boto3_session,
+                    region=config_manager.aws_region
+                )
+                log_student(f"ROUTING: Using Bedrock SSO with direct model ID: {bedrock_model_id}")
+            else:
+                # Fall back to direct API access for backward compatibility
+                # Route 'anthropic' through 'anthropic' provider directly when using api-key auth
+                fallback_provider = 'anthropic' if agent_config.provider.name.lower() == 'anthropic' else langchain_provider
+                llm = init_chat_model(
+                    model=agent_config.model.name,
+                    model_provider=fallback_provider,
+                )
+                log_student(f"ROUTING: Using direct API for {agent_config.model.name} via {fallback_provider}")
+        else:
+            # Use standard LangChain initialization for non-Bedrock providers
+            llm = init_chat_model(
+                model=agent_config.model.name,
+                model_provider=langchain_provider,
+            )
+            log_student(f"ROUTING: Using {langchain_provider} for {agent_config.model.name}")
 
         # Extract max_tool_calls from LaunchDarkly config
         max_tool_calls = 5  # Default value
@@ -83,40 +253,47 @@ async def create_agent_with_fresh_config(
             if 'model' in config_dict and 'custom' in config_dict['model'] and config_dict['model']['custom']:
                 custom_params = config_dict['model']['custom']
                 if 'max_tool_calls' in custom_params:
-                    max_tool_calls = custom_params['max_tool_calls']
+                    max_tool_calls = int(custom_params['max_tool_calls'])
+                    log_student(f"EXTRACTED max_tool_calls from LaunchDarkly: {max_tool_calls}")
         except Exception as e:
             log_student(f"DEBUG: Error extracting max_tool_calls: {e}")
 
-        # Create React agent with instructions
+        # Wrap tools with call counter to track invocations
+        counter = ToolCallCounter(max_calls=max_tool_calls)
+        wrapped_tools = [wrap_tool_with_counter(tool, counter) for tool in tools]
+
+        # Calculate effective recursion limit
+        # Formula: max_tool_calls * 3 + 10 headroom
+        # Each tool call cycle: think → tool_call → tool_result → think
+        effective_recursion_limit = max_tool_calls * 3 + 10
+        log_student(f"CONFIG: max_tool_calls={max_tool_calls}, effective_recursion_limit={effective_recursion_limit}")
+
+        # Create React agent with wrapped tools
         agent = create_react_agent(
             model=llm,
-            tools=tools,
+            tools=wrapped_tools,
             prompt=agent_config.instructions
         )
 
-        return agent, agent_config.tracker, False
+        return agent, agent_config.tracker, False, effective_recursion_limit
 
     except Exception as e:
         log_student(f"ERROR in create_agent_with_fresh_config: {e}")
-        return None, None, True
+        default_recursion_limit = 5 * 3 + 10  # Default: 5 tool calls * 3 + headroom
+        return None, None, True, default_recursion_limit
 
 
 def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any] = None):
     """
-    Create an agent wrapper that fetches config on each invocation.
+    Create agent wrapper that fetches fresh LaunchDarkly config on each invocation.
 
-    Returns an object with an invoke() method that:
-    1. Fetches LaunchDarkly config
-    2. Creates React agent with instructions
-    3. Executes the agent with proper tracking
+    Enables dynamic A/B testing and real-time config changes without restarts.
+    Tracks tokens, costs, and errors automatically.
     """
     if tools is None:
         tools = []
 
     class LaunchDarklyAgent:
-        def __init__(self):
-            self.max_tool_calls = 15  # Default value
-
         async def ainvoke(self, request_data: dict) -> dict:
             """
             Async invocation - fetches config and executes without blocking event loop
@@ -129,7 +306,7 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                 messages = request_data.get("messages", [])
 
                 # Create agent with config
-                agent, tracker, disabled = await create_agent_with_fresh_config(
+                agent, tracker, disabled, effective_recursion_limit = await create_agent_with_fresh_config(
                     config_manager=config_manager,
                     config_key=config_key,
                     user_id=user_id,
@@ -171,8 +348,9 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                 # Execute agent with tracking
                 start_time = time.time()
                 try:
-                    # Execute agent
-                    response = await agent.ainvoke(initial_state)
+                    # Execute agent with effective recursion limit
+                    log_student(f"EXECUTING AGENT with recursion_limit={effective_recursion_limit}")
+                    response = await agent.ainvoke(initial_state, {"recursion_limit": effective_recursion_limit})
 
                     # Track success and latency
                     tracker.track_success()
@@ -211,7 +389,18 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                             config_manager.track_cost_metric(agent_config, ld_context, cost, config_key)
                             log_student(f"COST TRACKING: ${cost:.6f} for {agent_config.model.name}")
 
-                except Exception as e:
+                except MaxToolCallsExceeded as e:
+                    # Handle tool limit gracefully - this is expected behavior, not an error
+                    log_student(f"TOOL LIMIT REACHED: {e}")
+                    # Return friendly message explaining the limit
+                    return {
+                        "user_input": user_input,
+                        "response": f"I've reached the tool call limit for this request. {str(e)}",
+                        "tool_calls": [],
+                        "tool_details": [],
+                        "messages": []
+                    }
+                except Exception:
                     tracker.track_error()
                     raise
 
@@ -281,7 +470,7 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
             try:
                 # Try to run in existing event loop first
                 try:
-                    loop = asyncio.get_running_loop()
+                    asyncio.get_running_loop()
                     # We're in an async context, create task
                     import concurrent.futures
                     with concurrent.futures.ThreadPoolExecutor() as executor:

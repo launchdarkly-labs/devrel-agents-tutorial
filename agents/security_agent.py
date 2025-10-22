@@ -1,6 +1,6 @@
 from typing import TypedDict, List, Annotated
 from langgraph.graph import StateGraph, add_messages
-from langchain_core.messages import HumanMessage, AIMessage, BaseMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
 from langchain.chat_models import init_chat_model
 from config_manager import FixedConfigManager as ConfigManager
 from pydantic import BaseModel
@@ -113,14 +113,59 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
                 }
 
             # Create model with structured output and up-to-date instructions
-            from config_manager import map_provider_to_langchain
-            langchain_provider = map_provider_to_langchain(agent_config.provider.name)
+            from agents.ld_agent_helpers import map_provider_to_langchain, create_bedrock_chat_model
+            from utils.bedrock_helpers import normalize_bedrock_provider
+            import os
 
-            base_model = init_chat_model(
-                model=agent_config.model.name,
-                model_provider=langchain_provider,
-                temperature=0.0
-            )
+            # Normalize provider name to handle bedrock:anthropic format
+            normalized_provider = normalize_bedrock_provider(agent_config.provider.name)
+            langchain_provider = map_provider_to_langchain(normalized_provider)
+
+            # Check if we need to use Bedrock routing
+            if langchain_provider == 'bedrock':
+                # Get AUTH_METHOD to determine routing
+                auth_method = os.getenv('AUTH_METHOD', 'api-key').lower()
+
+                if auth_method == 'sso':
+                    # Use Bedrock with SSO authentication
+                    if not hasattr(config_manager, 'boto3_session') or not config_manager.boto3_session:
+                        raise ValueError("Bedrock authentication requires AWS SSO session. Run: aws sso login")
+
+                    # Use model ID directly from LaunchDarkly AI Config (FR-006 compliance)
+                    bedrock_model_id = agent_config.model.name
+
+                    # 🚨 DEBUG: Log what we received from LaunchDarkly
+                    log_student("DEBUG SECURITY: LaunchDarkly AI Config details:")
+                    log_student(f"  - Provider: {agent_config.provider.name}")
+                    log_student(f"  - Model ID: {bedrock_model_id}")
+                    log_student(f"  - Region: {config_manager.aws_region}")
+
+                    # Create Bedrock model using our factory
+                    base_model = create_bedrock_chat_model(
+                        model_id=bedrock_model_id,
+                        session=config_manager.boto3_session,
+                        region=config_manager.aws_region,
+                        temperature=0.0
+                    )
+                    log_student(f"SECURITY ROUTING: Using Bedrock SSO with direct model ID: {bedrock_model_id}")
+                else:
+                    # Fall back to direct API access for backward compatibility
+                    # Route 'anthropic' through 'anthropic' provider directly when using api-key auth
+                    fallback_provider = 'anthropic' if agent_config.provider.name.lower() == 'anthropic' else langchain_provider
+                    base_model = init_chat_model(
+                        model=agent_config.model.name,
+                        model_provider=fallback_provider,
+                        temperature=0.0
+                    )
+                    log_student(f"SECURITY ROUTING: Using direct API for {agent_config.model.name} via {fallback_provider}")
+            else:
+                # Use standard LangChain initialization for non-Bedrock providers
+                base_model = init_chat_model(
+                    model=agent_config.model.name,
+                    model_provider=langchain_provider,
+                    temperature=0.0
+                )
+                log_student(f"SECURITY ROUTING: Using {langchain_provider} for {agent_config.model.name}")
 
             # Use structured output for guaranteed PII format
             # include_raw=True preserves usage metadata for cost tracking
@@ -188,13 +233,13 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
                 "response": f"PII Analysis: detected={detected}, types={types}"
             }
             
-        except Exception as e:
+        except Exception:
             
             # Track error with LDAI metrics
             try:
                 if 'agent_config' in locals() and agent_config and hasattr(agent_config, 'tracker'):
                     agent_config.tracker.track_error()
-            except:
+            except Exception:
                 pass
             
             error_response = AIMessage(content="Security processing encountered an error.")
@@ -231,7 +276,7 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
             pii_summary = f"Found {', '.join(pii_types)}" if pii_types else "Sensitive data detected"
             log_student(f"SECURITY: {pii_summary} → Sanitized")
         else:
-            log_student(f"SECURITY: Clean - No PII detected")
+            log_student("SECURITY: Clean - No PII detected")
         
         return {
             "user_input": state["user_input"],
