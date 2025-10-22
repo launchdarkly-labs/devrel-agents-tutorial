@@ -226,7 +226,8 @@ jobs:
           echo "🧪 Running AI Config test suite with judge evaluations..."
           echo "Working directory: $(pwd)"
           echo "Test data file exists: $(test -f test_data/ai_config_evaluation.yaml && echo 'YES' || echo 'NO')"
-          .venv/bin/ld-aic test \
+          # Pass LD_SDK_KEY to ld-aic test so it can initialize LD client for metrics/tracking
+          LD_SDK_KEY="${LD_SDK_KEY}" .venv/bin/ld-aic test \
             --config-keys "supervisor-agent,support-agent,security-agent" \
             --environment production \
             --evaluation-dataset test_data/ai_config_evaluation.yaml \
