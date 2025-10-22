@@ -259,14 +259,12 @@ jobs:
           
           # Create .env file for ld-aic framework (judge needs OPENAI_API_KEY)
           echo "📝 Creating .env file for ld-aic framework..."
-          cat > .env << EOF
-OPENAI_API_KEY=${OPENAI_API_KEY}
-ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-MISTRAL_API_KEY=${MISTRAL_API_KEY}
-LD_SDK_KEY=${LD_SDK_KEY}
-LD_API_KEY=${LD_API_KEY}
-LD_PROJECT_KEY=${LD_PROJECT_KEY}
-EOF
+          echo "OPENAI_API_KEY=${OPENAI_API_KEY}" > .env
+          echo "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" >> .env
+          echo "MISTRAL_API_KEY=${MISTRAL_API_KEY}" >> .env
+          echo "LD_SDK_KEY=${LD_SDK_KEY}" >> .env
+          echo "LD_API_KEY=${LD_API_KEY}" >> .env
+          echo "LD_PROJECT_KEY=${LD_PROJECT_KEY}" >> .env
           
           .venv/bin/ld-aic test \
             --config-keys "supervisor-agent,support-agent,security-agent" \
