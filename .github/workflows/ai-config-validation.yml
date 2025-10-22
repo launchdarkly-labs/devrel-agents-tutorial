@@ -226,8 +226,15 @@ jobs:
           echo "🧪 Running AI Config test suite with judge evaluations..."
           echo "Working directory: $(pwd)"
           echo "Test data file exists: $(test -f test_data/ai_config_evaluation.yaml && echo 'YES' || echo 'NO')"
-          # Pass LD_SDK_KEY to ld-aic test so it can initialize LD client for metrics/tracking
-          LD_SDK_KEY="${LD_SDK_KEY}" .venv/bin/ld-aic test \
+          # Pass all required env vars to ld-aic test subprocess
+          # - LD_SDK_KEY: for ld-aic framework to initialize LD client
+          # - ANTHROPIC_API_KEY/OPENAI_API_KEY: for our API to make LLM calls
+          # - CI_SAFE_MODE: to disable flaky external tools
+          LD_SDK_KEY="${LD_SDK_KEY}" \
+          ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
+          OPENAI_API_KEY="${OPENAI_API_KEY}" \
+          CI_SAFE_MODE="${CI_SAFE_MODE}" \
+          .venv/bin/ld-aic test \
             --config-keys "supervisor-agent,support-agent,security-agent" \
             --environment production \
             --evaluation-dataset test_data/ai_config_evaluation.yaml \
