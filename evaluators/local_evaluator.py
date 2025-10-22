@@ -51,7 +51,14 @@ class AgentsDemoEvaluator(LocalEvaluator):
             api_url: Base URL of the agents-demo API (default: http://localhost:8000)
         """
         self.api_url = api_url.rstrip("/")
-        self.client = httpx.AsyncClient(timeout=60.0)  # 60 second timeout for agent responses
+        # Configure httpx client with connection pooling limits and retries for CI stability
+        limits = httpx.Limits(max_keepalive_connections=5, max_connections=10)
+        transport = httpx.AsyncHTTPTransport(retries=3)
+        self.client = httpx.AsyncClient(
+            timeout=60.0,
+            limits=limits,
+            transport=transport
+        )
 
     async def evaluate_case(
         self,
