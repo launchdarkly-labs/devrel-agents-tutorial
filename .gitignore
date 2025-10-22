@@ -3,6 +3,34 @@ __pycache__/
 *.pyo
 *.pyd
 .Python
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+.virtualenv
 
 # macOS
 .DS_Store
@@ -36,9 +64,18 @@ test_tutorial_2.py
 test_tools_loading.py
 data/mythical_pets_kb.py
 
+# Vector store data (generated artifacts)
+data/vector_store/documents.pkl
+data/vector_store/faiss.index
+
 # Project files
 .claude
 CLAUDE.md
 
 # Development posts
 dev_posts/
+
+# Temporary LaunchDarkly development files (analysis, tests, helpers)
+ld_temp_*
+.specify/
+specs/

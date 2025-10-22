@@ -7,23 +7,12 @@ import time
 import ldclient
 from ldclient import Context
 from ldai.client import LDAIClient, LDAIAgentConfig, LDAIAgentDefaults, ModelConfig
-from ldai.tracker import TokenUsage, FeedbackKind
+from ldai.tracker import FeedbackKind
 from dotenv import load_dotenv
 from utils.logger import log_student, log_debug
-from utils.cost_calculator import calculate_cost
+import boto3
 
 load_dotenv()
-
-def map_provider_to_langchain(provider_name):
-    """Map LaunchDarkly provider names to LangChain provider names."""
-    provider_mapping = {
-        'gemini': 'google_genai',
-        'anthropic': 'anthropic', 
-        'openai': 'openai',
-        'mistral': 'mistralai'
-    }
-    lower_provider = provider_name.lower()
-    return provider_mapping.get(lower_provider, lower_provider)
 
 class FixedConfigManager:
     def __init__(self):
@@ -31,9 +20,12 @@ class FixedConfigManager:
         self.sdk_key = os.getenv('LD_SDK_KEY')
         if not self.sdk_key:
             raise ValueError("LD_SDK_KEY environment variable is required")
-        
+
         self._initialize_launchdarkly_client()
         self._initialize_ai_client()
+
+        # Initialize AWS Bedrock session for SSO authentication
+        self._initialize_bedrock_session()
     
     def _initialize_launchdarkly_client(self):
         """Initialize LaunchDarkly client"""
@@ -53,7 +45,50 @@ class FixedConfigManager:
     def _initialize_ai_client(self):
         """Initialize AI client"""
         self.ai_client = LDAIClient(self.ld_client)
-    
+
+    def _initialize_bedrock_session(self):
+        """Initialize AWS Bedrock session if AUTH_METHOD=sso"""
+        auth_method = os.getenv('AUTH_METHOD', 'api-key').lower()
+
+        if auth_method != 'sso':
+            self.boto3_session = None
+            log_debug("AUTH_METHOD not set to 'sso', Bedrock unavailable")
+            return
+
+        try:
+            # Initialize AWS session with optional profile support
+            aws_region = os.getenv('AWS_REGION', 'us-east-1')
+            aws_profile = os.getenv('AWS_PROFILE')
+
+            # Create session with profile if specified, otherwise use default credentials
+            if aws_profile:
+                self.boto3_session = boto3.Session(
+                    region_name=aws_region,
+                    profile_name=aws_profile
+                )
+                log_debug(f"AWS: Using profile '{aws_profile}' in region {aws_region}")
+            else:
+                self.boto3_session = boto3.Session(region_name=aws_region)
+                log_debug(f"AWS: Using default credentials in region {aws_region}")
+
+            self.aws_region = aws_region
+            self.aws_profile = aws_profile
+
+            # Test current SSO session
+            sts = self.boto3_session.client('sts')
+            identity = sts.get_caller_identity()
+            user_name = identity['Arn'].split('/')[-1]
+            account = identity['Account']
+            log_student(f"AWS: Connected via SSO as {user_name} (Account: {account})")
+
+        except Exception as e:
+            log_student(f"AWS SSO session not available: {e}")
+
+            # Provide helpful login command with profile if specified
+            profile_hint = f" --profile {os.getenv('AWS_PROFILE')}" if os.getenv('AWS_PROFILE') else ""
+            log_student(f"Run: aws sso login{profile_hint}")
+            raise
+
     def build_context(self, user_id: str, user_context: dict = None) -> Context:
         """Build a LaunchDarkly context with consistent attributes.
         
@@ -94,7 +129,7 @@ class FixedConfigManager:
         try:
             # Return the AI Config object directly
             result = self.ai_client.agent(agent_config, ld_user_context)
-            log_debug(f"CONFIG MANAGER: Got result from LaunchDarkly")
+            log_debug("CONFIG MANAGER: Got result from LaunchDarkly")
             
             # Debug the actual configuration received (basic info only)
             try:
@@ -176,9 +211,9 @@ class FixedConfigManager:
         """Close LaunchDarkly client"""
         try:
             self.ld_client.flush()
-        except:
+        except Exception:
             pass
         try:
             self.ld_client.close()
-        except:
+        except Exception:
             pass
