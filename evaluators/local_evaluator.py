@@ -141,6 +141,10 @@ class AgentsDemoEvaluator(LocalEvaluator):
                     "http_status": response.status_code,
                     "model": response_data.get("model", "unknown"),
                     "agent_configurations": agent_configs,
+                    # DEBUG: Full conversation for judge evaluation debugging
+                    "user_message": test_input,
+                    "ai_response": response_text,
+                    "context_attributes": context_attributes,
                     # surface server-side logs when present (truncated)
                     "console_logs": (response_data.get("console_logs", [])[:20]
                         if isinstance(response_data.get("console_logs", None), list)
