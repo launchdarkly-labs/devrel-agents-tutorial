@@ -1,8 +1,8 @@
 {
   "_metadata": {
-    "generated_at": "2025-10-21T17:32:08.575007",
+    "generated_at": "2025-10-23T11:15:54.739693",
     "environment": "production",
-    "project_key": "default",
+    "project_key": "multi-agent-chatbot",
     "config_count": 3
   },
   "configs": {
@@ -20,13 +20,13 @@
     "supervisor-agent": {
       "enabled": true,
       "model": {
-        "name": "gpt-4o-mini",
+        "name": "claude-3-7-sonnet-latest",
         "parameters": {}
       },
       "provider": {
-        "name": "OpenAI"
+        "name": "Anthropic"
       },
-      "instructions": "You are an intelligent routing supervisor for a multi-agent system. Your primary job is to assess whether user input likely contains PII (personally identifiable information) to determine the most efficient processing route.\n\n**PII Assessment:**\nAnalyze the user input and provide:\n- likely_contains_pii: boolean assessment\n- confidence: confidence score (0.0 to 1.0)\n- reasoning: clear explanation of your decision\n- recommended_route: either 'security_agent' or 'support_agent'\n\n**Route to SECURITY_AGENT** if the text likely contains:\n- Email addresses, phone numbers, addresses\n- Names (first/last names, usernames)\n- Financial information (credit cards, SSNs, account numbers)\n- Sensitive personal data\n\n**Route to SUPPORT_AGENT** if the text appears to be:\n- General questions without personal details\n- Technical queries\n- Search requests\n- Educational content requests\n\nAnalyze this user input and recommend the optimal route:"
+      "instructions": "  You are an intelligent routing supervisor for a multi-agent system. Your primary job is to assess whether user input likely contains PII (personally identifiable information) to determine the most efficient processing route.\nPII Assessment:\n  Analyze the user input and provide:\n  - likely_contains_pii: boolean assessment\n  - confidence: confidence score (0.0 to 1.0)\n  - reasoning: clear explanation of your decision\n  - recommended_route: either 'security_agent' or 'support_agent'\n\n  Route to SECURITY_AGENT** if the text likely contains:\n  - Email addresses, phone numbers, addresses\n  - Names (first/last names, usernames)\n  - Financial information (credit cards, SSNs, account numbers)\n  - Sensitive personal data\n\n  **Route to SUPPORT_AGENT** if the text appears to be:\n  - General questions without personal details\n  - Technical queries\n  - Search requests\n  - Educational content requests\n\n  Analyze this user input and recommend the optimal route:\n"
     },
     "support-agent": {
       "enabled": true,
