@@ -342,6 +342,9 @@ jobs:
   sync-production:
     name: Sync Production Configs
     runs-on: ubuntu-latest
+    # CONFIGURATION: Change 'main' to your production branch name (e.g., 'production', 'master', 'release')
+    # This job creates drift detection PRs when LaunchDarkly production configs change
+    # Only runs on pushes to your canonical production branch
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     steps:
