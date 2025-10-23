@@ -191,6 +191,8 @@ jobs:
           LD_SDK_KEY: ${{ secrets.LD_SDK_KEY }}
           LD_API_KEY: ${{ secrets.LD_API_KEY }}
           LD_PROJECT_KEY: ${{ secrets.LD_PROJECT_KEY }}
+          LD_CICD_SDK_KEY: ${{ secrets.LD_CICD_SDK_KEY }}
+          LD_CICD_PROJECT_KEY: ${{ secrets.LD_CICD_PROJECT_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
@@ -284,14 +286,17 @@ jobs:
           echo "LD_SDK_KEY=${LD_SDK_KEY}" >> .env
           echo "LD_API_KEY=${LD_API_KEY}" >> .env
           echo "LD_PROJECT_KEY=${LD_PROJECT_KEY}" >> .env
-          
+          echo "LD_CICD_SDK_KEY=${LD_CICD_SDK_KEY}" >> .env
+          echo "LD_CICD_PROJECT_KEY=${LD_CICD_PROJECT_KEY}" >> .env
+
+          # NOTE: Thresholds are controlled by LaunchDarkly judge-evaluator AI Config
+          # Do NOT pass --threshold or --max-error-rate flags - they override LaunchDarkly
+          # The framework reads thresholds from ld-aic-cicd-tools project automatically
           .venv/bin/ld-aic test \
             --config-keys "supervisor-agent,support-agent,security-agent" \
             --environment production \
             --evaluation-dataset test_data/ai_config_evaluation.yaml \
             --evaluator evaluators.local_evaluator:AgentsDemoEvaluator \
-            --threshold 7.0 \
-            --max-error-rate 0.30 \
             --report test-report.json
 
           TEST_EXIT_CODE=$?
