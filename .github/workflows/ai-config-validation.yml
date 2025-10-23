@@ -291,6 +291,7 @@ jobs:
             --evaluation-dataset test_data/ai_config_evaluation.yaml \
             --evaluator evaluators.local_evaluator:AgentsDemoEvaluator \
             --threshold 7.0 \
+            --max-error-rate 0.30 \
             --report test-report.json
 
           TEST_EXIT_CODE=$?
