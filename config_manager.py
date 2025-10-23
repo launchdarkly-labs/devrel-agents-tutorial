@@ -94,6 +94,7 @@ class FixedConfigManager:
         config_data = self.config_defaults[config_key]
 
         # Convert JSON config to LDAIAgentDefaults
+        # Note: Tools are managed by LaunchDarkly and not part of defaults
         return LDAIAgentDefaults(
             enabled=config_data.get("enabled", True),
             model=ModelConfig(
@@ -103,8 +104,7 @@ class FixedConfigManager:
             provider=ProviderConfig(
                 name=config_data["provider"]["name"]
             ),
-            instructions=config_data.get("instructions", "You are a helpful assistant."),
-            tools=config_data.get("tools", [])
+            instructions=config_data.get("instructions", "You are a helpful assistant.")
         )
     
     def _initialize_launchdarkly_client(self):
