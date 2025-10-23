@@ -7,8 +7,8 @@ name: AI Config Validation
 # - Artifacts are sanitized before upload
 
 on:
-  # Use pull_request_target to prevent external PRs from accessing secrets
-  pull_request_target:
+  # Temporarily using pull_request for testing (will change back to pull_request_target)
+  pull_request:
     branches: [main]
     types: [opened, synchronize, reopened, labeled]
   push:
@@ -31,13 +31,12 @@ jobs:
     runs-on: ubuntu-latest
     # Require manual approval for external PRs to prevent secret exposure
     environment:
-      name: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.fork && 'external-pr' || 'ci' }}
+      name: ci
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
         with:
-          # For pull_request_target, checkout the PR code not the base
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
 
       - name: Install uv
@@ -135,16 +134,15 @@ jobs:
   evaluate-configs:
     name: Evaluate AI Configs with Judge
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request_target'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
     # Require manual approval for external PRs to prevent secret exposure
     environment:
-      name: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.fork && 'external-pr' || 'ci' }}
+      name: ci
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
         with:
-          # For pull_request_target, checkout the PR code not the base
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
 
       - name: Install uv
