@@ -135,7 +135,7 @@ jobs:
   evaluate-configs:
     name: Evaluate AI Configs with Judge
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request_target'
     # Require manual approval for external PRs to prevent secret exposure
     environment:
       name: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.repo.fork && 'external-pr' || 'ci' }}
