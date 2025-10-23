@@ -289,9 +289,6 @@ jobs:
           echo "LD_CICD_SDK_KEY=${LD_CICD_SDK_KEY}" >> .env
           echo "LD_CICD_PROJECT_KEY=${LD_CICD_PROJECT_KEY}" >> .env
 
-          # NOTE: Thresholds are controlled by LaunchDarkly judge-evaluator AI Config
-          # Do NOT pass --threshold or --max-error-rate flags - they override LaunchDarkly
-          # The framework reads thresholds from ld-aic-cicd-tools project automatically
           .venv/bin/ld-aic test \
             --config-keys "supervisor-agent,support-agent,security-agent" \
             --environment production \
