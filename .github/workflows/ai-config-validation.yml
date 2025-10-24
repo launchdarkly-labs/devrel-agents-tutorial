@@ -326,6 +326,12 @@ jobs:
           
           exit $TEST_EXIT_CODE
 
+      - name: Summarize test failures
+        if: failure()
+        run: |
+          echo "📊 Generating human-readable failure summary..."
+          .venv/bin/python tools/summarize_test_failures.py || true
+
       - name: Cleanup secrets
         if: always()
         run: |
