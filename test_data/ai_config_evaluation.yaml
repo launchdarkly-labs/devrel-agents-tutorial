@@ -1,71 +1,68 @@
 # AI Config Evaluation Dataset for Agents Demo
 # Tests for supervisor-agent, support-agent, and security-agent
+# Updated to test against Reinforcement Learning knowledge base (Sutton & Barto)
 
 cases:
-  # Support Agent: Basic LaunchDarkly Query
-  - id: support_ld_basic
-    input: "What is LaunchDarkly and how does it help with feature flags?"
+  # Support Agent: Basic RL Query
+  - id: support_rl_basic
+    input: "What is a Markov Decision Process and why is it important in reinforcement learning?"
     context:
       user_type: "customer"
       query_type: "basic"
       agent: "support"
     evaluation_criteria:
       - name: Accuracy
-        description: "Does the response accurately describe LaunchDarkly's core functionality?"
+        description: "Does the response accurately describe MDPs and their role in RL?"
         weight: 2.0
       - name: Clarity
         description: "Is the explanation clear and easy to understand?"
         weight: 1.5
       - name: Completeness
-        description: "Does it cover the key benefits of feature flags?"
+        description: "Does it cover the key components of MDPs (states, actions, rewards)?"
         weight: 1.0
     reference_response: |
-      LaunchDarkly is a feature management platform that allows you to control and deploy features without code deployments.
-      Feature flags let you turn features on/off for specific users or segments, enabling safer releases and A/B testing.
+      A Markov Decision Process (MDP) is a mathematical framework for modeling decision-making where outcomes are partly random and partly under the control of an agent.
+      MDPs are fundamental to RL because they provide a formal way to describe the interaction between an agent and its environment.
 
-  # Support Agent: Technical Research Query (MCP Tools)
-  - id: support_rag_research
-    input: "Can you find recent research papers about LLM-as-judge evaluation methods?"
+  # Support Agent: Technical RL Concept
+  - id: support_rl_value_functions
+    input: "Can you explain the difference between state-value functions and action-value functions?"
     context:
       user_type: "developer"
-      query_type: "research"
+      query_type: "technical"
       agent: "support"
-      tools_expected: ["arxiv_search", "semantic_scholar"]
     evaluation_criteria:
-      - name: Research Quality
-        description: "Does the response cite relevant and recent papers?"
+      - name: Technical Accuracy
+        description: "Does it correctly explain V(s) vs Q(s,a)?"
         weight: 2.5
-      - name: Tool Usage
-        description: "Does it effectively use MCP research tools?"
+      - name: Practical Examples
+        description: "Does it provide helpful examples or use cases?"
         weight: 2.0
-      - name: Summarization
-        description: "Are the findings well-summarized and actionable?"
+      - name: Mathematical Understanding
+        description: "Does it show understanding of the mathematical relationship?"
         weight: 1.5
-      - name: Citations
-        description: "Are proper citations or references provided?"
-        weight: 1.0
 
-  # Support Agent: LaunchDarkly AI Configs
-  - id: support_ai_configs
-    input: "How do I use LaunchDarkly AI Configs to control my LLM prompts and models?"
+  # Support Agent: RL Algorithms
+  - id: support_rl_algorithms
+    input: "What is Q-learning and how does it differ from SARSA?"
     context:
       user_type: "enterprise"
       query_type: "technical"
       agent: "support"
     evaluation_criteria:
       - name: Technical Accuracy
-        description: "Is the information about AI Configs technically correct?"
+        description: "Is the explanation of both algorithms correct?"
         weight: 2.5
-      - name: Practical Examples
-        description: "Does it provide actionable implementation guidance?"
+      - name: Comparison Quality
+        description: "Does it clearly explain the on-policy vs off-policy distinction?"
         weight: 2.0
       - name: Best Practices
-        description: "Does it mention relevant best practices?"
+        description: "Does it mention when to use each algorithm?"
         weight: 1.0
 
-  # Support Agent: Multi-Agent Systems
-  - id: support_multi_agent
-    input: "What are the benefits of using LangGraph for multi-agent AI systems?"
+  # Support Agent: Advanced RL Topic
+  - id: support_rl_exploration
+    input: "What is the exploration-exploitation trade-off and why is it challenging?"
     context:
       user_type: "architect"
       query_type: "advanced"
@@ -73,18 +70,54 @@ cases:
       technical_level: "expert"
     evaluation_criteria:
       - name: Technical Depth
-        description: "Does it demonstrate deep understanding of multi-agent architectures?"
+        description: "Does it demonstrate deep understanding of the dilemma?"
         weight: 2.5
-      - name: LangGraph Specifics
-        description: "Does it accurately explain LangGraph capabilities?"
+      - name: Practical Implications
+        description: "Does it explain real-world implications?"
         weight: 2.0
-      - name: Use Cases
-        description: "Does it provide relevant use cases or examples?"
+      - name: Solutions
+        description: "Does it mention strategies like epsilon-greedy or UCB?"
+        weight: 1.5
+
+  # Support Agent: RL Fundamentals
+  - id: support_rl_bellman
+    input: "Can you explain the Bellman equation and its role in reinforcement learning?"
+    context:
+      user_type: "developer"
+      query_type: "technical"
+      agent: "support"
+    evaluation_criteria:
+      - name: Mathematical Accuracy
+        description: "Is the Bellman equation explained correctly?"
+        weight: 2.5
+      - name: Intuitive Understanding
+        description: "Does it provide intuitive explanation beyond just equations?"
+        weight: 2.0
+      - name: Applications
+        description: "Does it explain how it's used in RL algorithms?"
+        weight: 1.5
+
+  # Support Agent: RL Methods
+  - id: support_rl_temporal_difference
+    input: "What are temporal-difference learning methods and what advantages do they have?"
+    context:
+      user_type: "developer"
+      query_type: "technical"
+      agent: "support"
+    evaluation_criteria:
+      - name: Concept Clarity
+        description: "Is TD learning explained clearly?"
+        weight: 2.5
+      - name: Advantages
+        description: "Does it explain advantages over Monte Carlo methods?"
+        weight: 2.0
+      - name: Examples
+        description: "Does it provide concrete examples like TD(0) or TD(λ)?"
         weight: 1.5
 
   # Security Agent: PII Detection - Email
   - id: security_pii_email
-    input: "My email is john.doe@example.com and I need help with my account."
+    input: "My email is john.doe@example.com and I need help with reinforcement learning concepts."
     context:
       user_type: "customer"
       query_type: "support"
@@ -106,7 +139,7 @@ cases:
 
   # Security Agent: PII Detection - Phone Number
   - id: security_pii_phone
-    input: "Please call me at 555-123-4567 to discuss this issue."
+    input: "Please call me at 555-123-4567 to discuss Q-learning algorithms."
     context:
       user_type: "customer"
       query_type: "support"
@@ -125,7 +158,7 @@ cases:
 
   # Security Agent: PII Detection - SSN
   - id: security_pii_ssn
-    input: "My SSN is 123-45-6789, can you look up my account?"
+    input: "My SSN is 123-45-6789, can you help me understand policy gradient methods?"
     context:
       user_type: "customer"
       query_type: "support"
@@ -148,18 +181,18 @@ cases:
 
   # Security Agent: No PII - Safe Query
   - id: security_no_pii
-    input: "What are the best practices for securing API keys in production?"
+    input: "What are the best practices for implementing Monte Carlo methods in RL?"
     context:
       user_type: "developer"
-      query_type: "security"
+      query_type: "technical"
       agent: "security"
       pii_expected: false
     evaluation_criteria:
       - name: Normal Processing
         description: "Does it process the query normally without false PII alerts?"
         weight: 2.0
-      - name: Security Expertise
-        description: "Does it provide good security advice?"
+      - name: Technical Response
+        description: "Does it provide good technical guidance?"
         weight: 2.0
       - name: Practical Guidance
         description: "Are the recommendations actionable and practical?"
@@ -167,7 +200,7 @@ cases:
 
   # Supervisor Agent: Routing to Support
   - id: supervisor_route_support
-    input: "Can you help me understand how feature targeting works in LaunchDarkly?"
+    input: "Can you help me understand how value iteration works?"
     context:
       user_type: "customer"
       query_type: "general"
@@ -206,7 +239,7 @@ cases:
 
   # Supervisor Agent: Complex Multi-Turn
   - id: supervisor_multi_turn
-    input: "First, tell me about AI Configs, then help me implement PII detection in my app."
+    input: "First, explain policy gradient methods, then help me check if my message contains any sensitive information."
     context:
       user_type: "developer"
       query_type: "complex"
@@ -246,7 +279,7 @@ cases:
 
   # Performance Test: Quick Response
   - id: performance_simple
-    input: "What is a feature flag?"
+    input: "What is the reward signal in reinforcement learning?"
     context:
       user_type: "customer"
       query_type: "simple"
@@ -264,8 +297,8 @@ cases:
         weight: 1.0
 
   # Enterprise User: High-Value Query
-  - id: enterprise_research
-    input: "We need to evaluate different LLM providers for our production system. Can you research the latest benchmarks and cost comparisons?"
+  - id: enterprise_rl_comparison
+    input: "We're implementing RL for our production system. Can you compare model-free vs model-based approaches and their trade-offs?"
     context:
       user_type: "enterprise"
       plan: "enterprise"
@@ -274,14 +307,14 @@ cases:
       high_value: true
     evaluation_criteria:
       - name: Research Depth
-        description: "Does it provide comprehensive research using all available tools?"
+        description: "Does it provide comprehensive comparison of both approaches?"
         weight: 2.5
       - name: Business Value
-        description: "Does it focus on business-relevant metrics (cost, reliability, performance)?"
+        description: "Does it focus on practical trade-offs (computational cost, sample efficiency)?"
         weight: 2.0
-      - name: Data Quality
-        description: "Is the information recent and from reputable sources?"
+      - name: Technical Accuracy
+        description: "Is the information technically accurate?"
         weight: 2.0
       - name: Actionable Recommendations
-        description: "Does it provide clear recommendations?"
+        description: "Does it provide clear recommendations for production use?"
         weight: 1.5
