@@ -1,0 +1,231 @@
+# LaunchDarkly AI Config Bootstrap Manifest
+# 
+# IMPORTANT: This file is for INITIAL SETUP ONLY
+# 
+# Workflow:
+# 1. Bootstrap: This YAML file creates AI Configs in LaunchDarkly
+# 2. Post-Bootstrap: Make all configuration changes in LaunchDarkly UI
+# 3. Ongoing: LaunchDarkly is the single source of truth
+# 
+# DO NOT modify instructions here after bootstrap - use LaunchDarkly instead!
+
+project:
+  key: "multi-agent-chatbot"  # Your LaunchDarkly project key
+  environment:
+    - key: production
+  
+  # Combined geographic + business tier segments (4 total)
+  segment:
+    - key: eu-free
+      rules:
+      - attribute: "country"
+        op: "in"
+        values: ["DE", "FR", "ES", "IT", "NL", "BE", "AT", "PL", "PT", "GR", "CZ", "HU", "SE", "DK", "FI"]
+        contextKind: "user"
+        negate: false
+      - attribute: "plan"
+        op: "in"
+        values: ["free"]
+        contextKind: "user"
+        negate: false
+    
+    - key: eu-paid
+      rules:
+      - attribute: "country"
+        op: "in"
+        values: ["DE", "FR", "ES", "IT", "NL", "BE", "AT", "PL", "PT", "GR", "CZ", "HU", "SE", "DK", "FI"]
+        contextKind: "user"
+        negate: false
+      - attribute: "plan"
+        op: "in"
+        values: ["paid"]
+        contextKind: "user"
+        negate: false
+        
+    - key: other-free
+      rules:
+      - attribute: "country"
+        op: "in"
+        values: ["DE", "FR", "ES", "IT", "NL", "BE", "AT", "PL", "PT", "GR", "CZ", "HU", "SE", "DK", "FI"]
+        contextKind: "user"
+        negate: true
+      - attribute: "plan"
+        op: "in"
+        values: ["free"]
+        contextKind: "user"
+        negate: false
+        
+    - key: other-paid
+      rules:
+      - attribute: "country"
+        op: "in"
+        values: ["DE", "FR", "ES", "IT", "NL", "BE", "AT", "PL", "PT", "GR", "CZ", "HU", "SE", "DK", "FI"]
+        contextKind: "user"
+        negate: true
+      - attribute: "plan"
+        op: "in"
+        values: ["paid"]
+        contextKind: "user"
+        negate: false
+
+  # Multi-agent AI configurations
+  # Tool definitions - CLI creates these programmatically  
+  tool:
+    - key: "search_v1"
+      name: "Basic Keyword Search"
+      description: "Simple keyword search through knowledge base"
+      type: "function"
+      
+    - key: "search_v2"
+      name: "Semantic Vector Search"
+      description: "Advanced semantic search using vector embeddings"
+      type: "function"
+      
+    - key: "reranking"
+      name: "BM25 Relevance Scoring"
+      description: "BM25-based relevance scoring and reranking"
+      type: "function"
+      
+    - key: "arxiv_search"
+      name: "ArXiv Academic Search"
+      description: "Search academic papers from ArXiv database"
+      type: "mcp"
+      server: "arxiv-mcp-server"
+      
+    - key: "semantic_scholar"
+      name: "Semantic Scholar Research"
+      description: "Access Semantic Scholar citation database"
+      type: "mcp"
+      server: "semanticscholar-MCP-Server"
+
+  ai_config:
+    # Supervisor agent for workflow orchestration
+    - key: "supervisor-agent"
+      name: "Supervisor Agent - Workflow Orchestration"
+      variations:
+        - key: "supervisor-basic"
+          modelConfig:
+            provider: "anthropic"
+            modelId: "claude-3-5-sonnet-20241022"
+          # NOTE: After bootstrap, modify instructions in LaunchDarkly UI, not here
+          instructions: "You are an intelligent routing supervisor for a multi-agent system. Your primary job is to assess whether user input likely contains PII (personally identifiable information) to determine the most efficient processing route.\n\n**PII Assessment:**\nAnalyze the user input and provide:\n- likely_contains_pii: boolean assessment\n- confidence: confidence score (0.0 to 1.0)\n- reasoning: clear explanation of your decision\n- recommended_route: either 'security_agent' or 'support_agent'\n\n**Route to SECURITY_AGENT** if the text likely contains:\n- Email addresses, phone numbers, addresses\n- Names (first/last names, usernames)\n- Financial information (credit cards, SSNs, account numbers)\n- Sensitive personal data\n\n**Route to SUPPORT_AGENT** if the text appears to be:\n- General questions without personal details\n- Technical queries\n- Search requests\n- Educational content requests\n\nAnalyze this user input and recommend the optimal route:"
+          customParameters:
+            temperature: 0.0
+            
+      targeting:
+        rules: []
+        defaultVariation: "supervisor-basic"
+
+    # Security agent for PII detection with geographic privacy compliance
+    - key: "security-agent"
+      name: "Security Agent - PII Detection"
+      variations:
+        - key: "basic-security"
+          modelConfig:
+            provider: "anthropic"
+            modelId: "claude-3-5-haiku-20241022"
+          # NOTE: After bootstrap, modify instructions in LaunchDarkly UI, not here
+          instructions: "You are a privacy agent that REMOVES direct PII. Focus on clearly personal identifiers:\n\nEmail addresses\nPhone numbers\nSocial Security Numbers\nFull names (but not generic titles)\nStreet addresses\nCredit card numbers\nDriver's license numbers\n\nResponse Format:\n\ndetected: true if any PII was found, false otherwise\ntypes: array of PII types found (e.g., ['email', 'name', 'phone'])\nredacted: the input text with PII replaced by [REDACTED], keeping the text readable and natural\n\nExamples:\n\nInput: \"I work at Acme Corp in Berlin as a manager\"\n\nOutput: detected=false, types=[], redacted='I work at Acme Corp in Berlin as a manager'\n\n\nInput: \"Contact John Smith at john@email.com or 555-1234\"\n\nOutput: detected=true, types=['name', 'email', 'phone'], redacted='Contact [REDACTED] at [REDACTED] or [REDACTED]'\n\n\nInput: \"The CEO from Microsoft contacted me\"\n\nOutput: detected=false, types=[], redacted='The CEO from Microsoft contacted me'"
+          customParameters:
+            temperature: 0.1
+            max_tool_calls: 1
+        - key: "strict-security"  
+          modelConfig:
+            provider: "mistral"
+            modelId: "mistral-small-latest"
+          instructions: "You are a strict privacy agent that REMOVES ALL PII. Redact everything personally identifiable including names, emails, phones, addresses, locations (cities, countries, regions), job titles, companies, dates of birth, and any identifying references.\n\nYou must return a structured response with these exact fields:\n- detected: boolean (true if ANY PII found, false otherwise)\n- types: array of strings listing PII types found\n- redacted: string with ALL PII replaced by [REDACTED]\n\nPII types to detect: 'name', 'email', 'phone', 'address', 'location', 'job_title', 'company', 'date_of_birth', 'identifying_reference'\n\nExamples:\nInput: \"I work at Acme Corp in Berlin as a manager\" → detected=true, types=[\"company\", \"location\", \"job_title\"], redacted=\"I work at [REDACTED] in [REDACTED] as a [REDACTED]\"\n\nInput: \"I need help with my account\" → detected=false, types=[], redacted=\"I need help with my account\""
+          customParameters:
+            temperature: 0.1
+            max_tool_calls: 1
+      targeting:
+        rules:
+          - segments: ["eu-free"]
+            variation: "strict-security"
+          - segments: ["eu-paid"]
+            variation: "strict-security"
+          - segments: ["other-free"]
+            variation: "basic-security"
+          - segments: ["other-paid"]
+            variation: "basic-security"
+        defaultVariation: "basic-security"
+
+    # Support agent with 4 combined geographic + business tier variations
+    - key: "support-agent"
+      name: "Support Agent"
+      variations:
+        # EU variations
+        - key: "eu-free"
+          modelConfig:
+            provider: "anthropic"
+            modelId: "claude-3-5-haiku-20241022"
+          tools: ["search_v1"]
+          # NOTE: After bootstrap, modify instructions in LaunchDarkly UI, not here
+          instructions: "You are a helpful assistant with access to basic search (search_v1). Use your search tool to find relevant information from the knowledge base while following EU privacy requirements. Always search before responding to ensure accuracy."
+          customParameters:
+            max_tool_calls: 3
+            temperature: 0.4
+            max_cost_per_session: 0.10
+            privacy_mode: "strict"
+            
+        - key: "eu-paid"
+          modelConfig:
+            provider: "anthropic"
+            modelId: "claude-3-5-sonnet-20241022"
+          tools: ["search_v1", "search_v2", "reranking", "arxiv_search", "semantic_scholar"]
+          instructions: "You are a premium research specialist with access to comprehensive RAG tools: search_v1 (basic search), search_v2 (semantic vector search), reranking (BM25 relevance scoring), arxiv_search (academic papers), and semantic_scholar (citation database). When using semantic_scholar, always request as few as possible and less than 5 results (num_results: 5) to optimize performance and avoid rate limiting. When search results are available, prioritize information from those results over your general knowledge. EU privacy laws require strict data handling. Always cite sources and explain confidence levels. Use multiple search approaches for complex queries."
+          customParameters:
+            max_tool_calls: 20
+            temperature: 0.1
+            max_cost_per_session: 10.00
+            privacy_mode: "strict"
+            
+        # Other (Non-EU) variations
+        - key: "other-free"
+          modelConfig:
+            provider: "openai"
+            modelId: "gpt-4o-mini"
+          tools: ["search_v1"]
+          instructions: "You are a helpful assistant with access to basic search (search_v1). Use your search tool to find relevant information from the knowledge base. Provide accurate, concise responses efficiently."
+          customParameters:
+            max_tool_calls: 3
+            temperature: 0.5
+            max_cost_per_session: 0.10
+            privacy_mode: "standard"
+            
+        - key: "other-paid"
+          modelConfig:
+            provider: "openai"
+            modelId: "gpt-4o"
+          tools: ["search_v1", "search_v2", "reranking", "arxiv_search", "semantic_scholar"]
+          instructions: "You are a premium research specialist with access to comprehensive RAG tools: search_v1 (basic search), search_v2 (semantic vector search), reranking (BM25 relevance scoring), arxiv_search (academic papers), and semantic_scholar (citation database). When using semantic_scholar, always request as few as possible and less than 5 results (num_results: 5) to optimize performance and avoid rate limiting. When search results are available, prioritize information from those results over your general knowledge. Provide comprehensive, well-researched responses with source attribution from external databases and academic sources."
+          customParameters:
+            max_tool_calls: 20
+            temperature: 0.2
+            max_cost_per_session: 10.00
+            privacy_mode: "standard"
+            
+        # International fallback
+        - key: "international-standard"
+          modelConfig:
+            provider: "anthropic"  # Default to privacy-friendly
+            modelId: "claude-3-5-haiku-20241022"
+          tools: ["search_v1", "search_v2", "reranking"]
+          instructions: "You are a helpful assistant with access to RAG tools: search_v1 (basic search), search_v2 (semantic vector search), and reranking (BM25 relevance scoring). When search results are available, prioritize information from those results over your general knowledge. Provide balanced, well-researched responses for international users."
+          customParameters:
+            max_tool_calls: 5
+            temperature: 0.4
+            max_cost_per_session: 0.50
+
+        # Simple 1:1 segment-to-variation mapping
+      targeting:
+        rules:
+          - segments: ["eu-free"]
+            variation: "eu-free"
+          - segments: ["eu-paid"]
+            variation: "eu-paid"
+          - segments: ["other-free"]
+            variation: "other-free"
+          - segments: ["other-paid"]
+            variation: "other-paid"
+            
+        defaultVariation: "international-standard"
