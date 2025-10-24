@@ -126,6 +126,21 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
 
     log_debug(f"SUPERVISOR INSTRUCTIONS: {supervisor_config.instructions}")
 
+    def _select_provider_and_model(default_provider: str, default_model: str) -> tuple[str, str]:
+        """Select provider/model for CI while preserving full functionality.
+
+        If CI_SAFE_MODE is set and Anthropic is unavailable but OpenAI is available,
+        prefer OpenAI to avoid external connectivity issues while still exercising LLMs.
+        """
+        import os
+        ci = os.getenv("CI_SAFE_MODE", "").lower() in {"1", "true", "yes"}
+        anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+        openai_key = os.getenv("OPENAI_API_KEY")
+
+        if ci and (not anthropic_key) and openai_key:
+            return ("openai", "gpt-4o-mini")
+        return (default_provider, default_model)
+
     def pii_prescreen_node(state: SupervisorState):
         """
         Analyze user input to determine if it likely contains PII.
@@ -141,8 +156,14 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             from utils.bedrock_helpers import normalize_bedrock_provider
             import os
 
+            # CI_SAFE_MODE: Prefer OpenAI when Anthropic unavailable
+            selected_provider, selected_model = _select_provider_and_model(
+                supervisor_config.provider.name,
+                supervisor_config.model.name
+            )
+
             # Normalize provider name to handle bedrock:anthropic format
-            normalized_provider = normalize_bedrock_provider(supervisor_config.provider.name)
+            normalized_provider = normalize_bedrock_provider(selected_provider)
             langchain_provider = map_provider_to_langchain(normalized_provider)
 
             # Handle Bedrock vs direct API routing
@@ -150,22 +171,22 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
                 auth_method = os.getenv('AUTH_METHOD', 'api-key').lower()
                 if auth_method == 'sso' and hasattr(config_manager, 'boto3_session') and config_manager.boto3_session:
                     base_model = create_bedrock_chat_model(
-                        model_id=supervisor_config.model.name,
+                        model_id=selected_model,
                         session=config_manager.boto3_session,
                         region=config_manager.aws_region,
                         temperature=0.1
                     )
                 else:
                     # Fall back to direct anthropic API
-                    fallback_provider = 'anthropic' if supervisor_config.provider.name.lower() == 'anthropic' else langchain_provider
+                    fallback_provider = 'anthropic' if selected_provider.lower() == 'anthropic' else langchain_provider
                     base_model = init_chat_model(
-                        model=supervisor_config.model.name,
+                        model=selected_model,
                         model_provider=fallback_provider,
                         temperature=0.1
                     )
             else:
                 base_model = init_chat_model(
-                    model=supervisor_config.model.name,
+                    model=selected_model,
                     model_provider=langchain_provider,
                     temperature=0.1
                 )
