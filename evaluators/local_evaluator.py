@@ -118,18 +118,33 @@ class AgentsDemoEvaluator(LocalEvaluator):
                     error=f"Failed to parse JSON response: {type(json_error).__name__}: {str(json_error)}\nResponse text: {response.text[:500]}"
                 )
             response_text = response_data.get("response", "")
-            variation_key = response_data.get("variation_key", "unknown")
 
-            # Get the final agent from agent_configurations
+            # Extract agent-specific variation from agent_configurations
+            # The top-level variation_key is always the supervisor's, but we need the specific agent's variation
             agent_configs = response_data.get("agent_configurations", [])
+            variation_key = "unknown"
             final_agent = "unknown"
+
             if agent_configs:
                 try:
-                    # Handle both dict and object responses
-                    last_config = agent_configs[-1]
-                    final_agent = last_config.get("agent_name", "unknown") if isinstance(last_config, dict) else last_config.agent_name
-                except (KeyError, AttributeError, IndexError):
-                    final_agent = "unknown"
+                    # Find the config matching the config_key being tested
+                    for agent_config in agent_configs:
+                        agent_name = agent_config.get("agent_name", "") if isinstance(agent_config, dict) else getattr(agent_config, "agent_name", "")
+
+                        if agent_name == config_key:
+                            # Extract variation_key for this specific agent
+                            variation_key = agent_config.get("variation_key", "unknown") if isinstance(agent_config, dict) else getattr(agent_config, "variation_key", "unknown")
+                            final_agent = agent_name
+                            break
+
+                    # If we didn't find a match, use the last agent as fallback
+                    if variation_key == "unknown" and agent_configs:
+                        last_config = agent_configs[-1]
+                        final_agent = last_config.get("agent_name", "unknown") if isinstance(last_config, dict) else last_config.agent_name
+                        variation_key = last_config.get("variation_key", "unknown") if isinstance(last_config, dict) else getattr(last_config, "variation_key", "unknown")
+                except (KeyError, AttributeError, IndexError) as e:
+                    print(f"Warning: Error extracting agent variation: {e}")
+                    variation_key = response_data.get("variation_key", "unknown")  # Fallback to top-level
 
             return EvaluationResult(
                 response=response_text,
