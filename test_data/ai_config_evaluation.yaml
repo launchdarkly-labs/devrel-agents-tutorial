@@ -10,6 +10,8 @@ cases:
       user_type: "customer"
       query_type: "basic"
       agent: "support"
+      country: "US"
+      plan: "free"
     evaluation_criteria:
       - name: Accuracy
         description: "Does the response accurately describe MDPs and their role in RL?"
@@ -31,6 +33,8 @@ cases:
       user_type: "developer"
       query_type: "technical"
       agent: "support"
+      country: "DE"
+      plan: "paid"
     evaluation_criteria:
       - name: Technical Accuracy
         description: "Does it correctly explain V(s) vs Q(s,a)?"
@@ -49,6 +53,8 @@ cases:
       user_type: "enterprise"
       query_type: "technical"
       agent: "support"
+      country: "US"
+      plan: "paid"
     evaluation_criteria:
       - name: Technical Accuracy
         description: "Is the explanation of both algorithms correct?"
@@ -68,6 +74,8 @@ cases:
       query_type: "advanced"
       agent: "support"
       technical_level: "expert"
+      country: "FR"
+      plan: "paid"
     evaluation_criteria:
       - name: Technical Depth
         description: "Does it demonstrate deep understanding of the dilemma?"
@@ -86,6 +94,8 @@ cases:
       user_type: "developer"
       query_type: "technical"
       agent: "support"
+      country: "DE"
+      plan: "free"
     evaluation_criteria:
       - name: Mathematical Accuracy
         description: "Is the Bellman equation explained correctly?"
@@ -104,6 +114,8 @@ cases:
       user_type: "developer"
       query_type: "technical"
       agent: "support"
+      country: "US"
+      plan: "paid"
     evaluation_criteria:
       - name: Concept Clarity
         description: "Is TD learning explained clearly?"
@@ -288,6 +300,8 @@ cases:
       query_type: "simple"
       agent: "support"
       performance_critical: true
+      country: "US"
+      plan: "free"
     evaluation_criteria:
       - name: Speed
         description: "Is the response generated quickly?"
@@ -304,10 +318,11 @@ cases:
     input: "We're implementing RL for our production system. Can you compare model-free vs model-based approaches and their trade-offs?"
     context:
       user_type: "enterprise"
-      plan: "enterprise"
+      plan: "paid"
       query_type: "research"
       agent: "support"
       high_value: true
+      country: "FR"
     evaluation_criteria:
       - name: Research Depth
         description: "Does it provide comprehensive comparison of both approaches?"
