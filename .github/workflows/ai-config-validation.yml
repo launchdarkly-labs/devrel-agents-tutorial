@@ -186,6 +186,18 @@ jobs:
           echo "📚 Initializing vector embeddings for search tools..."
           .venv/bin/python initialize_embeddings.py
 
+      - name: Install MCP servers for research-enhanced variation
+        run: |
+          echo "📦 Installing MCP servers (ArXiv and Semantic Scholar)..."
+
+          # Install ArXiv MCP server
+          uv tool install arxiv-mcp-server
+
+          # Clone and set up Semantic Scholar MCP server
+          git clone https://github.com/JackKuo666/semanticscholar-MCP-Server.git
+
+          echo "✅ MCP servers installed (available for research-enhanced variation)"
+
       - name: Run tests with API
         id: run-tests
         env:
