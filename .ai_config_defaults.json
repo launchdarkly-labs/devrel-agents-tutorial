@@ -1,8 +1,8 @@
 {
   "_metadata": {
-    "generated_at": "2025-10-23T11:15:54.739693",
+    "generated_at": "2025-10-23T15:36:05.731867",
     "environment": "production",
-    "project_key": "multi-agent-chatbot",
+    "project_key": "ld-aic-cicd-tools",
     "config_count": 3
   },
   "configs": {
@@ -32,151 +32,12 @@
       "enabled": true,
       "model": {
         "name": "claude-3-5-haiku-20241022",
-        "parameters": {
-          "tools": [
-            {
-              "description": "Simple keyword search through knowledge base",
-              "name": "search_v1",
-              "parameters": {
-                "additionalProperties": false,
-                "properties": {
-                  "query": {
-                    "description": "Search query for keyword matching",
-                    "type": "string"
-                  },
-                  "top_k": {
-                    "description": "Number of results to return",
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "query"
-                ],
-                "type": "object"
-              },
-              "type": "function"
-            },
-            {
-              "description": "Semantic search using vector embeddings",
-              "name": "search_v2",
-              "parameters": {
-                "additionalProperties": false,
-                "properties": {
-                  "query": {
-                    "description": "Search query for semantic matching",
-                    "type": "string"
-                  },
-                  "top_k": {
-                    "description": "Number of results to return",
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "query"
-                ],
-                "type": "object"
-              },
-              "type": "function"
-            },
-            {
-              "description": "Reorders results by relevance using BM25 algorithm",
-              "name": "reranking",
-              "parameters": {
-                "additionalProperties": false,
-                "properties": {
-                  "query": {
-                    "description": "Original query for scoring",
-                    "type": "string"
-                  },
-                  "results": {
-                    "description": "Results to rerank",
-                    "type": "array"
-                  }
-                },
-                "required": [
-                  "query",
-                  "results"
-                ],
-                "type": "object"
-              },
-              "type": "function"
-            }
-          ]
-        }
+        "parameters": {}
       },
       "provider": {
         "name": "Anthropic"
       },
-      "instructions": "You are a helpful assistant with access to RAG tools: search_v1 (basic search), search_v2 (semantic vector search), and reranking (BM25 relevance scoring). When search results are available, prioritize information from those results over your general knowledge. Provide balanced, well-researched responses for international users.",
-      "tools": [
-        {
-          "description": "Simple keyword search through knowledge base",
-          "name": "search_v1",
-          "parameters": {
-            "additionalProperties": false,
-            "properties": {
-              "query": {
-                "description": "Search query for keyword matching",
-                "type": "string"
-              },
-              "top_k": {
-                "description": "Number of results to return",
-                "type": "number"
-              }
-            },
-            "required": [
-              "query"
-            ],
-            "type": "object"
-          },
-          "type": "function"
-        },
-        {
-          "description": "Semantic search using vector embeddings",
-          "name": "search_v2",
-          "parameters": {
-            "additionalProperties": false,
-            "properties": {
-              "query": {
-                "description": "Search query for semantic matching",
-                "type": "string"
-              },
-              "top_k": {
-                "description": "Number of results to return",
-                "type": "number"
-              }
-            },
-            "required": [
-              "query"
-            ],
-            "type": "object"
-          },
-          "type": "function"
-        },
-        {
-          "description": "Reorders results by relevance using BM25 algorithm",
-          "name": "reranking",
-          "parameters": {
-            "additionalProperties": false,
-            "properties": {
-              "query": {
-                "description": "Original query for scoring",
-                "type": "string"
-              },
-              "results": {
-                "description": "Results to rerank",
-                "type": "array"
-              }
-            },
-            "required": [
-              "query",
-              "results"
-            ],
-            "type": "object"
-          },
-          "type": "function"
-        }
-      ]
+      "instructions": "You are a helpful assistant with access to RAG tools: search_v1 (basic search), search_v2 (semantic vector search), and reranking (BM25 relevance scoring). When search results are available, prioritize information from those results over your general knowledge. Provide balanced, well-researched responses for international users."
     }
   }
 }
