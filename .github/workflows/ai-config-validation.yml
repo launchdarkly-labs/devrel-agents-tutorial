@@ -55,7 +55,7 @@ jobs:
           uv venv
           # Install dependencies without installing the package itself (to avoid dev dependency issues)
           uv pip install langchain langgraph langchain-anthropic fastapi "uvicorn[standard]" pydantic launchdarkly-server-sdk launchdarkly-server-sdk-ai numpy openai faiss-cpu PyMuPDF tiktoken streamlit requests python-dotenv PyYAML langchain-openai langchain-mcp-adapters beautifulsoup4 mcp semanticscholar rank-bm25 langchain-mistralai httpx boto3 langchain-aws
-          uv pip install git+https://x-access-token:${{ secrets.GH_PAT }}@github.com/launchdarkly-labs/scarlett_ai_configs_ci_cd-.git@feature/initial-implementation
+          uv pip install git+https://x-access-token:${{ secrets.GH_PAT }}@github.com/launchdarkly-labs/scarlett_ai_configs_ci_cd-.git@feature/user-friendly-setup
 
       - name: Validate required secrets
         run: |
@@ -161,7 +161,7 @@ jobs:
           uv venv
           # Install dependencies without installing the package itself (to avoid dev dependency issues)
           uv pip install langchain langgraph langchain-anthropic fastapi "uvicorn[standard]" pydantic launchdarkly-server-sdk launchdarkly-server-sdk-ai numpy openai faiss-cpu PyMuPDF tiktoken streamlit requests python-dotenv PyYAML langchain-openai langchain-mcp-adapters beautifulsoup4 mcp semanticscholar rank-bm25 langchain-mistralai httpx boto3 langchain-aws
-          uv pip install git+https://x-access-token:${{ secrets.GH_PAT }}@github.com/launchdarkly-labs/scarlett_ai_configs_ci_cd-.git@feature/initial-implementation
+          uv pip install git+https://x-access-token:${{ secrets.GH_PAT }}@github.com/launchdarkly-labs/scarlett_ai_configs_ci_cd-.git@feature/user-friendly-setup
 
       - name: Validate required secrets
         run: |
@@ -198,7 +198,7 @@ jobs:
 
           echo "✅ MCP servers installed (available for research-enhanced variation)"
 
-      - name: Run tests with API
+      - name: Run tests with Direct evaluator
         id: run-tests
         env:
           LD_SDK_KEY: ${{ secrets.LD_SDK_KEY }}
@@ -212,8 +212,8 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}
           CI_SAFE_MODE: true
         run: |
-          # Create .env file BEFORE starting API (API needs these for search tool embedding)
-          echo "📝 Creating .env file for API and ld-aic framework..."
+          # Create .env file for tools that need API keys
+          echo "📝 Creating .env file for search tools and API access..."
           echo "OPENAI_API_KEY=${OPENAI_API_KEY}" > .env
           echo "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" >> .env
           echo "MISTRAL_API_KEY=${MISTRAL_API_KEY}" >> .env
@@ -223,65 +223,10 @@ jobs:
           echo "LD_CICD_SDK_KEY=${LD_CICD_SDK_KEY}" >> .env
           echo "LD_CICD_PROJECT_KEY=${LD_CICD_PROJECT_KEY}" >> .env
 
-          # NOTE: The evaluator (evaluators/local_evaluator.py) expects the API on port 8000
-          # If you change the port here, update the port in the evaluator as well
-          echo "🚀 Starting agents-demo API on port 8000..."
-          .venv/bin/python -m uvicorn api.main:app --host 0.0.0.0 --port 8000 > /tmp/agents-demo-api.log 2>&1 &
-          API_PID=$!
-
-          # Wait for API to be ready (max 30 seconds)
-          echo "Waiting for API to start..."
-          for i in {1..30}; do
-            if curl -s http://localhost:8000/health >/dev/null 2>&1; then
-              echo "✅ API is ready!"
-              break
-            fi
-            if ! kill -0 $API_PID 2>/dev/null; then
-              echo "❌ API process died. Logs:"
-              cat /tmp/agents-demo-api.log
-              exit 1
-            fi
-            sleep 1
-          done
-
-          # Test the /chat endpoint with curl
-          echo "🔍 Testing /chat endpoint with curl..."
-          curl -X POST http://localhost:8000/chat \
-            -H "Content-Type: application/json" \
-            -d '{"message":"test","user_id":"test-user","user_context":{}}' \
-            || echo "Curl test failed"
-
-          # Test with httpx (Python)
-          echo "🐍 Testing /chat endpoint with httpx..."
-          .venv/bin/python << 'PYTHON_SCRIPT'
-          import httpx
-          import asyncio
-
-          async def test():
-              client = httpx.AsyncClient(timeout=10.0)
-              try:
-                  response = await client.post(
-                      'http://127.0.0.1:8000/chat',
-                      json={'message': 'test', 'user_id': 'test-user', 'user_context': {}}
-                  )
-                  print(f'HTTPx test - Status: {response.status_code}')
-                  print(f'HTTPx test - Response length: {len(response.text)}')
-                  data = response.json()
-                  print(f'HTTPx test - Has response field: {"response" in data}')
-              except Exception as e:
-                  print(f'HTTPx test FAILED: {type(e).__name__}: {str(e)}')
-                  import traceback
-                  traceback.print_exc()
-              finally:
-                  await client.aclose()
-
-          asyncio.run(test())
-          PYTHON_SCRIPT
-
-          echo "🧪 Running AI Config test suite with judge evaluations..."
+          echo "🧪 Running AI Config test suite with Direct evaluator (no server needed)..."
           echo "Working directory: $(pwd)"
           echo "Test data file exists: $(test -f test_data/ai_config_evaluation.yaml && echo 'YES' || echo 'NO')"
-          
+
           # Export all env vars so they're inherited by subprocesses
           export LD_SDK_KEY="${LD_SDK_KEY}"
           export LD_API_KEY="${LD_API_KEY}"
@@ -290,40 +235,24 @@ jobs:
           export OPENAI_API_KEY="${OPENAI_API_KEY}"
           export MISTRAL_API_KEY="${MISTRAL_API_KEY}"
           export CI_SAFE_MODE="${CI_SAFE_MODE}"
-          
+
           # Debug: verify env vars are set
           echo "🔍 Env vars check:"
           echo "  LD_SDK_KEY: ${LD_SDK_KEY:0:10}... (${#LD_SDK_KEY} chars)"
           echo "  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:+SET}"
           echo "  OPENAI_API_KEY: ${OPENAI_API_KEY:+SET}"
           echo "  MISTRAL_API_KEY: ${MISTRAL_API_KEY:+SET}"
-          
-          # Test: verify evaluator can be imported and called
-          echo "🧪 Testing evaluator import and basic call..."
-          .venv/bin/python test_evaluator.py
 
+          # Run tests with Direct evaluator (calls AI configs directly via SDK)
           .venv/bin/ld-aic test \
             --config-keys "supervisor-agent,support-agent,security-agent" \
             --environment production \
             --evaluation-dataset test_data/ai_config_evaluation.yaml \
-            --evaluator evaluators.local_evaluator:AgentsDemoEvaluator \
+            --evaluator direct \
             --report test-report.json
 
           TEST_EXIT_CODE=$?
 
-          echo "🛑 Stopping API..."
-          kill $API_PID 2>/dev/null || true
-
-          # If tests failed, dump API logs for debugging
-          if [ $TEST_EXIT_CODE -ne 0 ]; then
-            echo "===== /tmp/agents-demo-api.log ====="
-            if [ -f /tmp/agents-demo-api.log ]; then
-              tail -n 500 /tmp/agents-demo-api.log || true
-            else
-              echo "No API log found at /tmp/agents-demo-api.log"
-            fi
-          fi
-          
           exit $TEST_EXIT_CODE
 
       - name: Summarize test failures
@@ -353,13 +282,6 @@ jobs:
           name: judge-evaluation-logs
           path: logs/judge_evaluations/**
 
-      - name: Upload API server log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: api-server-log
-          path: /tmp/agents-demo-api.log
-
   sync-production:
     name: Sync Production Configs
     runs-on: ubuntu-latest
@@ -387,7 +309,7 @@ jobs:
           uv venv
           # Install dependencies without installing the package itself (to avoid dev dependency issues)
           uv pip install langchain langgraph langchain-anthropic fastapi "uvicorn[standard]" pydantic launchdarkly-server-sdk launchdarkly-server-sdk-ai numpy openai faiss-cpu PyMuPDF tiktoken streamlit requests python-dotenv PyYAML langchain-openai langchain-mcp-adapters beautifulsoup4 mcp semanticscholar rank-bm25 langchain-mistralai httpx boto3 langchain-aws
-          uv pip install git+https://x-access-token:${{ secrets.GH_PAT }}@github.com/launchdarkly-labs/scarlett_ai_configs_ci_cd-.git@feature/initial-implementation
+          uv pip install git+https://x-access-token:${{ secrets.GH_PAT }}@github.com/launchdarkly-labs/scarlett_ai_configs_ci_cd-.git@feature/user-friendly-setup
 
       - name: Validate required secrets
         run: |
