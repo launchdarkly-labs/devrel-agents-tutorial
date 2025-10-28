@@ -211,13 +211,17 @@ jobs:
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
         run: |
           # Create .env file for search tools and API access
+          # Use cat with heredoc to avoid GitHub Actions secret masking in command output
           echo "📝 Creating .env file for search tools and API access..."
-          echo "OPENAI_API_KEY=${OPENAI_API_KEY}" > .env
-          echo "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" >> .env
-          echo "MISTRAL_API_KEY=${MISTRAL_API_KEY}" >> .env
-          echo "LD_SDK_KEY=${LD_SDK_KEY}" >> .env
-          echo "LD_API_KEY=${LD_API_KEY}" >> .env
-          echo "LD_PROJECT_KEY=${LD_PROJECT_KEY}" >> .env
+          cat > .env << 'ENVEOF'
+OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
+MISTRAL_API_KEY=${{ secrets.MISTRAL_API_KEY }}
+LD_SDK_KEY=${{ secrets.LD_SDK_KEY }}
+LD_API_KEY=${{ secrets.LD_API_KEY }}
+LD_PROJECT_KEY=${{ secrets.LD_PROJECT_KEY }}
+ENVEOF
+          echo "✅ Environment file created"
 
           echo "🚀 Starting FastAPI server in background..."
           .venv/bin/uvicorn api.main:app --host 0.0.0.0 --port 8000 > /tmp/agents-demo-api.log 2>&1 &
@@ -314,6 +318,14 @@ jobs:
         with:
           name: judge-evaluation-logs
           path: logs/judge_evaluations/**
+
+      - name: Upload API server logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-server-logs
+          path: /tmp/agents-demo-api.log
+          if-no-files-found: warn
 
   sync-production:
     name: Sync Production Configs
