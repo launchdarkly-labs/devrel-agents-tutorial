@@ -211,15 +211,15 @@ jobs:
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
         run: |
           # Create .env file for search tools and API access
-          # Use cat with heredoc to avoid GitHub Actions secret masking in command output
+          # Reference environment variables to avoid GitHub Actions secret masking
           echo "📝 Creating .env file for search tools and API access..."
-          cat > .env << 'ENVEOF'
-OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
-MISTRAL_API_KEY=${{ secrets.MISTRAL_API_KEY }}
-LD_SDK_KEY=${{ secrets.LD_SDK_KEY }}
-LD_API_KEY=${{ secrets.LD_API_KEY }}
-LD_PROJECT_KEY=${{ secrets.LD_PROJECT_KEY }}
+          cat > .env << ENVEOF
+OPENAI_API_KEY=${OPENAI_API_KEY}
+ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+MISTRAL_API_KEY=${MISTRAL_API_KEY}
+LD_SDK_KEY=${LD_SDK_KEY}
+LD_API_KEY=${LD_API_KEY}
+LD_PROJECT_KEY=${LD_PROJECT_KEY}
 ENVEOF
           echo "✅ Environment file created"
 
