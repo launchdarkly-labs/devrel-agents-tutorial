@@ -220,6 +220,19 @@ jobs:
           printf "LD_PROJECT_KEY=%s\n" "$LD_PROJECT_KEY" >> .env
           echo "✅ Environment file created"
 
+          # Verify API keys are set (show first 10 chars only for security)
+          echo "🔍 Verifying API keys..."
+          if [ -n "$OPENAI_API_KEY" ]; then
+            echo "  OPENAI_API_KEY: ${OPENAI_API_KEY:0:10}... (${#OPENAI_API_KEY} chars)"
+          else
+            echo "  ⚠️  OPENAI_API_KEY is empty!"
+          fi
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            echo "  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:0:10}... (${#ANTHROPIC_API_KEY} chars)"
+          else
+            echo "  ⚠️  ANTHROPIC_API_KEY is empty!"
+          fi
+
           echo "🚀 Starting FastAPI server in background..."
           .venv/bin/uvicorn api.main:app --host 0.0.0.0 --port 8000 > /tmp/agents-demo-api.log 2>&1 &
           API_PID=$!
