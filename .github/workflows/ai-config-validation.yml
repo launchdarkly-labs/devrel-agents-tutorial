@@ -261,6 +261,7 @@ jobs:
             --evaluator http \
             --api-url http://localhost:8000 \
             --endpoint /chat \
+            --minimal-payload \
             --report test-report.json
 
           TEST_EXIT_CODE=$?
