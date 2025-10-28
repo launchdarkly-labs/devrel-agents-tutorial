@@ -77,9 +77,10 @@ def summarize_failures(evaluations: List[Dict[str, Any]]) -> None:
     print("🔍 TEST FAILURE SUMMARY")
     print("="*80 + "\n")
 
-    # Separate passed and failed tests
-    passed = [e for e in evaluations if e.get('scores', {}).get('overall', 0) >= 0.6]
-    failed = [e for e in evaluations if e.get('scores', {}).get('overall', 0) < 0.6]
+    # Separate passed and failed tests (using new field names)
+    # The new format uses 'passed' boolean and 'aggregate_score'
+    passed = [e for e in evaluations if e.get('passed', False)]
+    failed = [e for e in evaluations if not e.get('passed', True)]
 
     print(f"📊 Overall Results:")
     print(f"   ✅ Passed: {len(passed)}/{len(evaluations)}")
@@ -92,10 +93,16 @@ def summarize_failures(evaluations: List[Dict[str, Any]]) -> None:
 
     print("❌ Failed Tests:\n")
 
-    # Group failures by agent
+    # Group failures by agent/config
     by_agent = {}
     for eval_result in failed:
-        agent = eval_result.get('context', {}).get('agent', 'unknown')
+        # Extract agent from context_attributes or config_key
+        agent = eval_result.get('context_attributes', {}).get('agent', 'unknown')
+        if agent == 'unknown':
+            # Try to extract from config_key (e.g., "support-agent" → "support")
+            config_key = eval_result.get('config_key', 'unknown')
+            agent = config_key.replace('-agent', '') if '-agent' in config_key else config_key
+
         if agent not in by_agent:
             by_agent[agent] = []
         by_agent[agent].append(eval_result)
@@ -107,33 +114,59 @@ def summarize_failures(evaluations: List[Dict[str, Any]]) -> None:
         print(f"{'─'*80}\n")
 
         for result in results:
-            test_id = result.get('test_case_id', 'unknown')
-            test_input = result.get('input', 'N/A')
-            overall_score = result.get('scores', {}).get('overall', 0)
+            # Use new field names from JudgeLogEntry
+            test_id = result.get('case_id', 'unknown')
+            test_input = result.get('input_prompt', 'N/A')
+            aggregate_score = result.get('aggregate_score', 0)
+            threshold = result.get('threshold', 7.0)
 
             print(f"Test ID: {test_id}")
-            print(f"Score: {overall_score:.2f}")
+            print(f"Score: {aggregate_score:.2f}/{threshold}")
             print(f"Input: {test_input[:100]}..." if len(test_input) > 100 else f"Input: {test_input}")
             print()
 
-            # Show criterion scores
-            criteria_scores = result.get('scores', {}).get('criteria', {})
-            if criteria_scores:
+            # Show criterion scores from judge_parsed_scores
+            parsed_scores = result.get('judge_parsed_scores', [])
+            if parsed_scores:
                 print("Criterion Scores:")
-                for criterion, score in criteria_scores.items():
-                    emoji = "✅" if score >= 0.6 else "❌"
-                    print(f"  {emoji} {criterion}: {score:.2f}")
+                for score_obj in parsed_scores:
+                    criterion = score_obj.get('criterion', 'Unknown')
+                    score = score_obj.get('score', 0)
+                    emoji = "✅" if score >= 7.0 else "❌"
+                    print(f"  {emoji} {criterion}: {score:.1f}/10")
+
+                    # Show reasoning for this criterion
+                    reasoning = score_obj.get('reasoning', '')
+                    if reasoning:
+                        print(f"     → {reasoning}")
                 print()
 
-            # Show judge reasoning
-            reasoning = result.get('reasoning', 'No reasoning provided')
-            print("Judge Reasoning:")
-            print(f"  {reasoning[:300]}..." if len(reasoning) > 300 else f"  {reasoning}")
-            print()
+            # Show strengths/weaknesses/suggestions
+            strengths = result.get('strengths', [])
+            weaknesses = result.get('weaknesses', [])
+            suggestions = result.get('suggestions', [])
 
-            # Show actual response (truncated)
-            response = result.get('response', 'N/A')
-            print("System Response:")
+            if strengths:
+                print("Strengths:")
+                for strength in strengths:
+                    print(f"  ✓ {strength}")
+                print()
+
+            if weaknesses:
+                print("Weaknesses:")
+                for weakness in weaknesses:
+                    print(f"  ✗ {weakness}")
+                print()
+
+            if suggestions:
+                print("Suggestions:")
+                for suggestion in suggestions:
+                    print(f"  💡 {suggestion}")
+                print()
+
+            # Show actual AI response (truncated)
+            response = result.get('model_response', 'N/A')
+            print("AI Response:")
             print(f"  {response[:200]}..." if len(response) > 200 else f"  {response}")
             print()
 
