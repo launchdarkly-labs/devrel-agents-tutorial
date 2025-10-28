@@ -34,7 +34,10 @@ def search_v1(query: str) -> str:
         tool = SearchToolV1()
         return tool._run(query)
     except Exception as e:
-        return f"Search error: {str(e)}. Ensure vector embeddings are initialized with 'uv run initialize_embeddings.py'"
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"ERROR in search_v1: {type(e).__name__}: {str(e)}\n{error_details}")
+        return f"Search error: {type(e).__name__}: {str(e)}. If this persists, ensure vector embeddings are initialized with 'uv run initialize_embeddings.py'"
 
 
 def search_v2(query: str, top_k: int = 3) -> str:
@@ -58,7 +61,10 @@ def search_v2(query: str, top_k: int = 3) -> str:
         top_k = max(1, min(int(top_k), 20))
         return tool._run(query, top_k)
     except Exception as e:
-        return f"Search error: {str(e)}. Ensure vector embeddings are initialized with 'uv run initialize_embeddings.py'"
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"ERROR in search_v2: {type(e).__name__}: {str(e)}\n{error_details}")
+        return f"Search error: {type(e).__name__}: {str(e)}. If this persists, ensure vector embeddings are initialized with 'uv run initialize_embeddings.py'"
 
 
 def reranking(query: str, results: Optional[List[Dict[str, Any]]] = None) -> str:

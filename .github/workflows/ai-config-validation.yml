@@ -220,7 +220,7 @@ jobs:
           echo "LD_PROJECT_KEY=${LD_PROJECT_KEY}" >> .env
 
           echo "🚀 Starting FastAPI server in background..."
-          .venv/bin/uvicorn api.main:app --host 0.0.0.0 --port 8000 > api.log 2>&1 &
+          .venv/bin/uvicorn api.main:app --host 0.0.0.0 --port 8000 > /tmp/agents-demo-api.log 2>&1 &
           API_PID=$!
           echo $API_PID > api.pid
           echo "API server started with PID: $API_PID"
@@ -234,7 +234,7 @@ jobs:
             fi
             if [ $i -eq 30 ]; then
               echo "❌ API server failed to start within 30 seconds"
-              cat api.log
+              cat /tmp/agents-demo-api.log
               exit 1
             fi
             sleep 1
@@ -283,6 +283,16 @@ jobs:
         run: |
           echo "📊 Generating human-readable failure summary..."
           .venv/bin/python tools/summarize_test_failures.py || true
+
+          echo ""
+          echo "═══════════════════════════════════════════════════════════════════"
+          echo "📋 API SERVER LOGS (last 100 lines)"
+          echo "═══════════════════════════════════════════════════════════════════"
+          if [ -f /tmp/agents-demo-api.log ]; then
+            tail -n 100 /tmp/agents-demo-api.log
+          else
+            echo "⚠️  API log file not found at /tmp/agents-demo-api.log"
+          fi
 
       - name: Cleanup secrets
         if: always()
