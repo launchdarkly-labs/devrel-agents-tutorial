@@ -1,6 +1,9 @@
 name: AI Config Validation
 
-# Updated: 2025-10-24 08:20 - Testing with fixed search embeddings, variation tracking, and 0.40 error threshold
+# Uses HTTP evaluator for integration testing of multi-agent system
+# Tests full request flow: API → Supervisor → Security/Support agent routing
+# Validates that LaunchDarkly AI configs are properly selected and used
+#
 # Security Notes:
 # - pull_request_target is used to prevent external PRs from accessing secrets without approval
 # - External PRs require manual environment approval before secrets are exposed
@@ -198,21 +201,16 @@ jobs:
 
           echo "✅ MCP servers installed (available for research-enhanced variation)"
 
-      - name: Run tests with Direct evaluator
-        id: run-tests
+      - name: Start API server
         env:
           LD_SDK_KEY: ${{ secrets.LD_SDK_KEY }}
           LD_API_KEY: ${{ secrets.LD_API_KEY }}
           LD_PROJECT_KEY: ${{ secrets.LD_PROJECT_KEY }}
-          LD_CICD_SDK_KEY: ${{ secrets.LD_CICD_SDK_KEY }}
-          LD_CICD_PROJECT_KEY: ${{ secrets.LD_CICD_PROJECT_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
-          PYTHONPATH: ${{ github.workspace }}
-          CI_SAFE_MODE: true
         run: |
-          # Create .env file for tools that need API keys
+          # Create .env file for search tools and API access
           echo "📝 Creating .env file for search tools and API access..."
           echo "OPENAI_API_KEY=${OPENAI_API_KEY}" > .env
           echo "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}" >> .env
@@ -220,40 +218,64 @@ jobs:
           echo "LD_SDK_KEY=${LD_SDK_KEY}" >> .env
           echo "LD_API_KEY=${LD_API_KEY}" >> .env
           echo "LD_PROJECT_KEY=${LD_PROJECT_KEY}" >> .env
-          echo "LD_CICD_SDK_KEY=${LD_CICD_SDK_KEY}" >> .env
-          echo "LD_CICD_PROJECT_KEY=${LD_CICD_PROJECT_KEY}" >> .env
 
-          echo "🧪 Running AI Config test suite with Direct evaluator (no server needed)..."
-          echo "Working directory: $(pwd)"
-          echo "Test data file exists: $(test -f test_data/ai_config_evaluation.yaml && echo 'YES' || echo 'NO')"
+          echo "🚀 Starting FastAPI server in background..."
+          .venv/bin/uvicorn api.main:app --host 0.0.0.0 --port 8000 > api.log 2>&1 &
+          API_PID=$!
+          echo $API_PID > api.pid
+          echo "API server started with PID: $API_PID"
 
-          # Export all env vars so they're inherited by subprocesses
-          export LD_SDK_KEY="${LD_SDK_KEY}"
-          export LD_API_KEY="${LD_API_KEY}"
-          export LD_PROJECT_KEY="${LD_PROJECT_KEY}"
-          export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}"
-          export OPENAI_API_KEY="${OPENAI_API_KEY}"
-          export MISTRAL_API_KEY="${MISTRAL_API_KEY}"
-          export CI_SAFE_MODE="${CI_SAFE_MODE}"
+          # Wait for server to be ready
+          echo "⏳ Waiting for API server to be ready..."
+          for i in {1..30}; do
+            if curl -s http://localhost:8000/health > /dev/null 2>&1; then
+              echo "✅ API server is ready!"
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "❌ API server failed to start within 30 seconds"
+              cat api.log
+              exit 1
+            fi
+            sleep 1
+          done
 
-          # Debug: verify env vars are set
-          echo "🔍 Env vars check:"
-          echo "  LD_SDK_KEY: ${LD_SDK_KEY:0:10}... (${#LD_SDK_KEY} chars)"
-          echo "  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:+SET}"
-          echo "  OPENAI_API_KEY: ${OPENAI_API_KEY:+SET}"
-          echo "  MISTRAL_API_KEY: ${MISTRAL_API_KEY:+SET}"
+      - name: Run tests with HTTP evaluator
+        id: run-tests
+        env:
+          LD_CICD_SDK_KEY: ${{ secrets.LD_CICD_SDK_KEY }}
+          LD_CICD_PROJECT_KEY: ${{ secrets.LD_CICD_PROJECT_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          echo "🧪 Running AI Config test suite with HTTP evaluator (tests full multi-agent routing)..."
+          echo "API server URL: http://localhost:8000"
+          echo "Test data file: test_data/ai_config_evaluation.yaml"
 
-          # Run tests with Direct evaluator (calls AI configs directly via SDK)
+          # Run tests with HTTP evaluator (calls API endpoint to test full system)
           .venv/bin/ld-aic test \
             --config-keys "supervisor-agent,support-agent,security-agent" \
             --environment production \
             --evaluation-dataset test_data/ai_config_evaluation.yaml \
-            --evaluator direct \
+            --evaluator http \
+            --api-url http://localhost:8000 \
+            --endpoint /chat \
             --report test-report.json
 
           TEST_EXIT_CODE=$?
 
           exit $TEST_EXIT_CODE
+
+      - name: Stop API server
+        if: always()
+        run: |
+          if [ -f api.pid ]; then
+            API_PID=$(cat api.pid)
+            echo "🛑 Stopping API server (PID: $API_PID)..."
+            kill $API_PID || true
+            rm api.pid
+          fi
 
       - name: Summarize test failures
         if: failure()
