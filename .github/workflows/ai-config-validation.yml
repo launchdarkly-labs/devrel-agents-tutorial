@@ -244,6 +244,14 @@ jobs:
           fi
 
           echo "🚀 Starting FastAPI server in background..."
+          # Export cleaned environment variables for the server process
+          export OPENAI_API_KEY="$OPENAI_KEY"
+          export ANTHROPIC_API_KEY="$ANTHROPIC_KEY"
+          export MISTRAL_API_KEY="$MISTRAL_KEY"
+          export LD_SDK_KEY="$LD_SDK"
+          export LD_API_KEY="$LD_API"
+          export LD_PROJECT_KEY="$LD_PROJECT"
+
           .venv/bin/uvicorn api.main:app --host 0.0.0.0 --port 8000 > /tmp/agents-demo-api.log 2>&1 &
           API_PID=$!
           echo $API_PID > api.pid
