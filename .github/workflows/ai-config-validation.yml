@@ -211,24 +211,34 @@ jobs:
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
         run: |
           # Create .env file for search tools and API access
+          # Strip any trailing whitespace/newlines from secrets
           echo "📝 Creating .env file for search tools and API access..."
-          printf "OPENAI_API_KEY=%s\n" "$OPENAI_API_KEY" > .env
-          printf "ANTHROPIC_API_KEY=%s\n" "$ANTHROPIC_API_KEY" >> .env
-          printf "MISTRAL_API_KEY=%s\n" "$MISTRAL_API_KEY" >> .env
-          printf "LD_SDK_KEY=%s\n" "$LD_SDK_KEY" >> .env
-          printf "LD_API_KEY=%s\n" "$LD_API_KEY" >> .env
-          printf "LD_PROJECT_KEY=%s\n" "$LD_PROJECT_KEY" >> .env
+          OPENAI_KEY=$(echo "$OPENAI_API_KEY" | tr -d '\n\r')
+          ANTHROPIC_KEY=$(echo "$ANTHROPIC_API_KEY" | tr -d '\n\r')
+          MISTRAL_KEY=$(echo "$MISTRAL_API_KEY" | tr -d '\n\r')
+          LD_SDK=$(echo "$LD_SDK_KEY" | tr -d '\n\r')
+          LD_API=$(echo "$LD_API_KEY" | tr -d '\n\r')
+          LD_PROJECT=$(echo "$LD_PROJECT_KEY" | tr -d '\n\r')
+
+          {
+            echo "OPENAI_API_KEY=$OPENAI_KEY"
+            echo "ANTHROPIC_API_KEY=$ANTHROPIC_KEY"
+            echo "MISTRAL_API_KEY=$MISTRAL_KEY"
+            echo "LD_SDK_KEY=$LD_SDK"
+            echo "LD_API_KEY=$LD_API"
+            echo "LD_PROJECT_KEY=$LD_PROJECT"
+          } > .env
           echo "✅ Environment file created"
 
           # Verify API keys are set (show first 10 chars only for security)
           echo "🔍 Verifying API keys..."
-          if [ -n "$OPENAI_API_KEY" ]; then
-            echo "  OPENAI_API_KEY: ${OPENAI_API_KEY:0:10}... (${#OPENAI_API_KEY} chars)"
+          if [ -n "$OPENAI_KEY" ]; then
+            echo "  OPENAI_API_KEY: ${OPENAI_KEY:0:10}... (${#OPENAI_KEY} chars)"
           else
             echo "  ⚠️  OPENAI_API_KEY is empty!"
           fi
-          if [ -n "$ANTHROPIC_API_KEY" ]; then
-            echo "  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:0:10}... (${#ANTHROPIC_API_KEY} chars)"
+          if [ -n "$ANTHROPIC_KEY" ]; then
+            echo "  ANTHROPIC_API_KEY: ${ANTHROPIC_KEY:0:10}... (${#ANTHROPIC_KEY} chars)"
           else
             echo "  ⚠️  ANTHROPIC_API_KEY is empty!"
           fi
