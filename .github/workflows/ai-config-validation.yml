@@ -294,6 +294,8 @@ jobs:
             --api-url http://localhost:8000 \
             --endpoint /chat \
             --minimal-payload \
+            --judge-model claude-3-5-sonnet-20241022 \
+            --judge-provider anthropic \
             --report test-report.json
 
           TEST_EXIT_CODE=$?
