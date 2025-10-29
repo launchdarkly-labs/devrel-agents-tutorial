@@ -1,0 +1,439 @@
+name: AI Config Validation
+
+# Uses HTTP evaluator for integration testing of multi-agent system
+# Tests full request flow: API → Supervisor → Security/Support agent routing
+# Validates that LaunchDarkly AI configs are properly selected and used
+#
+# Security Notes:
+# - pull_request_target is used to prevent external PRs from accessing secrets without approval
+# - External PRs require manual environment approval before secrets are exposed
+# - .env file is cleaned up after each run to prevent secret leakage
+# - Artifacts are sanitized before upload
+
+on:
+  # Temporarily using pull_request for testing (will change back to pull_request_target)
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'LaunchDarkly environment to validate against'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+          - development
+
+jobs:
+  validate-configs:
+    name: Validate AI Configs
+    runs-on: ubuntu-latest
+    # Require manual approval for external PRs to prevent secret exposure
+    environment:
+      name: ci
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: |
+          uv venv
+          # Install dependencies without installing the package itself (to avoid dev dependency issues)
+          uv pip install langchain langgraph langchain-anthropic fastapi "uvicorn[standard]" pydantic launchdarkly-server-sdk launchdarkly-server-sdk-ai numpy openai faiss-cpu PyMuPDF tiktoken streamlit requests python-dotenv PyYAML langchain-openai langchain-mcp-adapters beautifulsoup4 mcp semanticscholar rank-bm25 langchain-mistralai httpx boto3 langchain-aws
+          uv pip install git+https://x-access-token:${{ secrets.GH_PAT }}@github.com/launchdarkly-labs/scarlett_ai_configs_ci_cd-.git@feature/user-friendly-setup
+
+      - name: Validate required secrets
+        run: |
+          if [ -z "${{ secrets.LD_SDK_KEY }}" ]; then
+            echo "::error::Missing required secret: LD_SDK_KEY"
+            exit 1
+          fi
+          if [ -z "${{ secrets.LD_API_KEY }}" ]; then
+            echo "::error::Missing required secret: LD_API_KEY"
+            exit 1
+          fi
+          echo "✅ Required secrets are configured"
+
+      - name: Run AI Config validation
+        env:
+          LD_SDK_KEY: ${{ secrets.LD_SDK_KEY }}
+          LD_API_KEY: ${{ secrets.LD_API_KEY }}
+          LD_PROJECT_KEY: ${{ secrets.LD_PROJECT_KEY }}
+        run: |
+          # Use ld-aic-cicd framework to validate our AI configs
+          .venv/bin/ld-aic validate \
+            --environment ${{ github.event.inputs.environment || 'production' }} \
+            --config-keys "supervisor-agent,support-agent,security-agent" \
+            --report validation-report.json \
+            --fail-on-error
+
+      - name: Upload validation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-report
+          path: validation-report.json
+
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const report = JSON.parse(fs.readFileSync('validation-report.json', 'utf8'));
+
+            let comment = '## 🔍 AI Config Validation Results\n\n';
+            comment += `**Environment:** ${report.environment}\n`;
+            comment += `**Total Configs:** ${report.total_configs}\n\n`;
+
+            // Count statuses
+            const configs = Object.values(report.configs);
+            const valid = configs.filter(c => c.valid).length;
+            const errors = configs.filter(c => c.errors.length > 0).length;
+            const warnings = configs.filter(c => c.warnings.length > 0).length;
+
+            // Summary
+            comment += '### Summary\n';
+            comment += `✅ Valid: ${valid}\n`;
+            comment += `❌ Errors: ${errors}\n`;
+            comment += `⚠️ Warnings: ${warnings}\n\n`;
+
+            // Details for problematic configs
+            if (errors > 0 || warnings > 0) {
+              comment += '### Issues Found\n';
+              for (const [key, config] of Object.entries(report.configs)) {
+                if (config.errors.length > 0 || config.warnings.length > 0) {
+                  comment += `\n**${key}**\n`;
+                  config.errors.forEach(e => comment += `- ❌ ${e}\n`);
+                  config.warnings.forEach(w => comment += `- ⚠️ ${w}\n`);
+                }
+              }
+            }
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  evaluate-configs:
+    name: Evaluate AI Configs with Judge
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
+    # Require manual approval for external PRs to prevent secret exposure
+    environment:
+      name: ci
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: |
+          uv venv
+          # Install dependencies without installing the package itself (to avoid dev dependency issues)
+          uv pip install langchain langgraph langchain-anthropic fastapi "uvicorn[standard]" pydantic launchdarkly-server-sdk launchdarkly-server-sdk-ai numpy openai faiss-cpu PyMuPDF tiktoken streamlit requests python-dotenv PyYAML langchain-openai langchain-mcp-adapters beautifulsoup4 mcp semanticscholar rank-bm25 langchain-mistralai httpx boto3 langchain-aws
+          uv pip install git+https://x-access-token:${{ secrets.GH_PAT }}@github.com/launchdarkly-labs/scarlett_ai_configs_ci_cd-.git@feature/user-friendly-setup
+
+      - name: Validate required secrets
+        run: |
+          # Check LaunchDarkly secrets
+          if [ -z "${{ secrets.LD_SDK_KEY }}" ]; then
+            echo "::error::Missing required secret: LD_SDK_KEY"
+            exit 1
+          fi
+
+          # Check at least one AI provider API key is set
+          if [ -z "${{ secrets.OPENAI_API_KEY }}" ] && [ -z "${{ secrets.ANTHROPIC_API_KEY }}" ]; then
+            echo "::error::At least one AI provider API key required: OPENAI_API_KEY or ANTHROPIC_API_KEY"
+            exit 1
+          fi
+
+          echo "✅ Required secrets are configured"
+
+      - name: Initialize vector embeddings
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          echo "📚 Initializing vector embeddings for search tools..."
+          .venv/bin/python initialize_embeddings.py
+
+      - name: Install MCP servers for research-enhanced variation
+        run: |
+          echo "📦 Installing MCP servers (ArXiv and Semantic Scholar)..."
+
+          # Install ArXiv MCP server
+          uv tool install arxiv-mcp-server
+
+          # Clone and set up Semantic Scholar MCP server
+          git clone https://github.com/JackKuo666/semanticscholar-MCP-Server.git
+
+          echo "✅ MCP servers installed (available for research-enhanced variation)"
+
+      - name: Start API server
+        env:
+          LD_SDK_KEY: ${{ secrets.LD_SDK_KEY }}
+          LD_API_KEY: ${{ secrets.LD_API_KEY }}
+          LD_PROJECT_KEY: ${{ secrets.LD_PROJECT_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+        run: |
+          # Create .env file for search tools and API access
+          # Strip any trailing whitespace/newlines from secrets
+          echo "📝 Creating .env file for search tools and API access..."
+          OPENAI_KEY=$(echo "$OPENAI_API_KEY" | tr -d '\n\r')
+          ANTHROPIC_KEY=$(echo "$ANTHROPIC_API_KEY" | tr -d '\n\r')
+          MISTRAL_KEY=$(echo "$MISTRAL_API_KEY" | tr -d '\n\r')
+          LD_SDK=$(echo "$LD_SDK_KEY" | tr -d '\n\r')
+          LD_API=$(echo "$LD_API_KEY" | tr -d '\n\r')
+          LD_PROJECT=$(echo "$LD_PROJECT_KEY" | tr -d '\n\r')
+
+          {
+            echo "OPENAI_API_KEY=$OPENAI_KEY"
+            echo "ANTHROPIC_API_KEY=$ANTHROPIC_KEY"
+            echo "MISTRAL_API_KEY=$MISTRAL_KEY"
+            echo "LD_SDK_KEY=$LD_SDK"
+            echo "LD_API_KEY=$LD_API"
+            echo "LD_PROJECT_KEY=$LD_PROJECT"
+          } > .env
+          echo "✅ Environment file created"
+
+          # Verify API keys are set (show first 10 chars only for security)
+          echo "🔍 Verifying API keys..."
+          if [ -n "$OPENAI_KEY" ]; then
+            echo "  OPENAI_API_KEY: ${OPENAI_KEY:0:10}... (${#OPENAI_KEY} chars)"
+          else
+            echo "  ⚠️  OPENAI_API_KEY is empty!"
+          fi
+          if [ -n "$ANTHROPIC_KEY" ]; then
+            echo "  ANTHROPIC_API_KEY: ${ANTHROPIC_KEY:0:10}... (${#ANTHROPIC_KEY} chars)"
+          else
+            echo "  ⚠️  ANTHROPIC_API_KEY is empty!"
+          fi
+
+          echo "🚀 Starting FastAPI server in background..."
+          # Export cleaned environment variables for the server process
+          export OPENAI_API_KEY="$OPENAI_KEY"
+          export ANTHROPIC_API_KEY="$ANTHROPIC_KEY"
+          export MISTRAL_API_KEY="$MISTRAL_KEY"
+          export LD_SDK_KEY="$LD_SDK"
+          export LD_API_KEY="$LD_API"
+          export LD_PROJECT_KEY="$LD_PROJECT"
+
+          .venv/bin/uvicorn api.main:app --host 0.0.0.0 --port 8000 > /tmp/agents-demo-api.log 2>&1 &
+          API_PID=$!
+          echo $API_PID > api.pid
+          echo "API server started with PID: $API_PID"
+
+          # Wait for server to be ready
+          echo "⏳ Waiting for API server to be ready..."
+          for i in {1..30}; do
+            if curl -s http://localhost:8000/health > /dev/null 2>&1; then
+              echo "✅ API server is ready!"
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "❌ API server failed to start within 30 seconds"
+              cat /tmp/agents-demo-api.log
+              exit 1
+            fi
+            sleep 1
+          done
+
+      - name: Run tests with HTTP evaluator
+        id: run-tests
+        env:
+          LD_CICD_SDK_KEY: ${{ secrets.LD_CICD_SDK_KEY }}
+          LD_CICD_PROJECT_KEY: ${{ secrets.LD_CICD_PROJECT_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          echo "🧪 Running AI Config test suite with HTTP evaluator (tests full multi-agent routing)..."
+          echo "API server URL: http://localhost:8000"
+          echo "Test data file: test_data/ai_config_evaluation.yaml"
+
+          # Run tests with HTTP evaluator (calls API endpoint to test full system)
+          .venv/bin/ld-aic test \
+            --config-keys "supervisor-agent,support-agent,security-agent" \
+            --environment production \
+            --evaluation-dataset test_data/ai_config_evaluation.yaml \
+            --evaluator http \
+            --api-url http://localhost:8000 \
+            --endpoint /chat \
+            --minimal-payload \
+            --report test-report.json
+
+          TEST_EXIT_CODE=$?
+
+          exit $TEST_EXIT_CODE
+
+      - name: Stop API server
+        if: always()
+        run: |
+          if [ -f api.pid ]; then
+            API_PID=$(cat api.pid)
+            echo "🛑 Stopping API server (PID: $API_PID)..."
+            kill $API_PID || true
+            rm api.pid
+          fi
+
+      - name: Summarize test failures
+        if: failure()
+        run: |
+          echo "📊 Generating human-readable failure summary..."
+          .venv/bin/python tools/summarize_test_failures.py || true
+
+          echo ""
+          echo "═══════════════════════════════════════════════════════════════════"
+          echo "📋 API SERVER LOGS (last 100 lines)"
+          echo "═══════════════════════════════════════════════════════════════════"
+          if [ -f /tmp/agents-demo-api.log ]; then
+            tail -n 100 /tmp/agents-demo-api.log
+          else
+            echo "⚠️  API log file not found at /tmp/agents-demo-api.log"
+          fi
+
+      - name: Cleanup secrets
+        if: always()
+        run: |
+          # Remove .env file containing secrets
+          rm -f .env
+          echo "🧹 Cleaned up .env file"
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: test-report.json
+
+      - name: Upload judge evaluation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: judge-evaluation-logs
+          path: logs/judge_evaluations/**
+
+      - name: Upload API server logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-server-logs
+          path: /tmp/agents-demo-api.log
+          if-no-files-found: warn
+
+  sync-production:
+    name: Sync Production Configs
+    runs-on: ubuntu-latest
+    # CONFIGURATION: Change 'main' to your production branch name (e.g., 'production', 'master', 'release')
+    # This job creates drift detection PRs when LaunchDarkly production configs change
+    # Only runs on pushes to your canonical production branch
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: |
+          uv venv
+          # Install dependencies without installing the package itself (to avoid dev dependency issues)
+          uv pip install langchain langgraph langchain-anthropic fastapi "uvicorn[standard]" pydantic launchdarkly-server-sdk launchdarkly-server-sdk-ai numpy openai faiss-cpu PyMuPDF tiktoken streamlit requests python-dotenv PyYAML langchain-openai langchain-mcp-adapters beautifulsoup4 mcp semanticscholar rank-bm25 langchain-mistralai httpx boto3 langchain-aws
+          uv pip install git+https://x-access-token:${{ secrets.GH_PAT }}@github.com/launchdarkly-labs/scarlett_ai_configs_ci_cd-.git@feature/user-friendly-setup
+
+      - name: Validate required secrets
+        run: |
+          if [ -z "${{ secrets.LD_API_KEY }}" ]; then
+            echo "::error::Missing required secret: LD_API_KEY"
+            exit 1
+          fi
+          if [ -z "${{ secrets.LD_PROJECT_KEY }}" ]; then
+            echo "::error::Missing required secret: LD_PROJECT_KEY"
+            exit 1
+          fi
+          echo "✅ Required secrets are configured"
+
+      - name: Sync production configs
+        env:
+          LD_API_KEY: ${{ secrets.LD_API_KEY }}
+          LD_PROJECT_KEY: ${{ secrets.LD_PROJECT_KEY }}
+        run: |
+          mkdir -p configs
+          .venv/bin/ld-aic sync \
+            --environment production \
+            --output-dir configs \
+            --format json \
+            --generate-module
+
+      - name: Check for drift
+        run: |
+          # Check if there are changes to commit
+          git diff --exit-code configs/ || echo "DRIFT_DETECTED=true" >> $GITHUB_ENV
+
+      - name: Create PR for config updates
+        if: env.DRIFT_DETECTED == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: 'Sync AI configs from production'
+          title: 'Sync AI Configs from Production'
+          body: |
+            ## 🔄 Production Config Sync
+
+            This PR updates the local AI config defaults to match production.
+
+            ### AI Configs Synced
+            - `supervisor-agent` - Multi-agent workflow orchestration
+            - `support-agent` - RAG + MCP research capabilities
+            - `security-agent` - PII detection and compliance
+
+            ### Changes
+            - Updated config snapshots in `configs/`
+            - Regenerated `configs/production_defaults.py`
+
+            Please review the changes to ensure they are expected.
+          branch: sync/production-configs
+          delete-branch: true

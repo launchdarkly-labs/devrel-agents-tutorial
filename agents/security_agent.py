@@ -117,8 +117,22 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
             from utils.bedrock_helpers import normalize_bedrock_provider
             import os
 
+            # CI_SAFE_MODE: Prefer OpenAI when Anthropic unavailable
+            def _select_provider_and_model(default_provider: str, default_model: str) -> tuple[str, str]:
+                ci = os.getenv("CI_SAFE_MODE", "").lower() in {"1", "true", "yes"}
+                anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+                openai_key = os.getenv("OPENAI_API_KEY")
+                if ci and (not anthropic_key) and openai_key:
+                    return ("openai", "gpt-4o-mini")
+                return (default_provider, default_model)
+
+            selected_provider, selected_model = _select_provider_and_model(
+                agent_config.provider.name,
+                agent_config.model.name
+            )
+
             # Normalize provider name to handle bedrock:anthropic format
-            normalized_provider = normalize_bedrock_provider(agent_config.provider.name)
+            normalized_provider = normalize_bedrock_provider(selected_provider)
             langchain_provider = map_provider_to_langchain(normalized_provider)
 
             # Check if we need to use Bedrock routing
@@ -132,7 +146,7 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
                         raise ValueError("Bedrock authentication requires AWS SSO session. Run: aws sso login")
 
                     # Use model ID directly from LaunchDarkly AI Config (FR-006 compliance)
-                    bedrock_model_id = agent_config.model.name
+                    bedrock_model_id = selected_model
 
                     # 🚨 DEBUG: Log what we received from LaunchDarkly
                     log_student("DEBUG SECURITY: LaunchDarkly AI Config details:")
@@ -151,21 +165,21 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
                 else:
                     # Fall back to direct API access for backward compatibility
                     # Route 'anthropic' through 'anthropic' provider directly when using api-key auth
-                    fallback_provider = 'anthropic' if agent_config.provider.name.lower() == 'anthropic' else langchain_provider
+                    fallback_provider = 'anthropic' if selected_provider.lower() == 'anthropic' else langchain_provider
                     base_model = init_chat_model(
-                        model=agent_config.model.name,
+                        model=selected_model,
                         model_provider=fallback_provider,
                         temperature=0.0
                     )
-                    log_student(f"SECURITY ROUTING: Using direct API for {agent_config.model.name} via {fallback_provider}")
+                    log_student(f"SECURITY ROUTING: Using direct API for {selected_model} via {fallback_provider}")
             else:
                 # Use standard LangChain initialization for non-Bedrock providers
                 base_model = init_chat_model(
-                    model=agent_config.model.name,
+                    model=selected_model,
                     model_provider=langchain_provider,
                     temperature=0.0
                 )
-                log_student(f"SECURITY ROUTING: Using {langchain_provider} for {agent_config.model.name}")
+                log_student(f"SECURITY ROUTING: Using {langchain_provider} for {selected_model}")
 
             # Use structured output for guaranteed PII format
             # include_raw=True preserves usage metadata for cost tracking
