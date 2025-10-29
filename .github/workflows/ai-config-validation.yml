@@ -58,7 +58,7 @@ jobs:
           uv venv
           # Install dependencies without installing the package itself (to avoid dev dependency issues)
           uv pip install langchain langgraph langchain-anthropic fastapi "uvicorn[standard]" pydantic launchdarkly-server-sdk launchdarkly-server-sdk-ai numpy openai faiss-cpu PyMuPDF tiktoken streamlit requests python-dotenv PyYAML langchain-openai langchain-mcp-adapters beautifulsoup4 mcp semanticscholar rank-bm25 langchain-mistralai httpx boto3 langchain-aws
-          uv pip install git+https://x-access-token:${{ secrets.GH_PAT }}@github.com/launchdarkly-labs/ld-aic-cicd-.git@feature/user-friendly-setup
+          uv pip install git+https://x-access-token:${{ secrets.GH_PAT }}@github.com/launchdarkly-labs/scarlett_ai_configs_ci_cd-.git@feature/user-friendly-setup
 
       - name: Validate required secrets
         run: |
@@ -164,7 +164,7 @@ jobs:
           uv venv
           # Install dependencies without installing the package itself (to avoid dev dependency issues)
           uv pip install langchain langgraph langchain-anthropic fastapi "uvicorn[standard]" pydantic launchdarkly-server-sdk launchdarkly-server-sdk-ai numpy openai faiss-cpu PyMuPDF tiktoken streamlit requests python-dotenv PyYAML langchain-openai langchain-mcp-adapters beautifulsoup4 mcp semanticscholar rank-bm25 langchain-mistralai httpx boto3 langchain-aws
-          uv pip install git+https://x-access-token:${{ secrets.GH_PAT }}@github.com/launchdarkly-labs/ld-aic-cicd-.git@feature/user-friendly-setup
+          uv pip install git+https://x-access-token:${{ secrets.GH_PAT }}@github.com/launchdarkly-labs/scarlett_ai_configs_ci_cd-.git@feature/user-friendly-setup
 
       - name: Validate required secrets
         run: |
@@ -382,7 +382,7 @@ jobs:
           uv venv
           # Install dependencies without installing the package itself (to avoid dev dependency issues)
           uv pip install langchain langgraph langchain-anthropic fastapi "uvicorn[standard]" pydantic launchdarkly-server-sdk launchdarkly-server-sdk-ai numpy openai faiss-cpu PyMuPDF tiktoken streamlit requests python-dotenv PyYAML langchain-openai langchain-mcp-adapters beautifulsoup4 mcp semanticscholar rank-bm25 langchain-mistralai httpx boto3 langchain-aws
-          uv pip install git+https://x-access-token:${{ secrets.GH_PAT }}@github.com/launchdarkly-labs/ld-aic-cicd-.git@feature/user-friendly-setup
+          uv pip install git+https://x-access-token:${{ secrets.GH_PAT }}@github.com/launchdarkly-labs/scarlett_ai_configs_ci_cd-.git@feature/user-friendly-setup
 
       - name: Validate required secrets
         run: |
