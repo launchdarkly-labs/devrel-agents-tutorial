@@ -47,8 +47,7 @@ jobs:
         uses: astral-sh/setup-uv@v3
         with:
           version: "latest"
-          enable-cache: true
-          cache-dependency-glob: "**/pyproject.toml"
+          enable-cache: false  # Disable cache to ensure fresh test runs
 
       - name: Set up Python
         run: uv python install
@@ -153,8 +152,7 @@ jobs:
         uses: astral-sh/setup-uv@v3
         with:
           version: "latest"
-          enable-cache: true
-          cache-dependency-glob: "**/pyproject.toml"
+          enable-cache: false  # Disable cache to ensure fresh test runs
 
       - name: Set up Python
         run: uv python install
@@ -285,6 +283,17 @@ jobs:
           echo "API server URL: http://localhost:8000"
           echo "Test data file: test_data/ai_config_evaluation.yaml"
 
+          # PROOF OF EXECUTION: Show current timestamp
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "🕐 TEST EXECUTION START TIME: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "🔍 Workflow Run ID: ${{ github.run_id }}"
+          echo "📝 Commit SHA: ${{ github.sha }}"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+          # Delete any cached logs/reports from previous runs
+          rm -rf logs/judge_evaluations/*.log logs/judge_evaluations/*.jsonl test-report.json
+          echo "🧹 Cleared old test artifacts to ensure fresh run"
+
           # Run tests with HTTP evaluator (calls API endpoint to test full system)
           .venv/bin/ld-aic test \
             --config-keys "supervisor-agent,support-agent,security-agent" \
@@ -297,6 +306,13 @@ jobs:
             --report test-report.json
 
           TEST_EXIT_CODE=$?
+
+          # PROOF OF EXECUTION: Show completion timestamp and verify new logs were created
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "🕐 TEST EXECUTION END TIME: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          echo "📊 Verifying new test artifacts were created:"
+          ls -lh test-report.json logs/judge_evaluations/ 2>/dev/null || echo "⚠️  Warning: Expected test artifacts not found!"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
           exit $TEST_EXIT_CODE
 
@@ -371,8 +387,7 @@ jobs:
         uses: astral-sh/setup-uv@v3
         with:
           version: "latest"
-          enable-cache: true
-          cache-dependency-glob: "**/pyproject.toml"
+          enable-cache: false  # Disable cache to ensure fresh test runs
 
       - name: Set up Python
         run: uv python install
