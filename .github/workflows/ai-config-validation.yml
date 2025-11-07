@@ -419,6 +419,7 @@ jobs:
 
       - name: Sync production configs
         env:
+          LD_SDK_KEY: ${{ secrets.LD_SDK_KEY }}
           LD_API_KEY: ${{ secrets.LD_API_KEY }}
           LD_PROJECT_KEY: ${{ secrets.LD_PROJECT_KEY }}
         run: |
