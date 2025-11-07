@@ -420,7 +420,7 @@ jobs:
       - name: Sync production configs
         env:
           LD_API_KEY: ${{ secrets.LD_API_KEY }}
-          LD_PROJECT_KEY: ${{ secrets.LD_PROJECT_KEY }}
+          LD_PROJECT_KEY: multi-agent-chatbot  # HARDCODED - GitHub secret is wrong
         run: |
           echo "🔄 Syncing AI configs from LaunchDarkly production..."
           echo "Project: $LD_PROJECT_KEY"
