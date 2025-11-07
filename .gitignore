@@ -64,6 +64,11 @@ test_tutorial_2.py
 test_tools_loading.py
 data/mythical_pets_kb.py
 
+# Test artifacts (generated during CI/local testing)
+test-report.json
+test_direct_evaluator.py
+test_rl_query.py
+
 # Vector store data - committed for CI reliability
 # Note: Embeddings are committed to avoid OpenAI API calls in CI
 # To rebuild: python initialize_embeddings.py --force

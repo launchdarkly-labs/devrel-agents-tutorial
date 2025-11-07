@@ -10,7 +10,7 @@ Use this for runtime fallbacks when LaunchDarkly is unavailable.
 """
 from ld_aic_cicd.types import AIConfigDefaults
 
-# Last synced: 2025-11-07T13:00:10.471693 (for reference only)
+# Last synced: 2025-11-07T13:20:42.200668 (for reference only)
 
 # Production defaults synchronized from LaunchDarkly
 PRODUCTION_DEFAULTS = {
