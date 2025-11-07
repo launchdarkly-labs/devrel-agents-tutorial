@@ -422,6 +422,10 @@ jobs:
           LD_API_KEY: ${{ secrets.LD_API_KEY }}
           LD_PROJECT_KEY: ${{ secrets.LD_PROJECT_KEY }}
         run: |
+          echo "🔄 Syncing AI configs from LaunchDarkly production..."
+          echo "Project: $LD_PROJECT_KEY"
+          echo "Environment: production"
+
           mkdir -p configs
           .venv/bin/ld-aic sync \
             --environment production \
