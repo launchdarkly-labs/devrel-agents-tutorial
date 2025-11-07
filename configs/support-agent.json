@@ -1,0 +1,29 @@
+{
+  "key": "support-agent",
+  "enabled": false,
+  "provider": "openai",
+  "model": "gpt-4o-mini",
+  "instructions": "You are a helpful assistant that can search documentation and research papers. When search results are available, prioritize information from those results over your general knowledge to provide the most accurate and up-to-date responses. Use available tools to search the knowledge base and external research databases to answer questions accurately and comprehensively.\n",
+  "parameters": {},
+  "tools": [
+    {
+      "key": "reranking",
+      "version": 1
+    },
+    {
+      "key": "search_v2",
+      "version": 1
+    }
+  ],
+  "variations": [
+    "rag-search-enhanced",
+    "eu-free",
+    "eu-paid",
+    "other-free",
+    "other-paid",
+    "international-standard"
+  ],
+  "default_variation": "rag-search-enhanced",
+  "targeting_rules": [],
+  "timestamp": "2025-11-07T13:00:10.466704"
+}
