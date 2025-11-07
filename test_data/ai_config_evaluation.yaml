@@ -1,0 +1,187 @@
+# AI Config Evaluation Dataset for Agents Demo
+# Tests for supervisor-agent, support-agent, and security-agent
+# Updated to test against Reinforcement Learning knowledge base (Sutton & Barto)
+# Uses standardized evaluation criteria for consistent, aggregatable metrics
+
+# Standardized evaluation criteria applied to ALL test cases
+# This enables meaningful aggregation and comparison across all tests
+default_evaluation_criteria:
+  - name: Relevance
+    description: "Does the response directly address the user's question or request?"
+    weight: 2.0
+
+  - name: Accuracy
+    description: "Is the information factually correct and reliable?"
+    weight: 2.0
+
+  - name: Completeness
+    description: "Does the response fully answer the question without missing key information?"
+    weight: 1.5
+
+  - name: Clarity
+    description: "Is the response clear, well-structured, and easy to understand?"
+    weight: 1.5
+
+  - name: Helpfulness
+    description: "Does the response provide practical, actionable value to the user?"
+    weight: 1.0
+
+cases:
+  # Support Agent: Basic RL Query
+  - id: support_rl_basic
+    input: "What is a Markov Decision Process and why is it important in reinforcement learning?"
+    context:
+      user_type: "customer"
+      query_type: "basic"
+      agent: "support"
+      country: "US"
+      plan: "free"
+    reference_response: |
+      A Markov Decision Process (MDP) is a mathematical framework for modeling decision-making where outcomes are partly random and partly under the control of an agent.
+      MDPs are fundamental to RL because they provide a formal way to describe the interaction between an agent and its environment.
+
+  # Support Agent: Technical RL Concept
+  - id: support_rl_value_functions
+    input: "Can you explain the difference between state-value functions and action-value functions?"
+    context:
+      user_type: "developer"
+      query_type: "technical"
+      agent: "support"
+      country: "DE"
+      plan: "paid"
+
+  # Support Agent: RL Algorithms
+  - id: support_rl_algorithms
+    input: "What is Q-learning and how does it differ from SARSA?"
+    context:
+      user_type: "enterprise"
+      query_type: "technical"
+      agent: "support"
+      country: "US"
+      plan: "paid"
+
+  # Support Agent: Advanced RL Topic
+  - id: support_rl_exploration
+    input: "What is the exploration-exploitation trade-off and why is it challenging?"
+    context:
+      user_type: "architect"
+      query_type: "advanced"
+      agent: "support"
+      technical_level: "expert"
+      country: "FR"
+      plan: "paid"
+
+  # Support Agent: RL Fundamentals
+  - id: support_rl_bellman
+    input: "Can you explain the Bellman equation and its role in reinforcement learning?"
+    context:
+      user_type: "developer"
+      query_type: "technical"
+      agent: "support"
+      country: "DE"
+      plan: "free"
+
+  # Support Agent: RL Methods
+  - id: support_rl_temporal_difference
+    input: "What are temporal-difference learning methods and what advantages do they have?"
+    context:
+      user_type: "developer"
+      query_type: "technical"
+      agent: "support"
+      country: "US"
+      plan: "paid"
+
+  # Security Agent: PII Detection - Email
+  - id: security_pii_email
+    input: "My email is john.doe@example.com and I need help with reinforcement learning concepts."
+    context:
+      user_type: "customer"
+      query_type: "support"
+      agent: "security"
+      pii_expected: true
+
+  # Security Agent: PII Detection - Phone Number
+  - id: security_pii_phone
+    input: "Please call me at 555-123-4567 to discuss Q-learning algorithms."
+    context:
+      user_type: "customer"
+      query_type: "support"
+      agent: "security"
+      pii_expected: true
+
+  # Security Agent: PII Detection - SSN
+  - id: security_pii_ssn
+    input: "My SSN is 123-45-6789, can you help me understand policy gradient methods?"
+    context:
+      user_type: "customer"
+      query_type: "support"
+      agent: "security"
+      pii_expected: true
+      sensitivity: "critical"
+
+  # Security Agent: No PII - Safe Query
+  - id: security_no_pii
+    input: "What are the best practices for implementing Monte Carlo methods in RL?"
+    context:
+      user_type: "developer"
+      query_type: "technical"
+      agent: "security"
+      pii_expected: false
+
+  # Supervisor Agent: Routing to Support
+  - id: supervisor_route_support
+    input: "Can you help me understand how value iteration works?"
+    context:
+      user_type: "customer"
+      query_type: "general"
+      agent: "supervisor"
+      expected_route: "support"
+
+  # Supervisor Agent: Routing to Security
+  - id: supervisor_route_security
+    input: "I accidentally posted my credit card number 4532-1234-5678-9010 in the chat. Can you delete it?"
+    context:
+      user_type: "customer"
+      query_type: "security"
+      agent: "supervisor"
+      expected_route: "security"
+      pii_expected: true
+
+  # Supervisor Agent: Complex Multi-Turn
+  - id: supervisor_multi_turn
+    input: "First, explain policy gradient methods, then help me check if my message contains any sensitive information."
+    context:
+      user_type: "developer"
+      query_type: "complex"
+      agent: "supervisor"
+      multi_agent_expected: true
+
+  # Edge Case: Ambiguous Query
+  - id: edge_ambiguous
+    input: "It's not working"
+    context:
+      user_type: "customer"
+      query_type: "vague"
+      agent: "supervisor"
+
+  # Performance Test: Quick Response
+  - id: performance_simple
+    input: "What is the reward signal in reinforcement learning?"
+    context:
+      user_type: "customer"
+      query_type: "simple"
+      agent: "support"
+      performance_critical: true
+      country: "US"
+      plan: "free"
+
+  # Enterprise User: High-Value Query
+  - id: enterprise_rl_comparison
+    input: "We're implementing RL for our production system. Can you compare model-free vs model-based approaches and their trade-offs?"
+    context:
+      user_type: "enterprise"
+      plan: "paid"
+      query_type: "research"
+      agent: "support"
+      high_value: true
+      country: "FR"

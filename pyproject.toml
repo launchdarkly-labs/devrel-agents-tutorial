@@ -47,3 +47,9 @@ dev = [
     "pytest-asyncio>=1.1.0",
     "ruff>=0.14.1",
 ]
+
+# Note: ld-aic-cicd is installed separately in CI via GitHub
+# See .github/workflows/ai-config-validation.yml for installation
+
+[tool.setuptools]
+packages = ["api", "agents"]
