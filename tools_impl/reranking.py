@@ -11,7 +11,7 @@ class RerankingInput(BaseModel):
 
 class RerankingTool(BaseTool):
     name: str = "reranking"
-    description: str = "Reorders results by relevance using BM25 algorithm"
+    description: str = "Rerank search results by relevance. Use after search to improve result ordering."
     args_schema: type[BaseModel] = RerankingInput
     
     def _tokenize(self, text: str) -> List[str]:

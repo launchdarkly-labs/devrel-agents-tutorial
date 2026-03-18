@@ -9,7 +9,7 @@ class SearchV1Input(BaseModel):
 
 class SearchToolV1(BaseTool):
     name: str = "search_v1"
-    description: str = "Basic keyword-based search through enterprise documentation"
+    description: str = "Keyword search through the knowledge base. Use for finding specific terms and concepts."
     args_schema: Any = SearchV1Input
     vector_store: Any = None
     

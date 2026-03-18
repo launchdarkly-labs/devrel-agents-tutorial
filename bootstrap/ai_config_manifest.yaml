@@ -67,32 +67,30 @@ project:
 
   # Tool definitions
   tool:
-    # Part 1 tools
     - key: "search_v2"
       name: "Semantic Vector Search"
-      description: "Semantic search using vector embeddings"
+      description: "Search the knowledge base using semantic similarity. Use for technical questions and concepts."
       type: "function"
 
     - key: "reranking"
       name: "BM25 Relevance Scoring"
-      description: "Reorders results by relevance using BM25 algorithm"
+      description: "Rerank search results by relevance. Use after search to improve result ordering."
       type: "function"
 
-    # Part 2 tools
     - key: "search_v1"
       name: "Basic Keyword Search"
-      description: "Simple keyword search through knowledge base"
+      description: "Keyword search through the knowledge base. Use for finding specific terms."
       type: "function"
 
     - key: "arxiv_search"
       name: "ArXiv Academic Search"
-      description: "Search academic papers from ArXiv database"
+      description: "Search academic papers on ArXiv."
       type: "mcp"
       server: "arxiv-mcp-server"
 
     - key: "semantic_scholar"
       name: "Semantic Scholar Research"
-      description: "Access Semantic Scholar citation database"
+      description: "Search Semantic Scholar for academic papers and citations."
       type: "mcp"
       server: "semanticscholar-MCP-Server"
 
@@ -215,7 +213,7 @@ project:
             modelId: "Anthropic.claude-sonnet-4-20250514"
           tools: ["search_v2", "reranking"]
           instructions: |
-            You are a helpful assistant that can search documentation and research papers. When search results are available, prioritize information from those results over your general knowledge to provide the most accurate and up-to-date responses. Use available tools to search the knowledge base and external research databases to answer questions accurately and comprehensively.
+            You are a helpful assistant. Use your available tools to search for information when answering questions about technical topics or documentation. Cite your sources when using search results.
           customParameters:
             max_tool_calls: 5
 
@@ -256,7 +254,7 @@ project:
             modelId: "OpenAI.gpt-4o"
           tools: ["search_v1", "search_v2", "reranking", "arxiv_search", "semantic_scholar"]
           instructions: |
-            You are a premium research specialist with access to comprehensive RAG tools: search_v1 (basic search), search_v2 (semantic vector search), reranking (BM25 relevance scoring), arxiv_search (academic papers), and semantic_scholar (citation database). When using semantic_scholar, always request fewer than 5 results to optimize performance. When search results are available, prioritize information from those results over your general knowledge. Provide comprehensive, well-researched responses with source attribution.
+            You are a premium research specialist. Use your available tools to search for information when answering questions about technical topics, research, or documentation. Cite your sources when using search results.
           customParameters:
             max_tool_calls: 20
 

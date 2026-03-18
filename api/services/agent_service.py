@@ -124,6 +124,11 @@ class AgentGraphExecutor:
                 duration_ms = int((time.time() - node_start) * 1000)
                 self._track_duration(graph_tracker, graph_key, config, duration_ms)
 
+                # Track tool calls to LaunchDarkly
+                if graph_tracker and result.get("tool_calls"):
+                    for tool_name in result["tool_calls"]:
+                        graph_tracker.track_tool_call(node_key, tool_name)
+
                 # Update context with results (generic)
                 self._update_context(node_key, config, result, ctx)
 

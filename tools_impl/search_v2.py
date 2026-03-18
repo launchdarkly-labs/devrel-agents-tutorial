@@ -48,7 +48,7 @@ def _cached_search(query: str, top_k: int, min_score: float) -> List[Tuple[str, 
 class SearchToolV2(BaseTool):
     """Advanced vector-based semantic search through enterprise documentation."""
     name: str = "search_v2"
-    description: str = "Semantic search using vector embeddings"
+    description: str = "Semantic search through the knowledge base. Use for technical questions and concepts."
     args_schema: type[BaseModel] = SearchV2Input
 
     # exclude heavy objects from Pydantic serialization

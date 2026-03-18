@@ -21,7 +21,8 @@ def create_generic_agent(agent_config, config_manager, valid_routes: List[str] =
         valid_routes: List of valid route values from outgoing edges (e.g., ["security", "support"])
     """
     from agents.ld_agent_helpers import (
-        create_model_for_config, _rate_limit_llm_call
+        create_model_for_config, _rate_limit_llm_call,
+        wrap_tool_with_counter, ToolCallCounter
     )
     from tools_impl.dynamic_tool_factory import create_dynamic_tools_from_launchdarkly
     from ldai.tracker import TokenUsage
@@ -104,13 +105,32 @@ def create_generic_agent(agent_config, config_manager, valid_routes: List[str] =
             """Execute using ReAct agent with tools."""
             from langgraph.prebuilt import create_react_agent
 
+            # Get max_tool_calls from config
+            max_tool_calls = 20  # Default higher for tool-using agents
+            try:
+                config_dict = agent_config.to_dict()
+                # Try multiple possible paths for custom parameters
+                custom = config_dict.get('model', {}).get('custom', {}) or {}
+                if not custom:
+                    custom = config_dict.get('model', {}).get('parameters', {}).get('custom', {}) or {}
+                if 'max_tool_calls' in custom:
+                    max_tool_calls = int(custom['max_tool_calls'])
+                    log_student(f"CONFIG: max_tool_calls={max_tool_calls} from LaunchDarkly")
+            except Exception as e:
+                log_student(f"CONFIG: using default max_tool_calls={max_tool_calls}")
+
+            # Wrap tools with counter for logging
+            counter = ToolCallCounter(max_calls=max_tool_calls)
+            wrapped_tools = [wrap_tool_with_counter(t, counter) for t in self.tools]
+            recursion_limit = max_tool_calls * 3 + 10
+
             agent = create_react_agent(
                 model=model,
-                tools=self.tools,
+                tools=wrapped_tools,
                 prompt=instructions
             )
 
-            result = await agent.ainvoke({"messages": messages})
+            result = await agent.ainvoke({"messages": messages}, {"recursion_limit": recursion_limit})
 
             # Extract response and tool calls
             response_text = ""
@@ -123,8 +143,9 @@ def create_generic_agent(agent_config, config_manager, valid_routes: List[str] =
                         response_text = msg.content
                     if hasattr(msg, 'tool_calls') and msg.tool_calls:
                         for tc in msg.tool_calls:
-                            tool_name = tc.get('name', 'unknown')
-                            if tool_name not in tool_calls:
+                            # Handle both dict and object access
+                            tool_name = tc.get('name') if isinstance(tc, dict) else getattr(tc, 'name', None)
+                            if tool_name and tool_name not in tool_calls:
                                 tool_calls.append(tool_name)
                     if hasattr(msg, 'usage_metadata') and msg.usage_metadata:
                         token_usage = {

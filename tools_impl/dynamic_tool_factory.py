@@ -128,7 +128,7 @@ def _create_dynamic_search_v2(tool_config: Dict[str, Any]) -> BaseTool:
     # Create dynamic tool class
     class DynamicSearchToolV2(BaseTool):
         name: str = "search_v2"
-        description: str = "Semantic search using vector embeddings"
+        description: str = "Semantic search through the knowledge base. Use for technical questions and concepts."
         args_schema: type[BaseModel] = DynamicSearchV2Input
 
         def _run(self, query: str, top_k: int = 3) -> str:
@@ -178,7 +178,7 @@ def _create_dynamic_reranking_tool(tool_config: Dict[str, Any]) -> BaseTool:
     # Create dynamic tool class
     class DynamicRerankingTool(BaseTool):
         name: str = "reranking"
-        description: str = "Reorders results by relevance using BM25 algorithm"
+        description: str = "Rerank search results by relevance. Use after search to improve result ordering."
         args_schema: type[BaseModel] = DynamicRerankingInput
 
         def _run(self, query: str, results: List[Dict[str, Any]] = None, **kwargs) -> str:
