@@ -43,14 +43,15 @@ class MCPResearchTools:
             
             server_configs = {}
             
-            # ArXiv MCP Server - only add if path is configured
-            arxiv_path = os.getenv('ARXIV_MCP_SERVER_PATH')
-            if arxiv_path and os.path.exists(arxiv_path):
+            # ArXiv MCP Server - run Python module directly
+            arxiv_python = os.getenv('ARXIV_MCP_PYTHON')
+            arxiv_module = os.getenv('ARXIV_MCP_MODULE', 'arxiv_mcp_server.server')
+            if arxiv_python and os.path.exists(arxiv_python):
                 server_configs["arxiv"] = {
-                    "command": arxiv_path,
-                    "args": ["--storage-path", "/tmp/arxiv-papers"]
+                    "command": arxiv_python,
+                    "args": ["-m", arxiv_module]
                 }
-                print(f"  MCP: ArXiv server configured at {arxiv_path}")
+                print(f"  MCP: ArXiv server configured with {arxiv_python} -m {arxiv_module}")
             
             # Semantic Scholar MCP Server - only add if path is configured
             semantic_path = os.getenv('SEMANTIC_SCHOLAR_SERVER_PATH')

@@ -503,13 +503,6 @@ for message in st.session_state.messages:
                     # Fallback for old format
                     st.json(metadata)
             
-            with st.expander("Backend Console Output"):
-                if message["metadata"].get("console_logs"):
-                    for log in message["metadata"]["console_logs"]:
-                        st.code(log, language="text")
-                else:
-                    st.markdown("*Console output not captured*")
-
 # Handle input sources
 prompt = None
 
@@ -554,10 +547,7 @@ if prompt:
         
         if response.status_code == 200:
             data = response.json()
-            
-            # Extract console logs if available
-            console_logs = data.get("console_logs", [])
-            
+
             # SECURITY BOUNDARY: Extract sanitized messages from security agent
             # Support agent only ever sees these PII-free versions
             sanitized_user_message = prompt  # Default fallback
@@ -583,8 +573,7 @@ if prompt:
             metadata = {
                 "primary_variation": data["variation_key"],
                 "primary_model": data["model"],
-                "tools_used": data["tool_calls"],
-                "console_logs": console_logs
+                "tools_used": data["tool_calls"]
             }
             
             # Add individual agent configurations if available
@@ -750,13 +739,6 @@ if prompt:
                             
                         st.json(config_data)
                 
-                with st.expander("Backend Console Output"):
-                    if metadata.get("console_logs"):
-                        for log in metadata["console_logs"]:
-                            st.code(log, language="text")
-                    else:
-                        st.markdown("*Console output not captured*")
-
             # Clear example query only after successful processing to avoid losing it on reruns
             if "example_query" in st.session_state and st.session_state.example_query == prompt:
                 del st.session_state.example_query

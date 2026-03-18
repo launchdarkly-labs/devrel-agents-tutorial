@@ -9,12 +9,12 @@ dependencies = [
     "langgraph>=0.0.40",
     "langchain-anthropic>=0.1.0",
     # Web Framework
-    "fastapi>=0.104.0",
-    "uvicorn[standard]>=0.24.0",
-    "pydantic>=2.0.0",
-    # LaunchDarkly
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic>=2.10.0",
+    # LaunchDarkly (using currently available versions; update to >=10.0.0 / >=1.0.0 at GA)
     "launchdarkly-server-sdk>=9.0.0",
-    "launchdarkly-server-sdk-ai>=0.1.0",
+    "launchdarkly-server-sdk-ai>=0.10.0",
     # AWS Bedrock Integration
     "langchain-aws>=0.2.0",
     "boto3>=1.35.0",
@@ -53,3 +53,6 @@ dev = [
 
 [tool.setuptools]
 packages = ["api", "agents"]
+
+[tool.uv.sources]
+launchdarkly-server-sdk-ai = { git = "https://github.com/launchdarkly/python-server-sdk-ai", subdirectory = "packages/sdk/server-ai", rev = "main" }

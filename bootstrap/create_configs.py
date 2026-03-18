@@ -19,10 +19,57 @@ class MultiAgentBootstrap:
         self.overwrite = False
         self.headers = {
             "Authorization": api_key,
-            "LD-API-Version": "beta", 
+            "LD-API-Version": "beta",
             "Content-Type": "application/json"
         }
-    
+
+    def create_project(self, project_key, project_name=None):
+        """Create a LaunchDarkly project if it doesn't exist"""
+        url = f"{self.base_url}/api/v2/projects"
+
+        # Check if project exists
+        check_url = f"{self.base_url}/api/v2/projects/{project_key}"
+        check_response = requests.get(check_url, headers=self.headers, timeout=30)
+
+        if check_response.status_code == 200:
+            print(f"  ✅ Project '{project_key}' exists")
+            # Extract SDK keys
+            project_data = check_response.json()
+            environments = project_data.get("environments", {})
+            if "items" in environments:
+                for env in environments["items"]:
+                    if env.get("key") == "production":
+                        sdk_key = env.get("apiKey")
+                        if sdk_key:
+                            print(f"     SDK Key (production): {sdk_key}")
+            return True
+
+        # Create project
+        name = project_name or project_key.replace("-", " ").title()
+        payload = {
+            "key": project_key,
+            "name": name
+        }
+
+        response = requests.post(url, headers=self.headers, json=payload, timeout=30)
+
+        if response.status_code in [200, 201]:
+            print(f"  ✅ Project '{project_key}' created")
+            # Extract SDK keys from response
+            project_data = response.json()
+            environments = project_data.get("environments", {})
+            if "items" in environments:
+                for env in environments["items"]:
+                    env_key = env.get("key")
+                    sdk_key = env.get("apiKey")
+                    if sdk_key:
+                        print(f"     SDK Key ({env_key}): {sdk_key}")
+            time.sleep(1)  # Wait for project to be ready
+            return True
+        else:
+            print(f"  ❌ Failed to create project: {response.text}")
+            return False
+
     def create_segment(self, project_key, segment_data):
         """Create user segment for targeting using two-step process"""
         url = f"{self.base_url}/api/v2/segments/{project_key}/production"
@@ -191,26 +238,9 @@ class MultiAgentBootstrap:
         
         url = f"{self.base_url}/api/v2/projects/{project_key}/ai-configs/{config_key}/variations"
         
-        # Map model IDs to correct modelConfigKey values
+        # Use modelId directly as modelConfigKey (format: Provider.model-name)
         model_config = variation_data["modelConfig"]
-        model_id = model_config["modelId"]
-        provider = model_config["provider"].lower()
-        
-        # Map to correct LaunchDarkly model config keys
-        model_config_key_map = {
-            "claude-3-5-sonnet-20241022": "Anthropic.claude-3-7-sonnet-latest",
-            "claude-3-5-haiku-20241022": "Anthropic.claude-3-5-haiku-20241022",
-            "claude-opus-4-20250514": "Anthropic.claude-opus-4-20250514",
-            "gpt-4o": "OpenAI.gpt-4o",
-            "gpt-4o-mini": "OpenAI.gpt-4o-mini-2024-07-18",
-            "mistral-small-latest": "Mistral.mistral-small-latest"
-        }
-        
-        model_config_key = model_config_key_map.get(model_id)
-        if not model_config_key:
-            print(f"    Unknown model ID '{model_id}', using fallback approach")
-            # Fallback to original approach
-            model_config_key = None
+        model_config_key = model_config["modelId"]
         
         payload = {
             "key": variation_data["key"],
@@ -220,14 +250,8 @@ class MultiAgentBootstrap:
             "tools": [{"key": tool, "version": 1} for tool in variation_data.get("tools", [])]
         }
         
-        # Use modelConfigKey if we have it, otherwise fallback to modelName/provider
-        if model_config_key:
-            payload["modelConfigKey"] = model_config_key
-            print(f"   Using modelConfigKey: {model_config_key}")
-        else:
-            payload["modelName"] = model_id
-            payload["provider"] = {"name": model_config["provider"].title()}
-            print(f"   Using modelName/provider fallback: {model_id}/{provider}")
+        payload["modelConfigKey"] = model_config_key
+        print(f"   Using modelConfigKey: {model_config_key}")
         
         print(f"DEBUG: Sending payload: {json.dumps(payload, indent=2)}")
         response = requests.post(url, headers=self.headers, json=payload, timeout=30)
@@ -263,35 +287,15 @@ class MultiAgentBootstrap:
         # Use the AI config variation ID with the regular AI config variations endpoint
         url = f"{self.base_url}/api/v2/projects/{project_key}/ai-configs/{config_key}/variations/{variation_id}"
         
-        # Build the same payload as create with model config key mapping
-        model_config = variation_data["modelConfig"]
-        model_id = model_config["modelId"]
-        
-        # Map to correct LaunchDarkly model config keys
-        model_config_key_map = {
-            "claude-3-5-sonnet-20241022": "Anthropic.claude-3-7-sonnet-latest",
-            "claude-3-5-haiku-20241022": "Anthropic.claude-3-5-haiku-20241022",
-            "claude-opus-4-20250514": "Anthropic.claude-opus-4-20250514",
-            "gpt-4o": "OpenAI.gpt-4o",
-            "gpt-4o-mini": "OpenAI.gpt-4o-mini-2024-07-18",
-            "mistral-small-latest": "Mistral.mistral-small-latest"
-        }
-        
-        model_config_key = model_config_key_map.get(model_id)
-        
+        # Use modelId directly as modelConfigKey
+        model_config_key = variation_data["modelConfig"]["modelId"]
+
         payload = {
             "instructions": variation_data["instructions"],
-            "tools": [{"key": tool, "version": 1} for tool in variation_data.get("tools", [])]
+            "tools": [{"key": tool, "version": 1} for tool in variation_data.get("tools", [])],
+            "modelConfigKey": model_config_key
         }
-        
-        # Use modelConfigKey if we have it, otherwise fallback to modelName/provider
-        if model_config_key:
-            payload["modelConfigKey"] = model_config_key
-            print(f"     Updating with modelConfigKey: {model_config_key}")
-        else:
-            payload["modelName"] = model_id
-            payload["provider"] = {"name": model_config["provider"].title()}
-            print(f"     Updating with modelName/provider fallback: {model_id}")
+        print(f"     Updating with modelConfigKey: {model_config_key}")
         
         response = requests.patch(url, headers=self.headers, json=payload, timeout=30)
         
@@ -595,19 +599,102 @@ class MultiAgentBootstrap:
             return False
 
     def ensure_ai_config_exists(self, project_key, config_data):
-        """Ensure an AI Config exists; do not delete it in overwrite mode."""
+        """Ensure an AI Config exists; create it if it doesn't."""
         config_key = config_data["key"]
+        config_name = config_data.get("name", config_key.replace("-", " ").title())
         url = f"{self.base_url}/api/v2/projects/{project_key}/ai-configs/{config_key}"
         response = requests.get(url, headers=self.headers, timeout=30)
         if response.status_code == 200:
-            print(f" AI Config '{config_key}' exists")
+            print(f"  ✅ AI Config '{config_key}' exists")
             return True
         else:
-            # For safety, we won't attempt to create brand-new configs here without a stable schema.
-            print(f"  AI Config '{config_key}' not found. Skipping creation.")
-            return False
+            # Create the AI Config
+            print(f"  📝 Creating AI Config '{config_key}'...")
+            create_url = f"{self.base_url}/api/v2/projects/{project_key}/ai-configs"
+            payload = {
+                "key": config_key,
+                "name": config_name,
+                "mode": "agent"
+            }
+            create_response = requests.post(create_url, headers=self.headers, json=payload, timeout=30)
+            if create_response.status_code in [200, 201]:
+                print(f"  ✅ AI Config '{config_key}' created")
+                time.sleep(0.5)
+                return True
+            else:
+                print(f"  ❌ Failed to create AI Config '{config_key}': {create_response.text}")
+                return False
 
     # Removed detachment logic per new overwrite deletion order requirements
+
+    def enable_ai_config(self, project_key, config_key, default_variation_key=None):
+        """Verify an AI Config is enabled and optionally set the default variation"""
+        url = f"{self.base_url}/api/v2/projects/{project_key}/ai-configs/{config_key}/targeting"
+
+        # First get targeting to check status and find variation IDs
+        response = requests.get(url, headers=self.headers, timeout=30)
+        if response.status_code != 200:
+            print(f"  ❌ Could not get targeting for '{config_key}': {response.text}")
+            return False
+
+        targeting_data = response.json()
+        variations = targeting_data.get("variations", [])
+
+        # Check if already enabled in production
+        environments = targeting_data.get("environments", {})
+        production_env = environments.get("production", {})
+        is_enabled = production_env.get("enabled", False)
+
+        if is_enabled:
+            print(f"  ✅ AI Config '{config_key}' is already enabled")
+        else:
+            # Enable targeting
+            enable_instructions = [{
+                "kind": "turnTargetingOn"
+            }]
+            enable_payload = {
+                "environmentKey": "production",
+                "instructions": enable_instructions
+            }
+            enable_response = requests.patch(url, headers=self.headers, json=enable_payload, timeout=30)
+            if enable_response.status_code == 200:
+                print(f"  ✅ AI Config '{config_key}' targeting enabled")
+            else:
+                print(f"  ❌ Failed to enable targeting for '{config_key}': {enable_response.text}")
+
+        # Set default variation if specified and not already set
+        if default_variation_key:
+            variation_id = None
+            for var in variations:
+                # Skip the "disabled" variation
+                if var.get("name") == "disabled":
+                    continue
+                # Check the variation key from _ldMeta
+                var_value = var.get("value", {})
+                ld_meta = var_value.get("_ldMeta", {})
+                var_key = ld_meta.get("variationKey")
+                if var_key == default_variation_key:
+                    variation_id = var["_id"]
+                    break
+
+            if variation_id:
+                instructions = [{
+                    "kind": "updateFallthroughVariationOrRollout",
+                    "variationId": variation_id
+                }]
+
+                payload = {
+                    "environmentKey": "production",
+                    "instructions": instructions
+                }
+
+                patch_response = requests.patch(url, headers=self.headers, json=payload, timeout=30)
+
+                if patch_response.status_code == 200:
+                    print(f"    → Default variation set to '{default_variation_key}'")
+                # Silently ignore if already set (duplicate error)
+
+        return is_enabled
 
     def update_targeting(self, project_key, config_key, targeting_data):
         """Update AI Config targeting rules using correct agent mode format"""
@@ -707,20 +794,24 @@ def main():
     
     project_key = manifest["project"]["key"]
     bootstrap = MultiAgentBootstrap(api_key)
-    
-    print(" Starting multi-agent system bootstrap (add-only)...")
+
+    print("🚀 Starting multi-agent system bootstrap...")
     print(f"📦 Project: {project_key}")
     print()
-    print("📋 Creation order: tools → ai configs → variations → segments → targeting")
+    print("📋 Creation order: project → tools → ai configs → variations → segments → targeting → enable")
+    print()
+
+    # 0) Create project if it doesn't exist
+    print("📁 Ensuring project exists...")
+    if not bootstrap.create_project(project_key, manifest["project"].get("name")):
+        print("  ❌ Failed to create or verify project. Exiting.")
+        return
     print()
 
     # 1) Tools
     if "tool" in manifest["project"]:
-        print(" Creating tools...")
-        part1_tool_keys = {"search_v2", "reranking"}
+        print("🔧 Creating tools...")
         for tool in manifest["project"]["tool"]:
-            if tool.get("key") in part1_tool_keys:
-                continue
             bootstrap.create_tool(project_key, tool)
         print()
 
@@ -736,14 +827,11 @@ def main():
 
     # 3) Variations (add-only; skip if exists)
     print("🧩 Creating variations...")
-    skip_variations = {"supervisor-basic"}  # Created in Part 1
     for ai_config in manifest["project"]["ai_config"]:
         config_key = ai_config["key"]
         if config_key not in existing_config_keys:
             continue
         for variation in ai_config.get("variations", []):
-            if variation.get("key") in skip_variations:
-                continue
             bootstrap.create_variation(project_key, config_key, variation)
     print()
 
@@ -764,6 +852,19 @@ def main():
             bootstrap.update_targeting(project_key, config_key, ai_config["targeting"])
         elif "targeting" in ai_config and not ai_config["targeting"].get("rules"):
             print(f"  ⏭️  Skipping targeting for '{config_key}' (empty rules)")
+    print()
+
+    # 6) Enable AI Configs (turn them on so they serve in production)
+    print("🚀 Enabling AI Configs...")
+    for ai_config in manifest["project"]["ai_config"]:
+        config_key = ai_config["key"]
+        if config_key not in existing_config_keys:
+            continue
+        # Use the defaultVariation from targeting config
+        default_variation = None
+        if "targeting" in ai_config:
+            default_variation = ai_config["targeting"].get("defaultVariation")
+        bootstrap.enable_ai_config(project_key, config_key, default_variation)
     print()
 
     print("✨ Bootstrap complete!")

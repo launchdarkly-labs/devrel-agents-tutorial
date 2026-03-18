@@ -78,4 +78,7 @@ dev_posts/
 # Temporary LaunchDarkly development files (analysis, tests, helpers)
 ld_temp_*
 .specify/
-specs/
+specs/node_modules/
+
+node_modules/
+package*.json
