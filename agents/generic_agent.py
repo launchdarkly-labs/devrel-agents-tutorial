@@ -1,32 +1,27 @@
 """
 Generic Agent - TRUE DYNAMIC agent that works with any LaunchDarkly AI Config.
 
-No hardcoded agent types. No registry. Just:
-1. Read instructions from config
-2. Load tools from config
-3. Execute and return response
-
-Add any node to your Agent Graph - this agent handles it.
+No hardcoded agent types. No assumptions. Everything from LaunchDarkly:
+- Instructions from AI Config
+- Tools from AI Config
+- Valid routes from Graph edges
 """
-from typing import Dict, Any, Optional
+from typing import List, Optional
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
-from langgraph.prebuilt import create_react_agent
 from utils.logger import log_student
 
 
-def create_generic_agent(agent_config, config_manager):
+def create_generic_agent(agent_config, config_manager, valid_routes: List[str] = None):
     """
-    Create a generic agent from any LaunchDarkly AI Config.
+    Create a generic agent from LaunchDarkly AI Config.
 
-    The config provides everything:
-    - instructions: system prompt
-    - model: which LLM to use
-    - tools: what capabilities to bind
-
-    Returns an agent that can handle any workflow node.
+    Args:
+        agent_config: LaunchDarkly AI Config
+        config_manager: Config manager for model creation
+        valid_routes: List of valid route values from outgoing edges (e.g., ["security", "support"])
     """
     from agents.ld_agent_helpers import (
-        create_model_for_config, _rate_limit_llm_call, extract_token_usage
+        create_model_for_config, _rate_limit_llm_call
     )
     from tools_impl.dynamic_tool_factory import create_dynamic_tools_from_launchdarkly
     from ldai.tracker import TokenUsage
@@ -36,6 +31,7 @@ def create_generic_agent(agent_config, config_manager):
         def __init__(self):
             self.tools = []
             self.has_tools = False
+            self.valid_routes = valid_routes or []
 
         async def ainvoke(self, state: dict) -> dict:
             """Execute the agent using LaunchDarkly config."""
@@ -53,17 +49,23 @@ def create_generic_agent(agent_config, config_manager):
                     temperature=0.3
                 )
 
-                log_student(f"AGENT CONFIG: {agent_config.provider.name} - {agent_config.model.name}")
+                log_student(f"CONFIG: {agent_config.provider.name} - {agent_config.model.name}")
 
                 # Load tools from LaunchDarkly config
                 self.tools = create_dynamic_tools_from_launchdarkly(agent_config)
                 self.has_tools = len(self.tools) > 0
 
                 if self.has_tools:
-                    log_student(f"TOOLS LOADED: {[t.name for t in self.tools]}")
+                    log_student(f"TOOLS: {[t.name for t in self.tools]}")
 
                 # Get instructions from config
                 instructions = agent_config.instructions or "Process the input and provide a helpful response."
+
+                # If this node has outgoing edges with routes, inject route options into instructions
+                if self.valid_routes:
+                    route_instruction = f"\n\nYou must select one of these routes: {self.valid_routes}. Return your choice in this exact JSON format at the end of your response: {{\"route\": \"<selected_route>\"}}"
+                    instructions = instructions + route_instruction
+                    log_student(f"ROUTES AVAILABLE: {self.valid_routes}")
 
                 # Get input
                 user_input = state.get("processed_input", state.get("user_input", ""))
@@ -83,11 +85,10 @@ def create_generic_agent(agent_config, config_manager):
                 agent_config.tracker.track_duration(duration_ms)
                 agent_config.tracker.track_success()
 
-                log_student(f"AGENT: duration={duration_ms}ms")
+                log_student(f"DURATION: {duration_ms}ms")
 
                 if "_token_usage" in result and result["_token_usage"]["total"] > 0:
                     agent_config.tracker.track_tokens(TokenUsage(**result["_token_usage"]))
-                    log_student(f"AGENT TOKENS: {result['_token_usage']['total']} ({result['_token_usage']['input']} in, {result['_token_usage']['output']} out)")
 
                 return result
 
@@ -95,7 +96,7 @@ def create_generic_agent(agent_config, config_manager):
                 log_student(f"AGENT ERROR: {e}")
                 agent_config.tracker.track_error()
                 return {
-                    "response": f"Error processing request: {e}",
+                    "response": f"Error: {e}",
                     "_error": str(e)
                 }
 
@@ -103,14 +104,12 @@ def create_generic_agent(agent_config, config_manager):
             """Execute using ReAct agent with tools."""
             from langgraph.prebuilt import create_react_agent
 
-            # Create ReAct agent with tools
             agent = create_react_agent(
                 model=model,
                 tools=self.tools,
                 prompt=instructions
             )
 
-            # Run agent
             result = await agent.ainvoke({"messages": messages})
 
             # Extract response and tool calls
@@ -122,13 +121,11 @@ def create_generic_agent(agent_config, config_manager):
                 if isinstance(msg, AIMessage):
                     if msg.content:
                         response_text = msg.content
-                    # Track tool calls
                     if hasattr(msg, 'tool_calls') and msg.tool_calls:
                         for tc in msg.tool_calls:
                             tool_name = tc.get('name', 'unknown')
                             if tool_name not in tool_calls:
                                 tool_calls.append(tool_name)
-                    # Extract token usage
                     if hasattr(msg, 'usage_metadata') and msg.usage_metadata:
                         token_usage = {
                             "input": msg.usage_metadata.get("input_tokens", 0),
@@ -136,8 +133,12 @@ def create_generic_agent(agent_config, config_manager):
                             "total": msg.usage_metadata.get("total_tokens", 0)
                         }
 
+            # Extract route if present
+            route = self._extract_route(response_text)
+
             return {
                 "response": response_text,
+                "routing_decision": route,
                 "tool_calls": tool_calls,
                 "_token_usage": token_usage
             }
@@ -159,30 +160,32 @@ def create_generic_agent(agent_config, config_manager):
                     "total": response.usage_metadata.get("total_tokens", 0)
                 }
 
-            # Parse routing decision if present in response
-            routing_decision = self._extract_routing(response_text)
+            # Extract route if present
+            route = self._extract_route(response_text)
+            if route:
+                log_student(f"ROUTE SELECTED: {route}")
 
-            result = {
+            return {
                 "response": response_text,
+                "routing_decision": route,
                 "tool_calls": [],
                 "_token_usage": token_usage
             }
 
-            if routing_decision:
-                result["routing_decision"] = routing_decision
+        def _extract_route(self, response_text: str) -> Optional[str]:
+            """Extract route from response JSON."""
+            import re
 
-            return result
-
-        def _extract_routing(self, response_text: str) -> Optional[str]:
-            """Extract routing decision from response if present."""
-            text_lower = response_text.lower()
-
-            # Look for routing keywords
-            if "security" in text_lower or "pii" in text_lower:
-                return "security"
-            elif "support" in text_lower:
-                return "support"
-
+            # Look for {"route": "..."} pattern
+            match = re.search(r'\{[^{}]*"route"\s*:\s*"([^"]+)"[^{}]*\}', response_text)
+            if match:
+                route = match.group(1).lower()
+                # Validate against available routes if we have them
+                if self.valid_routes:
+                    for valid in self.valid_routes:
+                        if valid.lower() in route or route in valid.lower():
+                            return valid
+                return route
             return None
 
     return GenericAgent()

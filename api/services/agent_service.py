@@ -105,11 +105,20 @@ class AgentGraphExecutor:
                     if prev_node_key:
                         graph_tracker.track_handoff_success(prev_node_key, node_key)
 
-                # Execute with generic agent
+                # Get valid routes from outgoing edges
+                edges = current_node.get_edges()
+                valid_routes = []
+                for edge in edges:
+                    handoff = edge.handoff or {}
+                    route = handoff.get("route")
+                    if route:
+                        valid_routes.append(route)
+
+                # Execute with generic agent, passing valid routes
                 log_student(f"EXECUTING: {node_key}")
                 node_start = time.time()
 
-                agent = create_generic_agent(config, self.config_manager)
+                agent = create_generic_agent(config, self.config_manager, valid_routes=valid_routes)
                 result = await agent.ainvoke(ctx)
 
                 duration_ms = int((time.time() - node_start) * 1000)
@@ -118,8 +127,7 @@ class AgentGraphExecutor:
                 # Update context with results (generic)
                 self._update_context(node_key, config, result, ctx)
 
-                # Find next node
-                edges = current_node.get_edges()
+                # Find next node (edges already fetched above)
                 if not edges:
                     log_student(f"TERMINAL: {node_key}")
                     break
@@ -142,31 +150,24 @@ class AgentGraphExecutor:
 
     def _select_next_node(self, edges, result: dict, nodes: dict):
         """Select next node based on agent result and edge handoffs."""
-        # Get routing hints from result
-        response = result.get("response", "").lower()
-        routing = result.get("routing_decision", "").lower()
+        routing = result.get("routing_decision", "").lower() if result.get("routing_decision") else None
 
+        # Log available edges
         for edge in edges:
-            target = edge.target_config
             handoff = edge.handoff or {}
             route = handoff.get("route", "").lower()
+            log_student(f"  EDGE: → {edge.target_config} (route={route})")
 
-            log_student(f"  EDGE: → {target} (route={route})")
+        # If we have an explicit routing decision, match it to edge route
+        if routing:
+            for edge in edges:
+                handoff = edge.handoff or {}
+                route = handoff.get("route", "").lower()
 
-            # Match by explicit routing decision
-            if routing:
-                if routing in target.lower():
-                    log_student(f"  MATCHED: routing_decision '{routing}' → {target}")
-                    return nodes.get(target)
-                # Match route keywords
-                if route and (route in routing or routing in route):
-                    log_student(f"  MATCHED: route '{route}' ↔ '{routing}' → {target}")
-                    return nodes.get(target)
-
-            # Match by response content
-            if route and route in response:
-                log_student(f"  MATCHED: '{route}' in response → {target}")
-                return nodes.get(target)
+                # Exact match or contains match
+                if route == routing or routing in route or route in routing:
+                    log_student(f"  MATCHED: routing='{routing}' → route='{route}' → {edge.target_config}")
+                    return nodes.get(edge.target_config)
 
         # Default: first edge
         if edges:
@@ -196,7 +197,7 @@ class AgentGraphExecutor:
         if hasattr(config, 'tracker') and hasattr(config.tracker, '_variation_key'):
             var_key = config.tracker._variation_key
 
-        # Record agent config - generic structure
+        # Record agent config - fully generic, include all result fields
         agent_info = {
             "agent_name": node_key,
             "variation_key": var_key,
@@ -204,10 +205,10 @@ class AgentGraphExecutor:
             "tools_used": result.get("tool_calls", []),
         }
 
-        # Include any extra fields from result (routing_decision, etc)
-        for key in ["routing_decision", "detected", "types", "redacted"]:
-            if key in result:
-                agent_info[key] = result[key]
+        # Include all non-internal fields from result
+        for key, value in result.items():
+            if not key.startswith("_") and key not in ["response", "tool_calls"]:
+                agent_info[key] = value
 
         ctx["agent_configs"].append(agent_info)
 
