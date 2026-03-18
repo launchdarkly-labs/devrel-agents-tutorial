@@ -194,19 +194,38 @@ def create_generic_agent(agent_config, config_manager, valid_routes: List[str] =
             }
 
         def _extract_route(self, response_text: str) -> Optional[str]:
-            """Extract route from response JSON."""
+            """Extract route from response JSON with strict validation."""
+            import json
             import re
 
-            # Look for {"route": "..."} pattern
-            match = re.search(r'\{[^{}]*"route"\s*:\s*"([^"]+)"[^{}]*\}', response_text)
-            if match:
-                route = match.group(1).lower()
-                # Validate against available routes if we have them
-                if self.valid_routes:
-                    for valid in self.valid_routes:
-                        if valid.lower() in route or route in valid.lower():
-                            return valid
-                return route
+            # Try to find JSON object with route key
+            json_patterns = [
+                r'```json\s*(\{[^`]+\})\s*```',  # Fenced code block
+                r'(\{"route":\s*"[^"]+"\s*\})',   # Inline JSON
+                r'(\{[^{}]*"route"\s*:\s*"[^"]+[^{}]*\})',  # Relaxed JSON
+            ]
+
+            for pattern in json_patterns:
+                match = re.search(pattern, response_text, re.DOTALL)
+                if match:
+                    try:
+                        data = json.loads(match.group(1))
+                        route = data.get("route", "").lower().strip()
+
+                        # Exact match validation against valid routes
+                        if self.valid_routes:
+                            valid_lower = [r.lower() for r in self.valid_routes]
+                            if route in valid_lower:
+                                # Return the original casing from valid_routes
+                                idx = valid_lower.index(route)
+                                return self.valid_routes[idx]
+                            else:
+                                log_student(f"INVALID ROUTE: '{route}' not in {self.valid_routes}")
+                                return None
+                        return route
+                    except json.JSONDecodeError:
+                        continue
+
             return None
 
     return GenericAgent()

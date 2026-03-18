@@ -82,3 +82,6 @@ specs/node_modules/
 
 node_modules/
 package*.json
+
+# Demo script (personal notes)
+DEMO_SCRIPT.md

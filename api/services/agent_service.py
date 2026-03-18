@@ -155,26 +155,26 @@ class AgentGraphExecutor:
 
     def _select_next_node(self, edges, result: dict, nodes: dict):
         """Select next node based on agent result and edge handoffs."""
-        routing = result.get("routing_decision", "").lower() if result.get("routing_decision") else None
+        routing = result.get("routing_decision", "").lower().strip() if result.get("routing_decision") else None
 
-        # Log available edges
+        # Build route map for validation
+        route_map = {}
         for edge in edges:
             handoff = edge.handoff or {}
-            route = handoff.get("route", "").lower()
+            route = handoff.get("route", "").lower().strip()
+            if route:
+                route_map[route] = edge.target_config
             log_student(f"  EDGE: → {edge.target_config} (route={route})")
 
-        # If we have an explicit routing decision, match it to edge route
-        if routing:
-            for edge in edges:
-                handoff = edge.handoff or {}
-                route = handoff.get("route", "").lower()
+        # Exact match only - fail closed on unrecognized routes
+        if routing and routing in route_map:
+            target = route_map[routing]
+            log_student(f"  MATCHED: routing='{routing}' → {target}")
+            return nodes.get(target)
+        elif routing:
+            log_student(f"  UNRECOGNIZED ROUTE: '{routing}' not in {list(route_map.keys())}")
 
-                # Exact match or contains match
-                if route == routing or routing in route or route in routing:
-                    log_student(f"  MATCHED: routing='{routing}' → route='{route}' → {edge.target_config}")
-                    return nodes.get(edge.target_config)
-
-        # Default: first edge
+        # Default: first edge (fallback)
         if edges:
             default = edges[0].target_config
             log_student(f"  DEFAULT: → {default}")
