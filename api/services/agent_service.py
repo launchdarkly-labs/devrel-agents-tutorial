@@ -137,7 +137,7 @@ class AgentGraphExecutor:
                     log_student(f"TERMINAL: {node_key}")
                     break
 
-                next_node = self._select_next_node(edges, result, nodes)
+                next_node = self._select_next_node(edges, result, nodes, graph_tracker)
                 prev_node_key = node_key
                 current_node = next_node
 
@@ -153,7 +153,7 @@ class AgentGraphExecutor:
 
         return ctx
 
-    def _select_next_node(self, edges, result: dict, nodes: dict):
+    def _select_next_node(self, edges, result: dict, nodes: dict, graph_tracker=None):
         """Select next node based on agent result and edge handoffs."""
         routing = result.get("routing_decision", "").lower().strip() if result.get("routing_decision") else None
 
@@ -173,6 +173,8 @@ class AgentGraphExecutor:
             return nodes.get(target)
         elif routing:
             log_student(f"  UNRECOGNIZED ROUTE: '{routing}' not in {list(route_map.keys())}")
+            if graph_tracker:
+                graph_tracker.track_handoff_failure()
 
         # Default: first edge (fallback)
         if edges:
