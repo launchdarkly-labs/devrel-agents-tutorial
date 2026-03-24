@@ -3,7 +3,6 @@
 Simplified ConfigManager for LaunchDarkly AI Agent integration
 """
 import os
-import time
 import json
 from pathlib import Path
 import ldclient
@@ -27,7 +26,6 @@ class FixedConfigManager:
         self._load_config_defaults()
 
         self._initialize_launchdarkly_client()
-        self._initialize_ai_client()
 
         # Initialize AWS Bedrock session for SSO authentication
         self._initialize_bedrock_session()
@@ -102,22 +100,21 @@ class FixedConfigManager:
         )
     
     def _initialize_launchdarkly_client(self):
-        """Initialize LaunchDarkly client"""
+        """Initialize LaunchDarkly client and AI client"""
         config = ldclient.Config(self.sdk_key)
         ldclient.set_config(config)
         self.ld_client = ldclient.get()
-        
-        max_wait = 10
-        wait_time = 0
-        while not self.ld_client.is_initialized() and wait_time < max_wait:
-            time.sleep(0.5)
-            wait_time += 0.5
-        
+
+        # Wait for initialization (SDK 9.x pattern)
+        import time
+        for _ in range(100):  # Wait up to 10 seconds
+            if self.ld_client.is_initialized():
+                break
+            time.sleep(0.1)
+
         if not self.ld_client.is_initialized():
             raise RuntimeError("LaunchDarkly client initialization failed")
-    
-    def _initialize_ai_client(self):
-        """Initialize AI client"""
+
         self.ai_client = LDAIClient(self.ld_client)
 
     def _initialize_bedrock_session(self):
@@ -179,42 +176,6 @@ class FixedConfigManager:
         
         return context_builder.build()
     
-    def get_agent_graph(self, user_id: str, graph_key: str, user_context: dict = None):
-        """Get LaunchDarkly Agent Graph for multi-agent orchestration.
-
-        The Agent Graph defines:
-        - Node structure (which agents exist)
-        - Edge connections (how agents connect)
-        - Handoff data (routing metadata on edges)
-
-        Usage:
-            graph = config_manager.get_agent_graph(user_id, "chatbot-flow", user_context)
-            if graph.is_enabled():
-                # Forward traversal: root -> terminals
-                graph.traverse(execute_agent, {})
-
-                # Or reverse traversal: terminals -> root
-                graph.reverse_traverse(execute_agent, {})
-
-                # Access edge handoff data
-                for edge in node.get_edges():
-                    route_reason = edge.handoff.get("reason")
-        """
-        log_debug(f"AGENT GRAPH: Getting graph '{graph_key}' for user_id={user_id}")
-
-        # Build context using centralized method
-        ld_context = self.build_context(user_id, user_context)
-
-        # Get the agent graph from LaunchDarkly
-        graph = self.ai_client.agent_graph(graph_key, ld_context)
-
-        if graph.is_enabled():
-            log_student(f"AGENT GRAPH: Loaded '{graph_key}' with root: {graph.root().get_key()}")
-            log_debug(f"AGENT GRAPH: Terminal nodes: {[n.get_key() for n in graph.terminal_nodes()]}")
-        else:
-            log_debug(f"AGENT GRAPH: Graph '{graph_key}' is disabled")
-
-        return graph
 
     async def get_config(self, user_id: str, config_key: str = None, user_context: dict = None):
         """Get LaunchDarkly AI Config with fallback to .ai_config_defaults.json
@@ -254,12 +215,8 @@ class FixedConfigManager:
         return result
     
 
-    def clear_cache(self):
-        """Clear LaunchDarkly SDK cache"""
-        self.ld_client.flush()
-
-    def flush_metrics(self):
-        """Flush metrics to LaunchDarkly"""
+    def flush(self):
+        """Flush metrics and clear SDK cache"""
         self.ld_client.flush()
 
     def track_feedback(self, tracker, thumbs_up: bool):
@@ -284,9 +241,6 @@ class FixedConfigManager:
         """Close LaunchDarkly client"""
         try:
             self.ld_client.flush()
-        except Exception:
-            pass
-        try:
             self.ld_client.close()
         except Exception:
             pass
