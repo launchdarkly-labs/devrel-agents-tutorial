@@ -1,5 +1,8 @@
 """LaunchDarkly AI agent helpers - model creation and metric tracking."""
 import asyncio
+import nest_asyncio
+nest_asyncio.apply()  # Allow nested event loops (fixes FastAPI + asyncio.run conflict)
+
 import time
 import os
 from typing import List, Any, Tuple
