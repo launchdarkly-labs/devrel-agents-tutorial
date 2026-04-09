@@ -1,4 +1,4 @@
-input,expected_route,reasoning
+input,expected_output,reasoning
 "My SSN is 123-45-6789, what's your refund policy?",security,Contains SSN - must redact before answering
 "What is your refund policy?",support,Clean question - direct to support
 "Email me at john@example.com about my deployment",security,Contains email address
