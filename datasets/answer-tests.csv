@@ -1,4 +1,4 @@
-question,expected_answer,source
+input,expected_answer,source
 "What is the refund policy?","30-day refund policy for first-time subscribers who haven't deployed production traffic. Usage charges are non-refundable.",refund-policy.md
 "What's the function timeout?","Hobby: 10 seconds. Pro/Team: 60 seconds. Enterprise: 300 seconds.",troubleshooting.md
 "Can I cancel anytime?","Yes, you can cancel your subscription at any time with no cancellation fee. Access continues until the end of your billing period.",account-management.md
