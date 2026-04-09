@@ -47,8 +47,8 @@ API_BASE_URL = f"http://{API_HOST}:{API_PORT}"
 UI_PORT = int(os.getenv('UI_PORT', '8501'))
 
 st.set_page_config(
-    page_title="LangGraph Multi-Agent System",
-    page_icon="→",
+    page_title="Umbra Support",
+    page_icon="🌑",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -56,7 +56,7 @@ st.set_page_config(
 st.markdown("""
 <style>
 .main {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%);
     color: white;
 }
 
@@ -123,9 +123,9 @@ st.markdown("""
     line-height: 1.4;
 }
 
-/* Gradient button styling inspired by LaunchDarkly cards */
+/* Gradient button styling */
 .stButton > button {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%);
     color: white;
     border: none;
     border-radius: 8px;
@@ -133,7 +133,7 @@ st.markdown("""
     font-weight: 500;
     font-size: 0.8rem;
     transition: all 0.3s ease;
-    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+    box-shadow: 0 2px 8px rgba(30, 64, 175, 0.2);
     position: relative;
     overflow: hidden;
 }
@@ -150,9 +150,9 @@ st.markdown("""
 }
 
 .stButton > button:hover {
-    background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%);
+    background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    box-shadow: 0 4px 12px rgba(30, 64, 175, 0.3);
 }
 
 .stButton > button:hover::before {
@@ -161,11 +161,10 @@ st.markdown("""
 
 .stButton > button:active {
     transform: translateY(0);
-    background: linear-gradient(135deg, #4c51bf 0%, #553c9a 100%);
+    background: linear-gradient(135deg, #1e3a8a 0%, #172554 100%);
 }
 
-/* Purple, pink, and green button variations inspired by LaunchDarkly cards */
-/* Use JavaScript to target buttons by text content */
+/* Button variations by text content */
 
 /* Chat message styling */
 .stChatMessage {
@@ -271,8 +270,8 @@ document.addEventListener('DOMContentLoaded', function() {
 # Simplified header section
 st.markdown("""
 <div class="header-container">
-    <h1 class="header-title">LaunchDarkly Multi-Agent System</h1>
-    <p class="header-subtitle">Intelligent document search and research powered by LangGraph and RAG architecture</p>
+    <h1 class="header-title">🌑 Umbra Support</h1>
+    <p class="header-subtitle">Cloud deployment platform support powered by AI agents</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -318,39 +317,39 @@ def process_tool_display(tools, tool_details):
 st.markdown("""
 <div class="example-queries-container">
     <h3 class="example-queries-title">Example Queries</h3>
-    <p class="example-queries-subtitle">Test different tool combinations with these curated queries</p>
+    <p class="example-queries-subtitle">Test the support agent with these sample questions</p>
 </div>
 """, unsafe_allow_html=True)
 
-# Row 1: Basic search tools
+# Row 1: Billing and account questions
 col1, col2 = st.columns(2)
 with col1:
-    if st.button("Basic Search", use_container_width=True):
-        st.session_state.example_query = "What are the key concepts I should understand from your knowledge base?"
+    if st.button("Refund Policy", use_container_width=True):
+        st.session_state.example_query = "What is your refund policy?"
 
 with col2:
-    if st.button("RAG + Reranking", use_container_width=True):
-        st.session_state.example_query = "Search for implementation guidance, then rerank the results to show me the most relevant information"
+    if st.button("Pricing & Plans", use_container_width=True):
+        st.session_state.example_query = "What's included in the Pro plan and how much does it cost?"
 
-# Row 2: Security and research tools
+# Row 2: Technical and security
 col4, col5, col6 = st.columns(3)
 with col4:
-    if st.button("Security Check", use_container_width=True):
-        st.session_state.example_query = "My name is John Doe, email: john.doe@example.com. I'm a VP at StarSystems, and I need help with my account"
+    if st.button("PII Test", use_container_width=True):
+        st.session_state.example_query = "Hi, I'm Sarah Chen, a DevOps Lead at TechStart in Munich. Contact me at sarah@techstart.io - why is my deployment failing?"
 
 with col5:
-    if st.button("ArXiv Research", use_container_width=True):
-        st.session_state.example_query = "Find recent ArXiv papers on machine learning from the last 6 months"
+    if st.button("Deployment Regions", use_container_width=True):
+        st.session_state.example_query = "What regions do you deploy to? Do you support GDPR compliance?"
 
 with col6:
-    if st.button("Semantic Scholar", use_container_width=True):
-        st.session_state.example_query = "Search Semantic Scholar for research papers on artificial intelligence with citations"
+    if st.button("Troubleshooting", use_container_width=True):
+        st.session_state.example_query = "My build is running out of memory. What can I do?"
 
-# Row 3: Advanced research
+# Row 3: Account management
 col7 = st.columns(1)[0]
 with col7:
-    if st.button("Full Research Stack", use_container_width=True):
-        st.session_state.example_query = "Compare what you know from your internal documentation with recent academic research papers"
+    if st.button("Subscription Management", use_container_width=True):
+        st.session_state.example_query = "Can I cancel my subscription anytime? What happens to my deployments?"
 
 st.markdown("---")
 
@@ -368,7 +367,8 @@ if "user_id" not in st.session_state:
 
 # Display chat history
 for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
+    avatar = "🌑" if message["role"] == "assistant" else "👤"
+    with st.chat_message(message["role"], avatar=avatar):
         st.write(message["content"])
         if message["role"] == "assistant" and "metadata" in message:
             # Show feedback buttons for assistant messages
@@ -511,7 +511,7 @@ if "example_query" in st.session_state and st.session_state.example_query:
     prompt = st.session_state.example_query
 
 # Always show chat input - it should never disappear
-user_text = st.chat_input("Ask questions about your documents or request research...")
+user_text = st.chat_input("Ask about billing, deployments, features, or troubleshooting...")
 if user_text is not None:
     user_text = user_text.strip()
     if user_text:
@@ -525,7 +525,7 @@ if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
     
     # Display user message
-    with st.chat_message("user"):
+    with st.chat_message("user", avatar="👤"):
         st.write(prompt)
     
     # Get agent response
@@ -592,7 +592,7 @@ if prompt:
             })
             
             # Display assistant message
-            with st.chat_message("assistant"):
+            with st.chat_message("assistant", avatar="🌑"):
                 st.write(data["response"])
                 
                 # Add improved feedback system after the response

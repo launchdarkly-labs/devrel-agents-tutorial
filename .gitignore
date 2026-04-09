@@ -71,6 +71,7 @@ data/mythical_pets_kb.py
 # Project files
 .claude
 CLAUDE.md
+.vscode/
 
 # Development posts
 dev_posts/

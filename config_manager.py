@@ -219,6 +219,32 @@ class FixedConfigManager:
         """Flush metrics and clear SDK cache"""
         self.ld_client.flush()
 
+    def clear_cache(self):
+        """Clear any cached configs (no-op for now, configs fetched live)"""
+        pass
+
+    def get_agent_graph(self, user_id: str, graph_key: str, user_context: dict = None):
+        """Get LaunchDarkly Agent Graph definition.
+
+        Args:
+            user_id: User identifier for targeting
+            graph_key: The agent graph key (e.g., 'chatbot-flow')
+            user_context: Optional user attributes for targeting
+
+        Returns:
+            AgentGraphDefinition from LaunchDarkly
+        """
+        log_debug(f"CONFIG MANAGER: Getting agent graph '{graph_key}' for user_id={user_id}")
+
+        # Build context using centralized method
+        ld_context = self.build_context(user_id, user_context)
+
+        # Get agent graph from LaunchDarkly
+        graph = self.ai_client.agent_graph(graph_key, ld_context)
+        log_debug(f"CONFIG MANAGER: Got agent graph '{graph_key}'")
+
+        return graph
+
     def track_feedback(self, tracker, thumbs_up: bool):
         """Track user feedback with LaunchDarkly"""
         if not tracker:

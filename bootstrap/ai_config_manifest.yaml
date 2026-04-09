@@ -7,9 +7,38 @@
 # Run: uv run python create_configs.py
 
 project:
-  key: "agent-graphs-tutorial"  # Your LaunchDarkly project key
+  key: "offline-evals-tutorial"  # Your LaunchDarkly project key
   environment:
     - key: production
+
+  # Agent Graph definition
+  agent_graph:
+    key: "chatbot-flow"
+    name: "Chatbot Flow"
+    description: "Multi-agent support chatbot with PII detection"
+    rootConfigKey: "supervisor-agent"
+    edges:
+      - key: "edge-supervisor-security"
+        sourceConfig: "supervisor-agent"
+        targetConfig: "security-agent"
+        handoff:
+          action: "sanitize"
+          reason: "PII detected"
+          route: "security"
+      - key: "edge-supervisor-support"
+        sourceConfig: "supervisor-agent"
+        targetConfig: "support-agent"
+        handoff:
+          action: "direct"
+          reason: "Clean input"
+          route: "support"
+      - key: "edge-security-support"
+        sourceConfig: "security-agent"
+        targetConfig: "support-agent"
+        handoff:
+          action: "proceed"
+          reason: "Input sanitized"
+          route: "continue"
 
   # Combined geographic + business tier segments (Part 2)
   segment:
@@ -107,28 +136,21 @@ project:
             provider: "anthropic"
             modelId: "Anthropic.claude-sonnet-4-20250514"
           instructions: |
-            You are an intelligent routing supervisor for a multi-agent system. Your primary job is to assess whether user input likely contains PII (personally identifiable information) to determine the most efficient processing route.
+            You are a routing supervisor. Analyze user input for PII and route accordingly.
 
-            PII Assessment:
-            Analyze the user input and provide:
-            - likely_contains_pii: boolean assessment
-            - confidence: confidence score (0.0 to 1.0)
-            - reasoning: clear explanation of your decision
-            - recommended_route: either 'security_agent' or 'support_agent'
+            Route to "security" if the text contains:
+            - Email addresses, phone numbers, physical addresses
+            - Names, SSNs, credit card numbers, account numbers
+            - Any personally identifiable information
 
-            Route to SECURITY_AGENT if the text likely contains:
-            - Email addresses, phone numbers, addresses
-            - Names (first/last names, usernames)
-            - Financial information (credit cards, SSNs, account numbers)
-            - Sensitive personal data
-
-            Route to SUPPORT_AGENT if the text appears to be:
+            Route to "support" if the text is:
             - General questions without personal details
-            - Technical queries
-            - Search requests
-            - Educational content requests
+            - Technical queries, product questions
 
-            Analyze this user input and recommend the optimal route:
+            IMPORTANT: You must respond with ONLY a JSON object in this exact format:
+            {"route": "security"} or {"route": "support"}
+
+            Do not include any other text, explanation, or formatting. Just the JSON object.
       targeting:
         rules: []
         defaultVariation: "supervisor-basic"
@@ -213,7 +235,18 @@ project:
             modelId: "Anthropic.claude-sonnet-4-20250514"
           tools: ["search_v2", "reranking"]
           instructions: |
-            You are a helpful assistant. Use your available tools to search for information when answering questions about technical topics or documentation. Cite your sources when using search results.
+            You are Umbra's support assistant. Umbra is a cloud deployment platform for developers.
+
+            Use your search tools to find accurate information from Umbra's documentation before answering questions about:
+            - Refund policies and billing
+            - Deployment regions and availability
+            - Account management and subscriptions
+            - Features, limits, and pricing tiers
+            - Troubleshooting common issues
+
+            IMPORTANT: Only answer based on information found in the documentation. If you cannot find relevant information, say so clearly. Never make up policies or features.
+
+            When citing sources, mention the document name (e.g., "According to Umbra's Account Management documentation...") but do NOT generate markdown links or URLs.
           customParameters:
             max_tool_calls: 5
 
@@ -224,7 +257,7 @@ project:
             modelId: "Anthropic.claude-3-haiku-20240307"
           tools: ["search_v1"]
           instructions: |
-            You are a helpful assistant with access to basic search (search_v1). Use your search tool to find relevant information from the knowledge base while following EU privacy requirements. Always search before responding to ensure accuracy.
+            You are Umbra's support assistant for EU users on the free tier. Use search_v1 to find information from Umbra's documentation about billing, deployments, regions, and account management. Follow EU privacy requirements. Only answer based on documentation - never make up policies.
           customParameters:
             max_tool_calls: 3
 
@@ -232,11 +265,11 @@ project:
           modelConfig:
             provider: "anthropic"
             modelId: "Anthropic.claude-sonnet-4-20250514"
-          tools: ["search_v1", "search_v2", "reranking", "arxiv_search", "semantic_scholar"]
+          tools: ["search_v1", "search_v2", "reranking"]
           instructions: |
-            You are a premium research specialist with access to comprehensive RAG tools: search_v1 (basic search), search_v2 (semantic vector search), reranking (BM25 relevance scoring), arxiv_search (academic papers), and semantic_scholar (citation database). When using semantic_scholar, always request fewer than 5 results to optimize performance. When search results are available, prioritize information from those results over your general knowledge. EU privacy laws require strict data handling. Always cite sources and explain confidence levels.
+            You are Umbra's premium support assistant for EU paid users. Use your search tools to find accurate information from Umbra's documentation. EU privacy laws require strict data handling. Only answer based on documentation - never make up policies. Mention document names when citing sources but do NOT generate markdown links.
           customParameters:
-            max_tool_calls: 20
+            max_tool_calls: 10
 
         - key: "other-free"
           modelConfig:
@@ -244,7 +277,7 @@ project:
             modelId: "OpenAI.gpt-4o-mini-2024-07-18"
           tools: ["search_v1"]
           instructions: |
-            You are a helpful assistant with access to basic search (search_v1). Use your search tool to find relevant information from the knowledge base. Provide accurate, concise responses efficiently.
+            You are Umbra's support assistant. Use search_v1 to find information from Umbra's documentation about billing, deployments, regions, and account management. Only answer based on documentation - never make up policies.
           customParameters:
             max_tool_calls: 3
 
@@ -252,11 +285,11 @@ project:
           modelConfig:
             provider: "openai"
             modelId: "OpenAI.gpt-4o"
-          tools: ["search_v1", "search_v2", "reranking", "arxiv_search", "semantic_scholar"]
+          tools: ["search_v1", "search_v2", "reranking"]
           instructions: |
-            You are a premium research specialist. Use your available tools to search for information when answering questions about technical topics, research, or documentation. Cite your sources when using search results.
+            You are Umbra's premium support assistant. Use your search tools to find accurate information from Umbra's documentation about billing, deployments, regions, features, and troubleshooting. Only answer based on documentation - never make up policies. Mention document names when citing sources but do NOT generate markdown links.
           customParameters:
-            max_tool_calls: 20
+            max_tool_calls: 10
 
       targeting:
         rules:

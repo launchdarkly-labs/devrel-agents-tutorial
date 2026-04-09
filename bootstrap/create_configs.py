@@ -252,8 +252,7 @@ class MultiAgentBootstrap:
         
         payload["modelConfigKey"] = model_config_key
         print(f"   Using modelConfigKey: {model_config_key}")
-        
-        print(f"DEBUG: Sending payload: {json.dumps(payload, indent=2)}")
+
         response = requests.post(url, headers=self.headers, json=payload, timeout=30)
         
         if response.status_code in [200, 201]:
@@ -414,7 +413,7 @@ class MultiAgentBootstrap:
         else:
             payload["type"] = "function"
         
-        print(f"   Creating tool with payload: {json.dumps(payload, indent=2)}")
+        print(f"   Creating tool '{payload['key']}'")
         response = requests.post(url, headers=self.headers, json=payload, timeout=30)
         
         if response.status_code in [200, 201]:
@@ -626,6 +625,107 @@ class MultiAgentBootstrap:
                 return False
 
     # Removed detachment logic per new overwrite deletion order requirements
+
+    def create_agent_graph(self, project_key, graph_data):
+        """Create an Agent Graph with nodes and edges.
+
+        Agent Graphs connect AI Configs together. The graph automatically
+        creates nodes for any AI Config referenced in edges.
+        """
+        graph_key = graph_data["key"]
+
+        # Check if graph exists
+        check_url = f"{self.base_url}/api/v2/projects/{project_key}/agent-graphs/{graph_key}"
+        check_response = requests.get(check_url, headers=self.headers, timeout=30)
+
+        if check_response.status_code == 200:
+            if self.overwrite:
+                print(f"  🔄 Agent Graph '{graph_key}' exists, deleting for recreation...")
+                delete_response = requests.delete(check_url, headers=self.headers, timeout=30)
+                if delete_response.status_code not in [200, 204]:
+                    print(f"  ❌ Failed to delete existing graph: {delete_response.text}")
+                    return False
+                time.sleep(1)
+            else:
+                print(f"  ✅ Agent Graph '{graph_key}' already exists")
+                # Still try to add edges in case they're missing
+                self._ensure_graph_edges(project_key, graph_key, graph_data)
+                return True
+
+        # Create the graph with root config
+        create_url = f"{self.base_url}/api/v2/projects/{project_key}/agent-graphs"
+        payload = {
+            "key": graph_key,
+            "name": graph_data.get("name", graph_key),
+            "description": graph_data.get("description", ""),
+            "rootConfigKey": graph_data.get("rootConfigKey")
+        }
+
+        response = requests.post(create_url, headers=self.headers, json=payload, timeout=30)
+
+        if response.status_code not in [200, 201]:
+            print(f"  ❌ Failed to create agent graph: {response.text}")
+            return False
+
+        print(f"  ✅ Agent Graph '{graph_key}' created (root: {graph_data.get('rootConfigKey')})")
+        time.sleep(0.5)
+
+        # Add all edges
+        self._ensure_graph_edges(project_key, graph_key, graph_data)
+
+        # Enable the graph in production
+        self._enable_agent_graph(project_key, graph_key)
+
+        return True
+
+    def _ensure_graph_edges(self, project_key, graph_key, graph_data):
+        """Add edges to an agent graph.
+
+        Note: The API requires rootConfigKey and edges to be sent together.
+        Edges sent alone are silently ignored.
+        """
+        if "edges" not in graph_data or not graph_data["edges"]:
+            return
+
+        print(f"  📎 Adding {len(graph_data['edges'])} edges...")
+
+        # Build edges array in API format
+        edges = []
+        for edge in graph_data["edges"]:
+            edges.append({
+                "key": edge["key"],
+                "sourceConfig": edge["sourceConfig"],
+                "targetConfig": edge["targetConfig"],
+                "handoff": edge.get("handoff", {})
+            })
+
+        # PATCH with both rootConfigKey and edges (API requirement)
+        patch_url = f"{self.base_url}/api/v2/projects/{project_key}/agent-graphs/{graph_key}"
+        patch_payload = {
+            "rootConfigKey": graph_data.get("rootConfigKey"),
+            "edges": edges
+        }
+
+        patch_response = requests.patch(patch_url, headers=self.headers, json=patch_payload, timeout=30)
+
+        if patch_response.status_code == 200:
+            for edge in graph_data["edges"]:
+                route = edge.get("handoff", {}).get("route", "default")
+                print(f"     ✓ {edge['sourceConfig']} --[{route}]--> {edge['targetConfig']}")
+        else:
+            print(f"  ⚠️ Failed to add edges: {patch_response.text}")
+
+    def _enable_agent_graph(self, project_key, graph_key):
+        """Enable agent graph targeting in production."""
+        url = f"{self.base_url}/api/v2/projects/{project_key}/agent-graphs/{graph_key}"
+        payload = {"instructions": [{"kind": "turnTargetingOn"}]}
+
+        response = requests.patch(url, headers=self.headers, json=payload, timeout=30)
+
+        if response.status_code == 200:
+            print(f"  ✅ Agent Graph '{graph_key}' enabled in production")
+        else:
+            print(f"  ⚠️ Could not enable graph: {response.text}")
 
     def enable_ai_config(self, project_key, config_key, default_variation_key=None):
         """Verify an AI Config is enabled and optionally set the default variation"""
@@ -866,6 +966,12 @@ def main():
             default_variation = ai_config["targeting"].get("defaultVariation")
         bootstrap.enable_ai_config(project_key, config_key, default_variation)
     print()
+
+    # 7) Create Agent Graph
+    if "agent_graph" in manifest["project"]:
+        print("🔗 Creating Agent Graph...")
+        bootstrap.create_agent_graph(project_key, manifest["project"]["agent_graph"])
+        print()
 
     print("✨ Bootstrap complete!")
     print()

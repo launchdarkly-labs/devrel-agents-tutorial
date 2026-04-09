@@ -1,0 +1,21 @@
+question,expected_answer,source
+"What is the refund policy?","30-day refund policy for first-time subscribers who haven't deployed production traffic. Usage charges are non-refundable.",refund-policy.md
+"What's the function timeout?","Hobby: 10 seconds. Pro/Team: 60 seconds. Enterprise: 300 seconds.",troubleshooting.md
+"Can I cancel anytime?","Yes, you can cancel your subscription at any time with no cancellation fee. Access continues until the end of your billing period.",account-management.md
+"Is there a free trial?","14-day free trial of Pro features. No credit card required.",account-management.md
+"What happens if my payment fails?","We retry failed payments 3 times over 9 days. After that, your account is downgraded to Hobby tier.",account-management.md
+"Do you deploy to China?","We cannot deploy to China mainland due to regulatory requirements. We recommend partnering with a local provider.",shipping-info.md
+"What are the Pro plan limits?","Pro plan: 1 TB bandwidth/month, 1M function invocations, 1,000 build minutes, 60s function timeout. $20/month.",account-management.md
+"How do I request a refund?","Open a support ticket at umbra.dev/support with your team slug and billing period. Processing takes 5-7 business days.",refund-policy.md
+"What frameworks are supported?","Auto-detected: Next.js, Remix, Astro, SvelteKit, Nuxt. Override in umbra.toml if needed.",feature-guide.md
+"How do I enable two-factor authentication?","2FA is managed through your Git provider (GitHub/GitLab/Bitbucket). Enable 2FA there.",account-management.md
+"What integrations are available?","Databases: Postgres (Neon, Supabase), Redis (Upstash), MongoDB Atlas. Monitoring: Datadog, Sentry, LogRocket.",feature-guide.md
+"Can I get a refund on bandwidth overages?","Usage charges including bandwidth overages are non-refundable. Review your Usage Dashboard before scaling to production.",refund-policy.md
+"What regions support GDPR compliance?","Select eu-west-1 (Dublin) or eu-central-1 (Frankfurt) as primary region and enable EU-only mode in project settings.",shipping-info.md
+"How long does deployment take?","Static assets: 30-60 seconds. Serverless functions: 45-90 seconds. Edge functions: 60-120 seconds. Full redeploy: 2-3 minutes.",shipping-info.md
+"What happens when my trial ends?","Subscribe to Pro to keep features, or automatically downgrade to Hobby with reduced limits. No data loss either way.",feature-guide.md
+"How do I delete my account?","Remove all projects first, then Settings → Account → Delete Account. 7-day grace period before permanent deletion.",account-management.md
+"What are the build environment specs?","Node.js 18, 20 (default), or 22. 8 GB RAM, 4 vCPUs. pnpm, npm, yarn, and bun supported.",feature-guide.md
+"What's the cold start latency?","Cold start under 100ms. Keep functions small (<50MB), minimize dependencies. Enterprise gets provisioned concurrency.",troubleshooting.md
+"How do I contact support?","Hobby: community forum. Pro: email (24h response). Team: email + chat (4h response). Enterprise: dedicated Slack (1h response).",troubleshooting.md
+"What if my build runs out of memory?","Add NODE_OPTIONS=--max_old_space_size=7168 to env vars, split large bundles, or reduce parallel compilation.",troubleshooting.md

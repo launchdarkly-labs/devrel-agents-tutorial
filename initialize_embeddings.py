@@ -82,7 +82,7 @@ def main():
         
         # Test the embeddings
         print("🧪 Testing search functionality...")
-        test_results = vector_store.search("reinforcement learning", top_k=3)
+        test_results = vector_store.search("refund policy", top_k=3)
         
         print(" Test results:")
         for i, (doc, score, meta) in enumerate(test_results):
