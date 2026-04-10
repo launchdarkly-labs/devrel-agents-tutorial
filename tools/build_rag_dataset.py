@@ -34,19 +34,20 @@ from data.vector_store import VectorStore
 
 
 def build_input(question: str, chunks: list[tuple[str, float, dict]]) -> str:
-    """Bundle a question and its retrieved chunks into a single prompt string.
+    """Bundle a question and its retrieved chunks into a single-line prompt.
 
-    The format is intentionally explicit so the model can't confuse context
-    with the question. Each chunk is separated by a divider for readability.
+    Newlines inside the input field break LaunchDarkly's CSV parser
+    (it treats \\n as a row terminator even inside quoted fields), so the
+    bundled prompt is flattened to one line. The `---` separator and the
+    `Question:` prefix preserve the visual structure for the model without
+    requiring multi-line fields.
     """
-    parts = ["Documentation context:"]
-    for i, (doc, _score, _meta) in enumerate(chunks, 1):
-        parts.append("---")
-        parts.append(doc.strip())
-    parts.append("---")
-    parts.append("")
-    parts.append(f"Question: {question}")
-    return "\n".join(parts)
+    flat_chunks = []
+    for doc, _score, _meta in chunks:
+        flat = " ".join(doc.split())  # collapse whitespace + newlines into spaces
+        flat_chunks.append(flat)
+    body = " --- ".join(flat_chunks)
+    return f"Documentation context: --- {body} --- Question: {question}"
 
 
 def main():
@@ -97,7 +98,16 @@ def main():
 
     out_rows = []
     for i, row in enumerate(rows, 1):
-        question = row.get("input") or row.get("question") or ""
+        # Idempotent: if the source has been previously bundled (has an
+        # `original_question` column), use that as the search query so we
+        # don't recursively bundle a bundled prompt. Otherwise treat
+        # `input` (or legacy `question`) as the question itself.
+        question = (
+            row.get("original_question")
+            or row.get("input")
+            or row.get("question")
+            or ""
+        )
         expected = row.get("expected_output") or row.get("expected_answer") or ""
         if not question:
             print(f"  Row {i}: skipping (no input)")
