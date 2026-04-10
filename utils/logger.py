@@ -13,11 +13,6 @@ def log_debug(*args: Any, **kwargs: Any) -> None:
     if LOG_MODE == 'DEBUG':
         print(*args, **kwargs)
 
-def log_info(*args: Any, **kwargs: Any) -> None:
-    """Log informational messages - shown in STUDENT and DEBUG modes"""
-    if LOG_MODE in ['STUDENT', 'DEBUG']:
-        print(*args, **kwargs)
-
 def log_verbose(*args: Any, **kwargs: Any) -> None:
     """Log verbose technical details - only shown in DEBUG mode"""
     if LOG_MODE == 'DEBUG':

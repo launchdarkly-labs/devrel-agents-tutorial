@@ -111,18 +111,6 @@ project:
       description: "Keyword search through the knowledge base. Use for finding specific terms."
       type: "function"
 
-    - key: "arxiv_search"
-      name: "ArXiv Academic Search"
-      description: "Search academic papers on ArXiv."
-      type: "mcp"
-      server: "arxiv-mcp-server"
-
-    - key: "semantic_scholar"
-      name: "Semantic Scholar Research"
-      description: "Search Semantic Scholar for academic papers and citations."
-      type: "mcp"
-      server: "semanticscholar-MCP-Server"
-
   ai_config:
     # ===========================================
     # SUPERVISOR AGENT - Workflow Orchestration

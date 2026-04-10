@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
-Test RAG Search
-Verify that the knowledge base is properly indexed and searchable
+Test RAG Search (developer debugging utility, not part of the tutorial flow).
+
+Verifies that the knowledge base is properly indexed and searchable. Run this
+when you suspect the vector store is stale or returning bad chunks.
 """
 
 import sys

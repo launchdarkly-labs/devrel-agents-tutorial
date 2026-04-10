@@ -14,29 +14,23 @@ sample_users = [
     {"id": "user_eu_free_001", "country": "FR", "region": "eu", "plan": "free"},
     {"id": "user_eu_paid_001", "country": "DE", "region": "eu", "plan": "paid"},
 ]
-print(f" UI: Loaded {len(sample_users)} sample users")
 
 # Function to get user context for LaunchDarkly targeting
 def get_user_context(user_id, sample_users):
     """Get user context (country, region, plan) for LaunchDarkly targeting"""
-    print(f" UI: Getting user context for user_id={user_id}")
     for user in sample_users:
         if user['id'] == user_id:
-            context = {
+            return {
                 "country": user['country'],
-                "region": user['region'], 
+                "region": user['region'],
                 "plan": user['plan']
             }
-            print(f" UI: Found user context: {context}")
-            return context
     # Default context for unknown users
-    default_context = {
+    return {
         "country": "US",
         "region": "other",
         "plan": "free"
     }
-    print(f" UI: User not found, using default context: {default_context}")
-    return default_context
 
 # Get API configuration from environment
 API_HOST = os.getenv('API_HOST', 'localhost')
@@ -284,33 +278,23 @@ def process_tool_display(tools, tool_details):
         tools = []
     if tool_details is None:
         tool_details = []
-    
-    # Define mapping from actual tool names to display names
-    mcp_name_mapping = {
-        "search_papers": "arxiv_search",
-        "search_semantic_scholar": "semantic_scholar"
-    }
-    
+
     for i, tool in enumerate(tools):
         tool_name = tool if isinstance(tool, str) else tool.get("name", str(tool))
-        
-        # Get search query from matching tool_details with proper name mapping
-        # Use index-based matching for multiple instances of the same tool
+
+        # Get search query from matching tool_details by index
         search_query = ""
         if i < len(tool_details):
             detail = tool_details[i]
-            detail_name = detail.get("name")
-            # Check both direct match and mapped match
-            mapped_name = mcp_name_mapping.get(detail_name, detail_name)
-            if mapped_name == tool_name:
+            if detail.get("name") == tool_name:
                 search_query = detail.get("search_query", "") or ""
-        
+
         # Add tool with search query if available
         if search_query:
             tool_list.append(f"{tool_name} ('{search_query}')")
         else:
             tool_list.append(tool_name)
-    
+
     return tool_list
 
 # Enhanced example queries section

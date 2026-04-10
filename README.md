@@ -53,7 +53,6 @@ Open http://localhost:8501
 | `tools_impl/search_v1.py` | Basic keyword search |
 | `tools_impl/search_v2.py` | Semantic vector search |
 | `tools_impl/reranking.py` | BM25 relevance scoring |
-| `tools_impl/mcp_research_tools.py` | MCP tools (arxiv_search, semantic_scholar) |
 
 ### Data & Utils
 | File | Purpose |

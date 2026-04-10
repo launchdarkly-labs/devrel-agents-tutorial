@@ -200,10 +200,7 @@ class MultiAgentBootstrap:
     def delete_variation_if_exists(self, project_key, config_key, variation_key):
         """Delete a specific variation if it exists"""
         variations = self.list_variations(project_key, config_key)
-        # Debug: Show all available variation keys
-        available_keys = [v.get("key") or v.get("variationKey", "unknown") for v in variations]
-        print(f"     Debug: Looking for '{variation_key}' in available variations: {available_keys}")
-        
+
         # Find the variation by key
         variation_id = None
         for variation in variations:
@@ -365,53 +362,14 @@ class MultiAgentBootstrap:
                 "additionalProperties": False,
                 "required": ["query", "results"]
             }
-        elif tool_key == "arxiv_search":
-            schema = {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "description": "Search query for academic papers",
-                        "type": "string"
-                    },
-                    "max_results": {
-                        "description": "Maximum number of papers to return",
-                        "type": "number"
-                    }
-                },
-                "additionalProperties": False,
-                "required": ["query"]
-            }
-        elif tool_key == "semantic_scholar":
-            schema = {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "description": "Search query for citation data",
-                        "type": "string"
-                    },
-                    "fields": {
-                        "description": "Fields to return from papers",
-                        "type": "array"
-                    }
-                },
-                "additionalProperties": False,
-                "required": ["query"]
-            }
 
         payload = {
             "key": tool_data["key"],
             "name": tool_data["name"],
             "description": tool_data["description"],
-            "schema": schema
+            "schema": schema,
+            "type": "function",
         }
-        
-        # Add MCP-specific configuration if applicable
-        if tool_data.get("type") == "mcp":
-            payload["mcpServer"] = tool_data.get("server", "")
-            # MCP tools may have different schema requirements
-            payload["type"] = "mcp"
-        else:
-            payload["type"] = "function"
         
         print(f"   Creating tool '{payload['key']}'")
         response = requests.post(url, headers=self.headers, json=payload, timeout=30)
