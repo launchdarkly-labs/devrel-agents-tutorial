@@ -99,11 +99,9 @@ class AgentGraphExecutor:
                 config = current_node.get_config()
                 execution_path.append(node_key)
 
-                # Track
-                if graph_tracker:
-                    graph_tracker.track_node_invocation(node_key)
-                    if prev_node_key:
-                        graph_tracker.track_handoff_success(prev_node_key, node_key)
+                # Track handoff into this node
+                if graph_tracker and prev_node_key:
+                    graph_tracker.track_handoff_success(prev_node_key, node_key)
 
                 # Get valid routes from outgoing edges
                 edges = current_node.get_edges()
@@ -116,18 +114,14 @@ class AgentGraphExecutor:
 
                 # Execute with generic agent, passing valid routes
                 log_student(f"EXECUTING: {node_key}")
-                node_start = time.time()
 
                 agent = create_generic_agent(config, self.config_manager, valid_routes=valid_routes)
                 result = await agent.ainvoke(ctx)
 
-                duration_ms = int((time.time() - node_start) * 1000)
-                self._track_duration(graph_tracker, graph_key, config, duration_ms)
-
-                # Track tool calls to LaunchDarkly
-                if graph_tracker and result.get("tool_calls"):
+                # Track tool calls to LaunchDarkly on the node's config tracker
+                if result.get("tool_calls"):
                     for tool_name in result["tool_calls"]:
-                        graph_tracker.track_tool_call(node_key, tool_name)
+                        config.tracker.track_tool_call(tool_name, graph_key=graph_key)
 
                 # Update context with results (generic)
                 self._update_context(node_key, config, result, ctx)
@@ -137,7 +131,7 @@ class AgentGraphExecutor:
                     log_student(f"TERMINAL: {node_key}")
                     break
 
-                next_node = self._select_next_node(edges, result, nodes, graph_tracker)
+                next_node = self._select_next_node(edges, result, nodes, graph_tracker, source_key=node_key)
                 prev_node_key = node_key
                 current_node = next_node
 
@@ -153,7 +147,7 @@ class AgentGraphExecutor:
 
         return ctx
 
-    def _select_next_node(self, edges, result: dict, nodes: dict, graph_tracker=None):
+    def _select_next_node(self, edges, result: dict, nodes: dict, graph_tracker=None, source_key: str = ""):
         """Select next node based on agent result and edge handoffs."""
         routing = result.get("routing_decision", "").lower().strip() if result.get("routing_decision") else None
 
@@ -174,7 +168,7 @@ class AgentGraphExecutor:
         elif routing:
             log_student(f"  UNRECOGNIZED ROUTE: '{routing}' not in {list(route_map.keys())}")
             if graph_tracker:
-                graph_tracker.track_handoff_failure()
+                graph_tracker.track_handoff_failure(source_key, routing)
 
         # Default: first edge (fallback)
         if edges:
@@ -218,29 +212,6 @@ class AgentGraphExecutor:
                 agent_info[key] = value
 
         ctx["agent_configs"].append(agent_info)
-
-    def _track_duration(self, graph_tracker, graph_key: str, config, duration_ms: int):
-        """Track node duration."""
-        if not graph_tracker or not config:
-            return
-        if not hasattr(graph_tracker, '_ld_client'):
-            return
-
-        tracker = config.tracker
-        track_data = {
-            'graphKey': graph_key,
-            'configKey': getattr(tracker, '_config_key', 'unknown'),
-            'variationKey': getattr(tracker, '_variation_key', 'default'),
-            'version': getattr(tracker, '_version', 1),
-            'modelName': getattr(tracker, '_model_name', 'unknown'),
-            'providerName': getattr(tracker, '_provider_name', 'unknown'),
-        }
-        graph_tracker._ld_client.track(
-            "$ld:ai:duration:total",
-            graph_tracker._context,
-            track_data,
-            duration_ms
-        )
 
     def _track_graph_metrics(self, graph_tracker, ctx: dict, path: list, start_time: float):
         """Track overall graph metrics."""
