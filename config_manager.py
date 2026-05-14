@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 import ldclient
 from ldclient import Context
-from ldai.client import LDAIClient, LDAIAgentConfig, LDAIAgentDefaults, ModelConfig, ProviderConfig
+from ldai import LDAIClient, AIAgentConfigRequest, AIAgentConfigDefault, ModelConfig, ProviderConfig
 from ldai.tracker import FeedbackKind
 from dotenv import load_dotenv
 from utils.logger import log_student, log_debug
@@ -68,14 +68,14 @@ class FixedConfigManager:
                 "  ld-aic validate --config-keys 'supervisor-agent,support-agent,security-agent'"
             )
 
-    def _get_default_config(self, config_key: str) -> LDAIAgentDefaults:
+    def _get_default_config(self, config_key: str) -> AIAgentConfigDefault:
         """Get fallback config from .ai_config_defaults.json
 
         Args:
             config_key: The AI config key (e.g., 'support-agent')
 
         Returns:
-            LDAIAgentDefaults object with config from the defaults file
+            AIAgentConfigDefault object with config from the defaults file
 
         Raises:
             ValueError: If config key not found in defaults
@@ -93,9 +93,9 @@ class FixedConfigManager:
 
         config_data = self.config_defaults[config_key]
 
-        # Convert JSON config to LDAIAgentDefaults
+        # Convert JSON config to AIAgentConfigDefault
         # Note: Tools are managed by LaunchDarkly and not part of defaults
-        return LDAIAgentDefaults(
+        return AIAgentConfigDefault(
             enabled=config_data.get("enabled", True),
             model=ModelConfig(
                 name=config_data["model"]["name"],
@@ -207,21 +207,21 @@ class FixedConfigManager:
         default_config = self._get_default_config(ai_config_key)
         log_debug(f"CONFIG MANAGER: Loaded fallback default - model: {default_config.model.name}")
 
-        agent_config = LDAIAgentConfig(
-            key=ai_config_key,
-            default_value=default_config  # Use validated production defaults from file
+        # Call LaunchDarkly - SDK automatically falls back to default if LD unavailable
+        result = self.ai_client.agent_config(
+            ai_config_key,
+            ld_user_context,
+            default=default_config,  # Use validated production defaults from file
         )
-
-        # Call LaunchDarkly - SDK automatically falls back to default_value if LD unavailable
-        result = self.ai_client.agent(agent_config, ld_user_context)
         log_debug("CONFIG MANAGER: ✅ Got config (from LaunchDarkly or fallback)")
 
         # Debug the actual configuration received (basic info only)
         try:
             config_dict = result.to_dict()
             log_debug(f"CONFIG MANAGER: Model: {config_dict.get('model', {}).get('name', 'unknown')}")
-            if hasattr(result, 'tracker') and hasattr(result.tracker, '_variation_key'):
-                log_debug(f"CONFIG MANAGER: Variation: {result.tracker._variation_key}")
+            tracker = result.create_tracker()
+            if hasattr(tracker, '_variation_key'):
+                log_debug(f"CONFIG MANAGER: Variation: {tracker._variation_key}")
         except Exception as debug_e:
             log_debug(f"CONFIG MANAGER: Could not debug result: {debug_e}")
 
@@ -251,10 +251,11 @@ class FixedConfigManager:
         """
         try:
             # Extract metadata from agent_config for experiment attribution
+            tracker = agent_config.create_tracker()
             metadata = {
                 "version": 1,
                 "configKey": config_key,
-                "variationKey": agent_config.tracker._variation_key if hasattr(agent_config.tracker, '_variation_key') else 'unknown',
+                "variationKey": tracker._variation_key if hasattr(tracker, '_variation_key') else 'unknown',
                 "modelName": agent_config.model.name if hasattr(agent_config, 'model') else 'unknown',
                 "providerName": agent_config.provider.name if hasattr(agent_config, 'provider') else 'unknown'
             }

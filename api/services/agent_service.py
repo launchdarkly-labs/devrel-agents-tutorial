@@ -236,8 +236,9 @@ class AgentService:
             def get_variation_key(ai_config, agent_name):
                 try:
                     # The variation key is stored in the tracker object
-                    if hasattr(ai_config, 'tracker') and hasattr(ai_config.tracker, '_variation_key'):
-                        variation_key = ai_config.tracker._variation_key
+                    tracker = ai_config.create_tracker()
+                    if hasattr(tracker, '_variation_key'):
+                        variation_key = tracker._variation_key
                         log_debug(f"VARIATION EXTRACTED for {agent_name}: {variation_key}")
                         return variation_key
                     else:

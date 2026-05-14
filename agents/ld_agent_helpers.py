@@ -275,7 +275,7 @@ async def create_agent_with_fresh_config(
             prompt=agent_config.instructions
         )
 
-        return agent, agent_config.tracker, False, effective_recursion_limit
+        return agent, agent_config.create_tracker(), False, effective_recursion_limit
 
     except Exception as e:
         log_student(f"ERROR in create_agent_with_fresh_config: {e}")
@@ -355,8 +355,7 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                     # Track success and latency
                     tracker.track_success()
                     latency_ms = int((time.time() - start_time) * 1000)
-                    if hasattr(tracker, 'track_latency_ms'):
-                        tracker.track_latency_ms(latency_ms)
+                    tracker.track_duration(latency_ms)
 
                     # Extract token usage from new messages
                     new_messages = response['messages'][prev_message_count:]

@@ -112,6 +112,9 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
                     "response": "Security check disabled"
                 }
 
+            # Create tracker for token, cost, and success/error metrics
+            tracker = agent_config.create_tracker()
+
             # Create model with structured output and up-to-date instructions
             from agents.ld_agent_helpers import map_provider_to_langchain, create_bedrock_chat_model
             from utils.bedrock_helpers import normalize_bedrock_provider
@@ -212,7 +215,7 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
                         output=usage_data.get("output_tokens", 0),
                         total=usage_data.get("total_tokens", 0)
                     )
-                    agent_config.tracker.track_tokens(token_usage)
+                    tracker.track_tokens(token_usage)
                     log_student(f"SECURITY PII DETECTION TOKENS: {token_usage.total} tokens ({token_usage.input} in, {token_usage.output} out)")
 
                     # Track cost metric with AI Config metadata for experiment attribution
@@ -229,7 +232,7 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
                         log_student(f"COST TRACKING: ${cost:.6f} for {agent_config.model.name}")
 
             # Track success metric
-            agent_config.tracker.track_success()
+            tracker.track_success()
 
             # Extract structured results
             detected = pii_result.detected
@@ -248,11 +251,11 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
             }
             
         except Exception:
-            
+
             # Track error with LDAI metrics
             try:
-                if 'agent_config' in locals() and agent_config and hasattr(agent_config, 'tracker'):
-                    agent_config.tracker.track_error()
+                if 'agent_config' in locals() and agent_config:
+                    agent_config.create_tracker().track_error()
             except Exception:
                 pass
             
