@@ -13,13 +13,11 @@ MODEL_PRICING = {
     "gpt-4o-mini-2024-07-18": {"input": 0.15, "output": 0.60},
     "chatgpt-4o-latest": {"input": 6.00, "output": 18.00},
 
-    # Anthropic Claude Models - All Versions Found in Codebase
-    "claude-3-5-sonnet-20241022": {"input": 3.00, "output": 15.00},
-    "claude-3-5-haiku-20241022": {"input": 0.25, "output": 1.25},
-    "claude-3-haiku-20240307": {"input": 0.25, "output": 1.25},
-    "claude-3-7-sonnet-latest": {"input": 3.00, "output": 15.00},
+    # Anthropic Claude Models
+    "claude-sonnet-4-6": {"input": 3.00, "output": 15.00},
+    "claude-haiku-4-5-20251001": {"input": 0.25, "output": 1.25},
     "claude-3-5-sonnet-latest": {"input": 3.00, "output": 15.00},
-    "claude-opus-4-20250514": {"input": 15.00, "output": 75.00},
+    "claude-opus-4-7": {"input": 15.00, "output": 75.00},
 
     # Mistral Models (Free as specified)
     "mistral-small-latest": {"input": 0.0, "output": 0.0},
@@ -28,9 +26,9 @@ MODEL_PRICING = {
     "mistral-large": {"input": 0.0, "output": 0.0},
 
     # LaunchDarkly Provider-Prefixed Names (from create_configs.py mapping)
-    "Anthropic.claude-3-7-sonnet-latest": {"input": 3.00, "output": 15.00},
-    "Anthropic.claude-3-5-haiku-20241022": {"input": 0.25, "output": 1.25},
-    "Anthropic.claude-opus-4-20250514": {"input": 15.00, "output": 75.00},
+    "Anthropic.claude-sonnet-4-6": {"input": 3.00, "output": 15.00},
+    "Anthropic.claude-haiku-4-5-20251001": {"input": 0.25, "output": 1.25},
+    "Anthropic.claude-opus-4-7": {"input": 15.00, "output": 75.00},
     "OpenAI.gpt-4o": {"input": 6.00, "output": 18.00},
     "OpenAI.gpt-4o-mini-2024-07-18": {"input": 0.15, "output": 0.60},
     "Mistral.mistral-small-latest": {"input": 0.0, "output": 0.0},

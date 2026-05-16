@@ -177,15 +177,15 @@ When configuring AI models in LaunchDarkly for Bedrock, you should use **inferen
 
 **✅ BEST PRACTICE - Inference Profile IDs (with region prefix):**
 ```
-us.anthropic.claude-3-5-sonnet-20241022-v2:0
+us.anthropic.claude-sonnet-4-6-v2:0
 us.anthropic.claude-3-7-sonnet-20250219-v1:0
-eu.anthropic.claude-3-5-haiku-20241022-v2:0
+eu.anthropic.claude-haiku-4-5-20251001-v2:0
 ```
 
 **⚠️ AUTO-CORRECTED - Direct Model IDs (will be fixed automatically):**
 ```
 anthropic.claude-3-7-sonnet-20250219-v1:0  → us.anthropic.claude-3-7-sonnet-20250219-v1:0
-anthropic.claude-3-5-sonnet-20241022-v2:0  → us.anthropic.claude-3-5-sonnet-20241022-v2:0
+anthropic.claude-sonnet-4-6-v2:0  → us.anthropic.claude-sonnet-4-6-v2:0
 ```
 
 **How Auto-Correction Works:**
@@ -371,11 +371,11 @@ Create LaunchDarkly AI Configs to control your **LangGraph** multi-agent system 
 > Anthropic
 > ```
 > ```
-> claude-3-7-sonnet-latest
+> claude-sonnet-4-6
 > ```
 >
 > **Note for Bedrock users:** The system auto-corrects direct model IDs to inference profiles:
-> - Use either `claude-3-7-sonnet-latest` (auto-corrected) or `us.anthropic.claude-3-7-sonnet-20250219-v1:0` (explicit)
+> - Use either `claude-sonnet-4-6` (auto-corrected) or `us.anthropic.claude-3-7-sonnet-20250219-v1:0` (explicit)
 > - Control region prefix via `BEDROCK_INFERENCE_REGION` env var (defaults to `us`)
 > - See "Bedrock Model ID Requirements" section above for details
 >
@@ -434,7 +434,7 @@ Similarly, create another AI Config called `security-agent`
 > Anthropic
 > ``` 
 > ```
-> claude-3-7-sonnet-latest
+> claude-sonnet-4-6
 > ```
 >
 > **Goal or task:** 
@@ -461,7 +461,7 @@ Finally, create `support-agent`
 > Anthropic
 > ``` 
 > ```
-> claude-3-7-sonnet-latest
+> claude-sonnet-4-6
 > ```
 >
 > Click **Attach tools**.

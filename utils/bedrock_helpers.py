@@ -51,7 +51,7 @@ def extract_base_model_from_inference_profile(inference_profile_id: str) -> str:
     """
     Extract base model name from inference profile for pricing.
 
-    us.anthropic.claude-3-5-sonnet-20241022-v2:0 → claude-3-5-sonnet-20241022
+    us.anthropic.claude-sonnet-4-6-v2:0 → claude-sonnet-4-6
     """
     if not inference_profile_id:
         return inference_profile_id
@@ -67,7 +67,7 @@ def extract_base_model_from_inference_profile(inference_profile_id: str) -> str:
     if len(provider_parts) < 2:
         return inference_profile_id
 
-    # Now we have something like "claude-3-5-sonnet-20241022-v2:0"
+    # Now we have something like "claude-sonnet-4-6-v2:0"
     full_model = provider_parts[1]
 
     # Map to base model name for pricing
@@ -76,11 +76,11 @@ def extract_base_model_from_inference_profile(inference_profile_id: str) -> str:
 
     # Map specific versions to pricing model names
     model_mapping = {
-        'claude-3-5-sonnet-20241022': 'claude-3-5-sonnet-20241022',
+        'claude-sonnet-4-6': 'claude-sonnet-4-6',
         'claude-3-5-sonnet-20250219': 'claude-3-5-sonnet-latest',
-        'claude-3-7-sonnet-20250219': 'claude-3-7-sonnet-latest',
-        'claude-3-5-haiku-20241022': 'claude-3-5-haiku-20241022',
-        'claude-opus-4-20250514': 'claude-opus-4-20250514',
+        'claude-3-7-sonnet-20250219': 'claude-sonnet-4-6',
+        'claude-haiku-4-5-20251001': 'claude-haiku-4-5-20251001',
+        'claude-opus-4-7': 'claude-opus-4-7',
     }
 
     return model_mapping.get(model_base, model_base)
