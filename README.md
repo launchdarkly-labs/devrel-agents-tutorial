@@ -69,8 +69,17 @@ You'll need:
 
 - **Python 3.9+** with `uv` package manager ([install uv](https://docs.astral.sh/uv/getting-started/installation/))
 - **LaunchDarkly account** ([sign up for free](https://app.launchdarkly.com/signup))
+
+**Choose your AI provider setup:**
+
+**Option A: AWS Bedrock (Recommended)**
+- **AWS Account** with Bedrock access and SSO configured
+- **No API keys required** - uses AWS SSO authentication
+- **Cost-effective** - enterprise-grade with cross-region failover
+
+**Option B: Direct API Keys (Traditional)**
 - **OpenAI API key** (required for RAG architecture embeddings)
-- **Anthropic API key** (required for Claude models) or **OpenAI API key** (for GPT models)
+- **Anthropic API key** (for Claude models) or **OpenAI API key** (for GPT models)
 
 ## Step 1: Clone and Configure (2 minutes)
 
@@ -139,15 +148,106 @@ First, you need to get your LaunchDarkly SDK key by creating a project:
 
 </div>
 
-Now edit `.env` with your keys:
+Now configure your authentication method in `.env`:
+
+### Option A: AWS Bedrock Setup (Recommended)
+
 ```bash
+# LaunchDarkly Configuration
 LD_SDK_KEY=your-launchdarkly-sdk-key  # From step above
+
+# AWS Bedrock Configuration
+AUTH_METHOD=sso                       # Use AWS SSO authentication
+AWS_REGION=us-east-1                  # Your AWS region
+AWS_PROFILE=your-sso-profile-name     # Your AWS SSO profile name
+
+# Optional: Bedrock Embedding Configuration
+BEDROCK_EMBEDDING_DIMENSIONS=1024     # Options: 256, 512, 1024
+BEDROCK_EMBEDDING_MODEL=amazon.titan-embed-text-v2:0
+```
+
+**Then configure AWS SSO:**
+```bash
+# Configure AWS SSO (one-time setup)
+aws configure sso --profile your-sso-profile-name
+
+# Login to AWS SSO (run when token expires)
+aws sso login --profile your-sso-profile-name
+
+# Test your access
+aws bedrock list-foundation-models --region us-east-1 --profile your-sso-profile-name
+```
+
+### Option B: Direct API Keys Setup
+
+```bash
+# LaunchDarkly Configuration
+LD_SDK_KEY=your-launchdarkly-sdk-key  # From step above
+
+# Direct API Configuration
+AUTH_METHOD=api-key                   # Use direct API keys (default)
 OPENAI_API_KEY=your-openai-key        # Required for RAG embeddings
 ANTHROPIC_API_KEY=your-anthropic-key  # Required for Claude models
 ```
 
 This sets up a **LangGraph** application that uses LaunchDarkly to control AI behavior. Think of it like swapping actors, directors, even props mid-performance without stopping the show.
-Do not check the `.env` into your source control. Keep those secrets safe!
+
+**Security Note:** Do not check the `.env` into your source control. Keep those secrets safe!
+
+### 🚨 **Common AWS SSO Issue:**
+
+If you get `AccessDeniedException` errors, verify your Python code is using the correct AWS profile:
+
+```bash
+# Check which AWS account your profile uses
+aws sts get-caller-identity --profile your-sso-profile-name
+
+# If the account numbers don't match your error message, add AWS_PROFILE to your .env
+```
+
+**The error message will show the account number your Python code is using.** Make sure it matches your SSO profile account.
+
+### 🚨 **Bedrock Model ID Requirements:**
+
+When configuring AI models in LaunchDarkly for Bedrock, you should use **inference profile IDs** (with region prefix):
+
+**✅ BEST PRACTICE - Inference Profile IDs (with region prefix):**
+```
+us.anthropic.claude-sonnet-4-6-v2:0
+us.anthropic.claude-3-7-sonnet-20250219-v1:0
+eu.anthropic.claude-haiku-4-5-20251001-v2:0
+```
+
+**⚠️ AUTO-CORRECTED - Direct Model IDs (will be fixed automatically):**
+```
+anthropic.claude-3-7-sonnet-20250219-v1:0  → us.anthropic.claude-3-7-sonnet-20250219-v1:0
+anthropic.claude-sonnet-4-6-v2:0  → us.anthropic.claude-sonnet-4-6-v2:0
+```
+
+**How Auto-Correction Works:**
+
+The system automatically converts direct model IDs to inference profile IDs to prevent `ValidationException` errors from Bedrock. The region prefix is determined by:
+
+1. **`BEDROCK_INFERENCE_REGION`** env var (if set) - explicit user preference
+2. **`AWS_REGION`** env var (e.g., `us-east-1` → `us` prefix) - automatic detection
+3. **Default to `us`** if neither is set
+
+**Configuring Region Prefix:**
+
+To use European inference profiles, add to your `.env`:
+```bash
+BEDROCK_INFERENCE_REGION=eu  # Force EU inference profiles
+```
+
+**Finding Available Inference Profiles:**
+```bash
+# List available Bedrock inference profiles
+aws bedrock list-inference-profiles --region us-east-1 --profile your-sso-profile-name
+```
+
+**Why Inference Profiles?**
+
+Bedrock requires inference profile IDs for on-demand throughput. The region prefix (`us.`, `eu.`, `ap.`, etc.) enables cross-region inference profiles for better availability and failover.
 
 ## Step 2: Add Your Business Knowledge (2 minutes)
 
