@@ -119,10 +119,13 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
     
     # Import needed modules for model creation
     from langchain.chat_models import init_chat_model
-    
+
     # Create child agents with config manager
     support_agent = create_support_agent(support_config, config_manager)
     security_agent = create_security_agent(security_config, config_manager)
+
+    # Create tracker for the supervisor's own LLM calls and orchestration metrics
+    supervisor_tracker = supervisor_config.create_tracker()
 
     log_debug(f"SUPERVISOR INSTRUCTIONS: {supervisor_config.instructions}")
 
@@ -217,7 +220,7 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
                         output=usage_data.get("output_tokens", 0),
                         total=usage_data.get("total_tokens", 0)
                     )
-                    supervisor_config.tracker.track_tokens(token_usage)
+                    supervisor_tracker.track_tokens(token_usage)
                     log_student(f"PII PRESCREEN TOKENS: {token_usage.total} tokens ({token_usage.input} in, {token_usage.output} out)")
 
                     # Track cost metric with AI Config metadata for experiment attribution
@@ -234,7 +237,7 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
                         log_student(f"COST TRACKING: ${cost:.6f} for {supervisor_config.model.name}")
 
             # Track success metric
-            supervisor_config.tracker.track_success()
+            supervisor_tracker.track_success()
 
             # Log the intelligent decision
             log_student(f"ROUTING: {screening_result.recommended_route} ({screening_result.confidence:.1f}) - {screening_result.reasoning}")
@@ -390,8 +393,7 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             
         except Exception as e:
             # Track error with LDAI metrics
-            if 'supervisor_config' in locals() and supervisor_config and hasattr(supervisor_config, 'tracker'):
-                supervisor_config.tracker.track_error()
+            supervisor_tracker.track_error()
 
             return {
                 "messages": [AIMessage(content=f"Security agent error: {e}")],
@@ -501,8 +503,7 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             
         except Exception as e:
             # Track error with LDAI metrics
-            if 'supervisor_config' in locals() and supervisor_config and hasattr(supervisor_config, 'tracker'):
-                supervisor_config.tracker.track_error()
+            supervisor_tracker.track_error()
 
             return {
                 "messages": [AIMessage(content=f"Support agent error: {e}")],
