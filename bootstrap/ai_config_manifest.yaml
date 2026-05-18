@@ -10,7 +10,7 @@
 # DO NOT modify instructions here after bootstrap - use LaunchDarkly instead!
 
 project:
-  key: "multi-agent-chatbot"  # Your LaunchDarkly project key
+  key: "agents-tut-1-langgraph"  # Your LaunchDarkly project key
   environment:
     - key: production
   
