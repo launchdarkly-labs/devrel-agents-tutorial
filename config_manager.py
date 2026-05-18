@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 import ldclient
 from ldclient import Context
-from ldai import LDAIClient, AIAgentConfigRequest, AIAgentConfigDefault, ModelConfig, ProviderConfig
+from ldai import LDAIClient, AIAgentConfigDefault, ModelConfig, ProviderConfig
 from ldai.tracker import FeedbackKind
 from dotenv import load_dotenv
 from utils.logger import log_student, log_debug
