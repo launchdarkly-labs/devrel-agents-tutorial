@@ -283,6 +283,8 @@ Here's how the smart segmentation works:
 - **Free users**: Basic search tools (`search_v1`)
 - **Paid users**: Full research capabilities (`search_v1`, `search_v2`, `reranking`, `arxiv_search`, `semantic_scholar`)
 
+> **Note — AWS Bedrock inference region:** This geo-segmentation is fully correct for the **non-Bedrock** path (direct OpenAI / Anthropic / Mistral APIs) — EU vs non-EU routing of model, provider, and PII-redaction strictness works exactly as described. On the **AWS Bedrock** path it likewise segments the model and redaction correctly, but it **cannot segment the AWS inference region**: the region prefix is process-global (set once via `BEDROCK_INFERENCE_REGION`), so every Bedrock call in a deployment uses the same region regardless of the user's EU/non-EU segment. Making the inference region a per-variation property is a planned LaunchDarkly enhancement; until then, run separate deployments per region if EU-region inference is a hard requirement.
+
 ## Step 4: Test Segmentation with Script (2 minutes)
 
 The included test script simulates real user scenarios across all segments, verifying that your targeting rules work correctly. It sends actual API requests to your system and confirms each user type gets the right model, tools, and behavior.
