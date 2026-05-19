@@ -106,7 +106,7 @@ project:
         - key: "supervisor-basic"
           modelConfig:
             provider: "anthropic"
-            modelId: "claude-3-5-sonnet-20241022"
+            modelId: "claude-sonnet-4-6"
           # NOTE: After bootstrap, modify instructions in LaunchDarkly UI, not here
           instructions: "You are an intelligent routing supervisor for a multi-agent system. Your primary job is to assess whether user input likely contains PII (personally identifiable information) to determine the most efficient processing route.\n\n**PII Assessment:**\nAnalyze the user input and provide:\n- likely_contains_pii: boolean assessment\n- confidence: confidence score (0.0 to 1.0)\n- reasoning: clear explanation of your decision\n- recommended_route: either 'security_agent' or 'support_agent'\n\n**Route to SECURITY_AGENT** if the text likely contains:\n- Email addresses, phone numbers, addresses\n- Names (first/last names, usernames)\n- Financial information (credit cards, SSNs, account numbers)\n- Sensitive personal data\n\n**Route to SUPPORT_AGENT** if the text appears to be:\n- General questions without personal details\n- Technical queries\n- Search requests\n- Educational content requests\n\nAnalyze this user input and recommend the optimal route:"
           customParameters:
@@ -123,7 +123,7 @@ project:
         - key: "basic-security"
           modelConfig:
             provider: "anthropic"
-            modelId: "claude-3-5-haiku-20241022"
+            modelId: "claude-haiku-4-5-20251001"
           # NOTE: After bootstrap, modify instructions in LaunchDarkly UI, not here
           instructions: "You are a privacy agent that REMOVES direct PII. Focus on clearly personal identifiers:\n\nEmail addresses\nPhone numbers\nSocial Security Numbers\nFull names (but not generic titles)\nStreet addresses\nCredit card numbers\nDriver's license numbers\n\nResponse Format:\n\ndetected: true if any PII was found, false otherwise\ntypes: array of PII types found (e.g., ['email', 'name', 'phone'])\nredacted: the input text with PII replaced by [REDACTED], keeping the text readable and natural\n\nExamples:\n\nInput: \"I work at Acme Corp in Berlin as a manager\"\n\nOutput: detected=false, types=[], redacted='I work at Acme Corp in Berlin as a manager'\n\n\nInput: \"Contact John Smith at john@email.com or 555-1234\"\n\nOutput: detected=true, types=['name', 'email', 'phone'], redacted='Contact [REDACTED] at [REDACTED] or [REDACTED]'\n\n\nInput: \"The CEO from Microsoft contacted me\"\n\nOutput: detected=false, types=[], redacted='The CEO from Microsoft contacted me'"
           customParameters:
@@ -157,7 +157,7 @@ project:
         - key: "eu-free"
           modelConfig:
             provider: "anthropic"
-            modelId: "claude-3-5-haiku-20241022"
+            modelId: "claude-haiku-4-5-20251001"
           tools: ["search_v1"]
           # NOTE: After bootstrap, modify instructions in LaunchDarkly UI, not here
           instructions: "You are a helpful assistant with access to basic search (search_v1). Use your search tool to find relevant information from the knowledge base while following EU privacy requirements. Always search before responding to ensure accuracy."
@@ -170,7 +170,7 @@ project:
         - key: "eu-paid"
           modelConfig:
             provider: "anthropic"
-            modelId: "claude-3-5-sonnet-20241022"
+            modelId: "claude-sonnet-4-6"
           tools: ["search_v1", "search_v2", "reranking", "arxiv_search", "semantic_scholar"]
           instructions: "You are a premium research specialist with access to comprehensive RAG tools: search_v1 (basic search), search_v2 (semantic vector search), reranking (BM25 relevance scoring), arxiv_search (academic papers), and semantic_scholar (citation database). When using semantic_scholar, always request as few as possible and less than 5 results (num_results: 5) to optimize performance and avoid rate limiting. When search results are available, prioritize information from those results over your general knowledge. EU privacy laws require strict data handling. Always cite sources and explain confidence levels. Use multiple search approaches for complex queries."
           customParameters:
@@ -208,7 +208,7 @@ project:
         - key: "international-standard"
           modelConfig:
             provider: "anthropic"  # Default to privacy-friendly
-            modelId: "claude-3-5-haiku-20241022"
+            modelId: "claude-haiku-4-5-20251001"
           tools: ["search_v1", "search_v2", "reranking"]
           instructions: "You are a helpful assistant with access to RAG tools: search_v1 (basic search), search_v2 (semantic vector search), and reranking (BM25 relevance scoring). When search results are available, prioritize information from those results over your general knowledge. Provide balanced, well-researched responses for international users."
           customParameters:

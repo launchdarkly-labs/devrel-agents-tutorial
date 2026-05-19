@@ -68,7 +68,7 @@ Most users don't give feedback unless the answer is notably good or bad."""
 
         try:
             ai_response = self.claude.messages.create(
-                model="claude-3-haiku-20240307",
+                model="claude-haiku-4-5-20251001",
                 max_tokens=10,
                 messages=[{"role": "user", "content": prompt}]
             )
@@ -88,7 +88,7 @@ Most users don't give feedback unless the answer is notably good or bad."""
         """Generate base RL topics"""
         try:
             response = self.claude.messages.create(
-                model="claude-3-5-haiku-20241022",
+                model="claude-haiku-4-5-20251001",
                 max_tokens=800,
                 messages=[{
                     "role": "user",
@@ -145,7 +145,7 @@ Complexity guide:
 
         try:
             response = self.claude.messages.create(
-                model="claude-3-5-haiku-20241022",
+                model="claude-haiku-4-5-20251001",
                 max_tokens=100,
                 messages=[{"role": "user", "content": prompt}]
             )

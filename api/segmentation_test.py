@@ -216,7 +216,7 @@ def main():
             "user_context": {"country": "DE", "plan": "paid", "user_id": "user_eu_paid_001", "region": "europe"},
             "expected_config": {
                 "support_agent": {
-                    "model": "claude-3-7-sonnet-latest",
+                    "model": "claude-sonnet-4-6",
                     "variation_key": "eu-paid",
                     "tools": ["search_v1", "search_v2", "reranking", "arxiv_search", "semantic_scholar"]
                 }
@@ -227,7 +227,7 @@ def main():
             "user_context": {"country": "DE", "plan": "free", "user_id": "user_eu_free_001", "region": "europe"},
             "expected_config": {
                 "support_agent": {
-                    "model": "claude-3-5-haiku-20241022",
+                    "model": "claude-haiku-4-5-20251001",
                     "variation_key": "eu-free", 
                     "tools": ["search_v1"]
                 }

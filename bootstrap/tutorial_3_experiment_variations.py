@@ -75,7 +75,7 @@ class Tutorial3VariationBootstrap:
                 "name": "Claude Opus 4 Treatment",
                 "instructions": "You are a helpful assistant that can search documentation and research papers. When search results are available, prioritize information from those results over your general knowledge to provide the most accurate and up-to-date responses. Use available tools to search the knowledge base and external research databases to answer questions accurately and comprehensively.",
                 "model": {
-                    "name": "claude-opus-4-20250514",
+                    "name": "claude-opus-4-7",
                     "provider": "anthropic"
                 },
                 "tools": ["search_v1", "search_v2", "reranking", "arxiv_search", "semantic_scholar"],
@@ -96,7 +96,7 @@ class Tutorial3VariationBootstrap:
             # Map model name to LaunchDarkly modelConfigKey
             model_name = variation["model"]["name"]
             model_config_key_map = {
-                "claude-opus-4-20250514": "Anthropic.claude-opus-4-20250514",
+                "claude-opus-4-7": "Anthropic.claude-opus-4-7",
             }
             
             model_config_key = model_config_key_map.get(model_name)
