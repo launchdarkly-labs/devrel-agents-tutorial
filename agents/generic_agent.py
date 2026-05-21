@@ -41,6 +41,8 @@ def create_generic_agent(agent_config, config_manager, valid_routes: List[str] =
                 log_student(f"AGENT DISABLED: skipping")
                 return {"response": "", "_skipped": True}
 
+            tracker = agent_config.create_tracker()
+
             try:
                 # Create model from config
                 model = create_model_for_config(
@@ -83,19 +85,19 @@ def create_generic_agent(agent_config, config_manager, valid_routes: List[str] =
 
                 # Track metrics
                 duration_ms = int((time.time() - start_time) * 1000)
-                agent_config.tracker.track_duration(duration_ms)
-                agent_config.tracker.track_success()
+                tracker.track_duration(duration_ms)
+                tracker.track_success()
 
                 log_student(f"DURATION: {duration_ms}ms")
 
                 if "_token_usage" in result and result["_token_usage"]["total"] > 0:
-                    agent_config.tracker.track_tokens(TokenUsage(**result["_token_usage"]))
+                    tracker.track_tokens(TokenUsage(**result["_token_usage"]))
 
                 return result
 
             except Exception as e:
                 log_student(f"AGENT ERROR: {e}")
-                agent_config.tracker.track_error()
+                tracker.track_error()
                 return {
                     "response": f"Error: {e}",
                     "_error": str(e)

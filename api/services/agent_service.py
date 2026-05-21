@@ -201,8 +201,10 @@ class AgentGraphExecutor:
 
         # Get variation key
         var_key = "default"
-        if hasattr(config, 'tracker') and hasattr(config.tracker, '_variation_key'):
-            var_key = config.tracker._variation_key
+        if config:
+            cfg_tracker = config.create_tracker()
+            if hasattr(cfg_tracker, '_variation_key'):
+                var_key = cfg_tracker._variation_key
 
         # Record agent config - fully generic, include all result fields
         agent_info = {
@@ -226,7 +228,7 @@ class AgentGraphExecutor:
         if not hasattr(graph_tracker, '_ld_client'):
             return
 
-        tracker = config.tracker
+        tracker = config.create_tracker()
         track_data = {
             'graphKey': graph_key,
             'configKey': getattr(tracker, '_config_key', 'unknown'),

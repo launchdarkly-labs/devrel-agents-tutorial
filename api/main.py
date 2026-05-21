@@ -94,7 +94,7 @@ async def submit_feedback(feedback: FeedbackRequest):
 
             # Track feedback using config_manager
             success = agent_service.config_manager.track_feedback(
-                support_config.tracker,
+                support_config.create_tracker(),
                 thumbs_up=thumbs_up
             )
 
