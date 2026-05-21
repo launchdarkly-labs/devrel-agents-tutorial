@@ -239,7 +239,7 @@ async def create_agent_with_fresh_config(
             prompt=config.instructions
         )
 
-        return agent, config.tracker, False, recursion_limit
+        return agent, config.create_tracker(), False, recursion_limit
 
     except Exception as e:
         log_student(f"ERROR creating agent: {e}")
@@ -284,8 +284,8 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
 
                 # Use graph node tracker if available
                 active_tracker = (
-                    graph_node_config.tracker
-                    if graph_node_config and hasattr(graph_node_config, 'tracker')
+                    graph_node_config.create_tracker()
+                    if graph_node_config
                     else tracker
                 )
 

@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 import ldclient
 from ldclient import Context
-from ldai.client import LDAIClient, AIAgentConfigDefault, ModelConfig, ProviderConfig
+from ldai import LDAIClient, AIAgentConfigDefault, ModelConfig, ProviderConfig
 from ldai.tracker import FeedbackKind
 from dotenv import load_dotenv
 from utils.logger import log_student, log_debug
@@ -207,8 +207,9 @@ class FixedConfigManager:
         try:
             config_dict = result.to_dict()
             log_debug(f"CONFIG MANAGER: Model: {config_dict.get('model', {}).get('name', 'unknown')}")
-            if hasattr(result, 'tracker') and hasattr(result.tracker, '_variation_key'):
-                log_debug(f"CONFIG MANAGER: Variation: {result.tracker._variation_key}")
+            debug_tracker = result.create_tracker()
+            if hasattr(debug_tracker, '_variation_key'):
+                log_debug(f"CONFIG MANAGER: Variation: {debug_tracker._variation_key}")
         except Exception as debug_e:
             log_debug(f"CONFIG MANAGER: Could not debug result: {debug_e}")
 
@@ -218,6 +219,18 @@ class FixedConfigManager:
     def flush(self):
         """Flush metrics and clear SDK cache"""
         self.ld_client.flush()
+
+    def clear_cache(self):
+        """Clear any cached configs (no-op for now, configs fetched live)"""
+        pass
+
+    def get_agent_graph(self, user_id: str, graph_key: str, user_context: dict = None):
+        """Get LaunchDarkly Agent Graph definition."""
+        log_debug(f"CONFIG MANAGER: Getting agent graph '{graph_key}' for user_id={user_id}")
+        ld_context = self.build_context(user_id, user_context)
+        graph = self.ai_client.agent_graph(graph_key, ld_context)
+        log_debug(f"CONFIG MANAGER: Got agent graph '{graph_key}'")
+        return graph
 
     def track_feedback(self, tracker, thumbs_up: bool):
         """Track user feedback with LaunchDarkly"""
