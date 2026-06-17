@@ -696,7 +696,7 @@ def main():
         return
     
     # Load manifest
-    manifest_path = Path("ai_config_manifest.yaml")
+    manifest_path = Path(__file__).parent / "ai_config_manifest.yaml"
     if not manifest_path.exists():
         print(" ai_config_manifest.yaml not found")
         print("   Make sure you're running this from the bootstrap/ directory")
