@@ -10,7 +10,7 @@ import os
 from typing import List, Any, Tuple
 from langchain.chat_models import init_chat_model
 from langgraph.prebuilt import create_react_agent
-from ldai.tracker import TokenUsage
+from launchdarkly_ai_server import create_handler
 from utils.logger import log_student
 from langchain_aws import ChatBedrockConverse
 import boto3
@@ -179,7 +179,12 @@ async def create_agent_with_fresh_config(
     Create LangChain agent with LaunchDarkly AI Config.
 
     Routes to Bedrock (AUTH_METHOD=sso) or direct API based on config.
-    Returns: (agent, tracker, disabled, max_tool_calls)
+    Returns: (agent, served_config, disabled, max_tool_calls)
+
+    The second element used to be a tracker. The current AI SDK has no tracker
+    object — telemetry is emitted by the call that runs the model — so this
+    returns the ServedConfig instead, which the caller passes to
+    config_manager.invoke().
     """
     if tools is None:
         tools = []
@@ -200,7 +205,7 @@ async def create_agent_with_fresh_config(
         from utils.bedrock_helpers import normalize_bedrock_provider
 
         # Normalize provider name to handle bedrock:anthropic format
-        normalized_provider = normalize_bedrock_provider(agent_config.provider.name)
+        normalized_provider = normalize_bedrock_provider(agent_config.provider_name)
         langchain_provider = map_provider_to_langchain(normalized_provider)
 
         # Check if we need to use Bedrock
@@ -214,11 +219,11 @@ async def create_agent_with_fresh_config(
                     raise ValueError("Bedrock authentication requires AWS SSO session. Run: aws sso login")
 
                 # Use model ID directly from LaunchDarkly AI Config (FR-006 compliance)
-                bedrock_model_id = agent_config.model.name
+                bedrock_model_id = agent_config.model_name
 
                 # 🚨 DEBUG: Log what we received from LaunchDarkly
                 log_student("DEBUG: LaunchDarkly AI Config details:")
-                log_student(f"  - Provider: {agent_config.provider.name}")
+                log_student(f"  - Provider: {agent_config.provider_name}")
                 log_student(f"  - Model ID: {bedrock_model_id}")
                 log_student(f"  - Region: {config_manager.aws_region}")
 
@@ -232,29 +237,27 @@ async def create_agent_with_fresh_config(
             else:
                 # Fall back to direct API access for backward compatibility
                 # Route 'anthropic' through 'anthropic' provider directly when using api-key auth
-                fallback_provider = 'anthropic' if agent_config.provider.name.lower() == 'anthropic' else langchain_provider
+                fallback_provider = 'anthropic' if agent_config.provider_name.lower() == 'anthropic' else langchain_provider
                 llm = init_chat_model(
-                    model=agent_config.model.name,
+                    model=agent_config.model_name,
                     model_provider=fallback_provider,
                 )
-                log_student(f"ROUTING: Using direct API for {agent_config.model.name} via {fallback_provider}")
+                log_student(f"ROUTING: Using direct API for {agent_config.model_name} via {fallback_provider}")
         else:
             # Use standard LangChain initialization for non-Bedrock providers
             llm = init_chat_model(
-                model=agent_config.model.name,
+                model=agent_config.model_name,
                 model_provider=langchain_provider,
             )
-            log_student(f"ROUTING: Using {langchain_provider} for {agent_config.model.name}")
+            log_student(f"ROUTING: Using {langchain_provider} for {agent_config.model_name}")
 
         # Extract max_tool_calls from LaunchDarkly config
         max_tool_calls = 5  # Default value
         try:
-            config_dict = agent_config.to_dict()
-            if 'model' in config_dict and 'custom' in config_dict['model'] and config_dict['model']['custom']:
-                custom_params = config_dict['model']['custom']
-                if 'max_tool_calls' in custom_params:
-                    max_tool_calls = int(custom_params['max_tool_calls'])
-                    log_student(f"EXTRACTED max_tool_calls from LaunchDarkly: {max_tool_calls}")
+            custom_params = agent_config.custom
+            if 'max_tool_calls' in custom_params:
+                max_tool_calls = int(custom_params['max_tool_calls'])
+                log_student(f"EXTRACTED max_tool_calls from LaunchDarkly: {max_tool_calls}")
         except Exception as e:
             log_student(f"DEBUG: Error extracting max_tool_calls: {e}")
 
@@ -275,7 +278,7 @@ async def create_agent_with_fresh_config(
             prompt=agent_config.instructions
         )
 
-        return agent, agent_config.create_tracker(), False, effective_recursion_limit
+        return agent, agent_config, False, effective_recursion_limit
 
     except Exception as e:
         log_student(f"ERROR in create_agent_with_fresh_config: {e}")
@@ -306,7 +309,7 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                 messages = request_data.get("messages", [])
 
                 # Create agent with config
-                agent, tracker, disabled, effective_recursion_limit = await create_agent_with_fresh_config(
+                agent, served, disabled, effective_recursion_limit = await create_agent_with_fresh_config(
                     config_manager=config_manager,
                     config_key=config_key,
                     user_id=user_id,
@@ -335,73 +338,88 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                 initial_state = {"messages": agent_messages}
                 prev_message_count = len(agent_messages)
 
-                # Get agent configuration for tracking
-                agent_config = await config_manager.get_config(
-                    user_id=user_id,
-                    config_key=config_key,
-                    user_context=user_context
-                )
+                # The config fetched to build the agent is reused here. The old
+                # code called get_config a second time for tracking, which cost
+                # an extra evaluation per request and could attribute metrics to
+                # a different variation than the one that actually ran.
+                ld_context = config_manager.build_context(user_id, user_context)
 
                 # Apply rate limiting before LLM call
                 _rate_limit_llm_call()
 
-                # Execute agent with tracking
-                start_time = time.time()
-                try:
-                    # Execute agent with effective recursion limit
+                # The agent runs inside a handler so the SDK can time the call
+                # and emit duration, token, and success/error events itself.
+                # There is no tracker to call manually any more. response_box
+                # carries the full LangGraph result back out, because the
+                # handler contract only returns output text and usage.
+                response_box: dict = {}
+
+                async def run_agent(cfg, handler_input, tool_handlers, variables, history):
                     log_student(f"EXECUTING AGENT with recursion_limit={effective_recursion_limit}")
-                    response = await agent.ainvoke(initial_state, {"recursion_limit": effective_recursion_limit})
+                    try:
+                        result = await agent.ainvoke(
+                            initial_state, {"recursion_limit": effective_recursion_limit}
+                        )
+                    except MaxToolCallsExceeded as exc:
+                        # Swallowed inside the handler on purpose. Letting it
+                        # escape would make the SDK emit a generation:error,
+                        # but hitting the configured tool ceiling is expected
+                        # behaviour, not a failure.
+                        response_box["limit_exceeded"] = exc
+                        return {"output": "", "usage": {}}
 
-                    # Track success and latency
-                    tracker.track_success()
-                    latency_ms = int((time.time() - start_time) * 1000)
-                    tracker.track_duration(latency_ms)
+                    response_box["result"] = result
 
-                    # Extract token usage from new messages
-                    new_messages = response['messages'][prev_message_count:]
+                    # parse_usage accepts these LangChain key names directly.
                     total_input = 0
                     total_output = 0
-
-                    for msg in new_messages:
+                    for msg in result['messages'][prev_message_count:]:
                         if hasattr(msg, 'usage_metadata') and msg.usage_metadata:
                             total_input += msg.usage_metadata.get('input_tokens', 0)
                             total_output += msg.usage_metadata.get('output_tokens', 0)
 
-                    # Track tokens if found
-                    if total_input > 0 or total_output > 0:
-                        token_usage = TokenUsage(
-                            input=total_input,
-                            output=total_output,
-                            total=total_input + total_output
-                        )
-                        tracker.track_tokens(token_usage)
-                        log_student(f"AGENT TOKENS: {token_usage.total} tokens ({token_usage.input} in, {token_usage.output} out)")
+                    return {
+                        "output": "",
+                        "usage": {
+                            "input_tokens": total_input,
+                            "output_tokens": total_output,
+                        },
+                    }
 
-                        # Track cost metric with AI Config metadata for experiment attribution
-                        from utils.cost_calculator import calculate_cost
-                        cost = calculate_cost(agent_config.model.name, total_input, total_output)
-                        if cost > 0:
-                            # Use centralized context builder to ensure exact match with AI Config evaluation
-                            ld_context = config_manager.build_context(user_id, user_context)
+                tracked = await config_manager.invoke(
+                    served,
+                    ld_context,
+                    create_handler((served.provider_name, "agent"), run_agent),
+                    user_input,
+                )
 
-                            # Track cost with metadata for experiment attribution
-                            config_manager.track_cost_metric(agent_config, ld_context, cost, config_key)
-                            log_student(f"COST TRACKING: ${cost:.6f} for {agent_config.model.name}")
-
-                except MaxToolCallsExceeded as e:
-                    # Handle tool limit gracefully - this is expected behavior, not an error
-                    log_student(f"TOOL LIMIT REACHED: {e}")
+                if "limit_exceeded" in response_box:
+                    log_student(f"TOOL LIMIT REACHED: {response_box['limit_exceeded']}")
                     # Return friendly message explaining the limit
                     return {
                         "user_input": user_input,
-                        "response": f"I've reached the tool call limit for this request. {str(e)}",
+                        "response": f"I've reached the tool call limit for this request. {response_box['limit_exceeded']}",
                         "tool_calls": [],
                         "tool_details": [],
                         "messages": []
                     }
-                except Exception:
-                    tracker.track_error()
-                    raise
+
+                response = response_box["result"]
+                usage = tracked["usage"]
+
+                if usage["total"] > 0:
+                    log_student(f"AGENT TOKENS: {usage['total']} tokens ({usage['input']} in, {usage['output']} out)")
+
+                    # Track cost metric with AI Config metadata for experiment attribution
+                    from utils.cost_calculator import calculate_cost
+                    cost = calculate_cost(served.model_name, usage['input'], usage['output'])
+                    if cost > 0:
+                        # track_data ties this cost event to the generation it
+                        # came from via runId.
+                        config_manager.track_cost_metric(
+                            served, ld_context, cost, config_key, tracked["track_data"]
+                        )
+                        log_student(f"COST TRACKING: ${cost:.6f} for {served.model_name}")
 
                 # Extract new messages
                 new_messages = response['messages'][prev_message_count:]

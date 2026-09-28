@@ -108,9 +108,15 @@ async def submit_feedback(feedback: FeedbackRequest):
             # Convert feedback format
             thumbs_up = feedback.feedback == "positive"
 
-            # Track feedback using config_manager
+            # Track feedback using config_manager. There is no tracker to pass
+            # any more, and the feedback event needs the same context the config
+            # was evaluated with so it stays attributable to the variation.
+            ld_context = agent_service.config_manager.build_context(
+                feedback.user_id, feedback.user_context
+            )
             success = agent_service.config_manager.track_feedback(
-                support_config.create_tracker(),
+                support_config,
+                ld_context,
                 thumbs_up=thumbs_up
             )
 

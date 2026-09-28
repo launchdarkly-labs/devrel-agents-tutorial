@@ -26,9 +26,9 @@ def extract_tool_configs_from_launchdarkly(config) -> tuple[List[str], Dict[str,
 
     # Try to get tool configurations from config dict structure
     try:
-        config_dict = config.to_dict()
-        if 'model' in config_dict and 'parameters' in config_dict['model'] and 'tools' in config_dict['model']['parameters']:
-            tools_data = config_dict['model']['parameters']['tools']
+        parameters = config.parameters
+        if 'tools' in parameters:
+            tools_data = parameters['tools']
             for tool in tools_data:
                 if 'name' in tool:
                     tool_name = tool['name']

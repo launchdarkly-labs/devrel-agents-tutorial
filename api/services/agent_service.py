@@ -40,8 +40,10 @@ class AgentService:
     def flush_metrics(self):
         """Flush LaunchDarkly metrics immediately"""
         try:
-            # Use the config manager's close method which handles flushing
-            self.config_manager.close()
+            # close() is a coroutine now (shutdown is async), and calling it
+            # here would only build one without flushing anything. flush_metrics
+            # is the synchronous flush, which is all this needs.
+            self.config_manager.flush_metrics()
             print(" METRICS: Successfully flushed to LaunchDarkly")
         except Exception as e:
             print(f" METRICS FLUSH ERROR: {e}")
@@ -126,7 +128,7 @@ class AgentService:
             security_config = await self.config_manager.get_config(user_id, "security-agent", user_context)
         
             log_student(f"LDAI: 3 agents configured")
-            log_debug(f"LDAI: Supervisor({supervisor_config.model.name}), Support({support_config.model.name}), Security({security_config.model.name})")
+            log_debug(f"LDAI: Supervisor({supervisor_config.model_name}), Support({support_config.model_name}), Security({security_config.model_name})")
             
             # Create supervisor agent with all child agents using LDAI SDK pattern
             supervisor_agent = create_supervisor_agent(
@@ -235,23 +237,19 @@ class AgentService:
             # Extract actual variation key from LaunchDarkly AI config
             def get_variation_key(ai_config, agent_name):
                 try:
-                    # The variation key is stored in the tracker object
-                    tracker = ai_config.create_tracker()
-                    if hasattr(tracker, '_variation_key'):
-                        variation_key = tracker._variation_key
-                        log_debug(f"VARIATION EXTRACTED for {agent_name}: {variation_key}")
-                        return variation_key
-                    else:
-                        log_debug(f"VARIATION NOT FOUND for {agent_name}: no tracker._variation_key")
-                        return 'default'
+                    # The variation key is public metadata on the served config
+                    # now, so this no longer reaches into a private tracker
+                    # attribute that could be renamed without warning.
+                    variation_key = ai_config.variation_key
+                    log_debug(f"VARIATION EXTRACTED for {agent_name}: {variation_key}")
+                    return variation_key
                 except Exception as e:
                     log_debug(f"VARIATION EXTRACTION ERROR for {agent_name}: {e}")
                     return 'default'
             
             def get_tools_list(ai_config):
                 try:
-                    config_dict = ai_config.to_dict()
-                    tools = config_dict.get('model', {}).get('parameters', {}).get('tools', [])
+                    tools = ai_config.parameters.get('tools', [])
                     tool_names = [tool.get('name', 'unknown') for tool in tools]
                     log_debug(f"EXTRACTED TOOLS: {tool_names}")
                     return tool_names
@@ -271,14 +269,14 @@ class AgentService:
                 APIAgentConfig(
                     agent_name="supervisor-agent",
                     variation_key=get_variation_key(supervisor_config, "supervisor-agent"),
-                    model=supervisor_config.model.name,
+                    model=supervisor_config.model_name,
                     tools=[],  # Supervisor doesn't have tools available
                     tools_used=[]  # Supervisor doesn't use tools directly
                 ),
                 APIAgentConfig(
                     agent_name="security-agent", 
                     variation_key=get_variation_key(security_config, "security-agent"),
-                    model=security_config.model.name,
+                    model=security_config.model_name,
                     tools=security_tools,  # Show configured tools
                     tools_used=security_tools_used,  # Show actual tools used
                     tool_details=security_tool_details,  # Show security tool details with PII results
@@ -290,7 +288,7 @@ class AgentService:
                 APIAgentConfig(
                     agent_name="support-agent",
                     variation_key=get_variation_key(support_config, "support-agent"),
-                    model=support_config.model.name, 
+                    model=support_config.model_name, 
                     tools=support_tools,  # Show configured tools from LaunchDarkly
                     tools_used=support_tools_used,  # Show actual tools executed
                     tool_details=tool_details  # Show detailed tool info with search queries
@@ -302,7 +300,7 @@ class AgentService:
                 response=result["final_response"],
                 tool_calls=actual_tool_calls,  # Show actual tools used
                 variation_key=get_variation_key(supervisor_config, "supervisor-agent"),  # Use actual LaunchDarkly variation
-                model=supervisor_config.model.name,  # Primary model
+                model=supervisor_config.model_name,  # Primary model
                 agent_configurations=agent_configurations
             )
             
