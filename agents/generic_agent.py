@@ -25,7 +25,6 @@ def create_generic_agent(agent_config, config_manager, valid_routes: List[str] =
         wrap_tool_with_counter, ToolCallCounter
     )
     from tools_impl.dynamic_tool_factory import create_dynamic_tools_from_launchdarkly
-    from ldai.tracker import TokenUsage
     import time
 
     class GenericAgent:
@@ -37,20 +36,25 @@ def create_generic_agent(agent_config, config_manager, valid_routes: List[str] =
         async def ainvoke(self, state: dict) -> dict:
             """Execute the agent using LaunchDarkly config."""
 
-            if not agent_config.enabled:
+            # Configs are plain dicts now. A node in an enabled graph always
+            # has one; an empty config means nothing was served.
+            if not agent_config:
                 log_student(f"AGENT DISABLED: skipping")
                 return {"response": "", "_skipped": True}
+
+            model_cfg = agent_config.get("model") or {}
+            provider_name = (agent_config.get("provider") or {}).get("name")
 
             try:
                 # Create model from config
                 model = create_model_for_config(
-                    provider=agent_config.provider.name,
-                    model=agent_config.model.name,
+                    provider=provider_name,
+                    model=model_cfg.get("name"),
                     config_manager=config_manager,
                     temperature=0.3
                 )
 
-                log_student(f"CONFIG: {agent_config.provider.name} - {agent_config.model.name}")
+                log_student(f"CONFIG: {provider_name} - {model_cfg.get('name')}")
 
                 # Load tools from LaunchDarkly config
                 self.tools = create_dynamic_tools_from_launchdarkly(agent_config)
@@ -60,7 +64,7 @@ def create_generic_agent(agent_config, config_manager, valid_routes: List[str] =
                     log_student(f"TOOLS: {[t.name for t in self.tools]}")
 
                 # Get instructions from config
-                instructions = agent_config.instructions or "Process the input and provide a helpful response."
+                instructions = agent_config.get("instructions") or "Process the input and provide a helpful response."
 
                 # If this node has outgoing edges with routes, inject route options into instructions
                 if self.valid_routes:
@@ -81,21 +85,18 @@ def create_generic_agent(agent_config, config_manager, valid_routes: List[str] =
                 else:
                     result = await self._execute_simple(model, instructions, messages)
 
-                # Track metrics
+                # No tracker here any more. The caller emits this node's
+                # duration and success/error, because it holds the graph
+                # tracker and the node key -- and because the old code emitted
+                # $ld:ai:duration:total from here while agent_service emitted
+                # it for the same node, double-counting every node's duration.
                 duration_ms = int((time.time() - start_time) * 1000)
-                agent_config.tracker.track_duration(duration_ms)
-                agent_config.tracker.track_success()
-
                 log_student(f"DURATION: {duration_ms}ms")
-
-                if "_token_usage" in result and result["_token_usage"]["total"] > 0:
-                    agent_config.tracker.track_tokens(TokenUsage(**result["_token_usage"]))
 
                 return result
 
             except Exception as e:
                 log_student(f"AGENT ERROR: {e}")
-                agent_config.tracker.track_error()
                 return {
                     "response": f"Error: {e}",
                     "_error": str(e)

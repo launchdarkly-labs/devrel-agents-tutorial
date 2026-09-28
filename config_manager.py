@@ -5,10 +5,142 @@ Simplified ConfigManager for LaunchDarkly AI Agent integration
 import os
 import json
 from pathlib import Path
+import asyncio
 import ldclient
-from ldclient import Context
-from ldai.client import LDAIClient, AIAgentConfigDefault, ModelConfig, ProviderConfig
-from ldai.tracker import FeedbackKind
+from launchdarkly_ai_server import (
+    get_client,
+    init_client,
+    inspect_config,
+    parse_ai_config,
+    resolve_graph,
+)
+
+# The AI SDK has no feedback API, so these are emitted directly. Keep the keys
+# byte-identical to the ones the previous SDK sent or the existing feedback
+# metrics stop receiving data.
+FEEDBACK_EVENTS = {
+    True: "$ld:ai:feedback:user:positive",
+    False: "$ld:ai:feedback:user:negative",
+}
+
+
+class GraphTracker:
+    """Emits the graph events that the SDK used to emit for a hand-rolled walk.
+
+    graph().invoke() records these itself, but this service traverses the graph
+    by hand through resolve_graph(), so nothing records them for it. The method
+    names match what agent_service already calls.
+
+    The event keys are the CURRENT ones, which differ from the previous SDK:
+
+        $ld:ai:graph:handoff      -> handoff_success / handoff_failure
+        $ld:ai:graph:invocation   -> invocation_success / invocation_failure
+        $ld:ai:graph:total        -> total_tokens
+        $ld:ai:tool               -> tool_call
+        $ld:ai:graph:path         -> graph:node, one event per node entered
+
+    Any LaunchDarkly metric keyed on the old names needs recreating against the
+    new ones. There is no replacement for the old graph:redirect event.
+    """
+
+    def __init__(self, graph_key: str, context: dict):
+        self._graph_key = graph_key
+        self._context = context
+        self._data = {"graphKey": graph_key}
+        self._nodes_entered = 0
+
+    def _track(self, event: str, value=1, extra: dict | None = None):
+        try:
+            data = {**self._data, **extra} if extra else self._data
+            get_client().track(event, self._context, data, value)
+        except Exception as e:
+            log_debug(f"GRAPH TRACK ERROR ({event}): {e}")
+
+    def track_node_invocation(self, node_key: str):
+        """Record this node as it is entered.
+
+        0.2.4 added $ld:ai:graph:node for exactly this, and the ordered series
+        of these events is the path the walk took. Emitted on entry rather than
+        at the end so a node that then fails still leaves its step behind.
+        """
+        log_debug(f"GRAPH: entering node {node_key}")
+        self._track(
+            "$ld:ai:graph:node", 1, {"nodeKey": node_key, "index": self._nodes_entered}
+        )
+        self._nodes_entered += 1
+
+    def track_handoff_success(self, source_key: str, target_key: str):
+        self._track("$ld:ai:graph:handoff_success")
+
+    def track_handoff_failure(self, source_key: str, routing):
+        self._track("$ld:ai:graph:handoff_failure")
+
+    def track_tool_call(self, node_key: str, tool_name: str):
+        self._track("$ld:ai:tool_call")
+
+    def track_invocation_success(self):
+        self._track("$ld:ai:graph:invocation_success")
+
+    def track_invocation_failure(self):
+        self._track("$ld:ai:graph:invocation_failure")
+
+    def track_node_success(self, node_key: str, config: dict):
+        self._track_generation("$ld:ai:generation:success", node_key, config, 1)
+
+    def track_node_error(self, node_key: str, config: dict):
+        self._track_generation("$ld:ai:generation:error", node_key, config, 1)
+
+    def _track_generation(self, event: str, node_key: str, config: dict, value):
+        model = (config or {}).get("model") or {}
+        data = {
+            "graphKey": self._graph_key,
+            "configKey": node_key,
+            "modelName": model.get("name", "unknown"),
+            "providerName": ((config or {}).get("provider") or {}).get("name", "unknown"),
+        }
+        try:
+            get_client().track(event, self._context, data, value)
+        except Exception as e:
+            log_debug(f"GRAPH TRACK ERROR ({event}): {e}")
+
+    def track_latency(self, latency_ms: int):
+        self._track("$ld:ai:graph:duration:total", latency_ms)
+
+    def track_node_duration(self, node_key: str, config: dict, duration_ms: int):
+        """Record one node's generation duration.
+
+        The caller used to build this event by reaching into the tracker's
+        _ld_client and _context and reading five private attributes off the
+        node's config tracker. Configs are plain dicts now, so the model and
+        provider come from public keys instead.
+        """
+        model = (config or {}).get("model") or {}
+        data = {
+            "graphKey": self._graph_key,
+            "configKey": node_key,
+            "modelName": model.get("name", "unknown"),
+            "providerName": ((config or {}).get("provider") or {}).get("name", "unknown"),
+        }
+        try:
+            get_client().track("$ld:ai:duration:total", self._context, data, duration_ms)
+        except Exception as e:
+            log_debug(f"GRAPH TRACK ERROR (duration): {e}")
+
+    def track_total_tokens(self, total: int):
+        """Total tokens across the walk.
+
+        Takes an int. The previous tracker took a TokenUsage object; this event
+        carries a single numeric value.
+        """
+        self._track("$ld:ai:graph:total_tokens", total)
+
+    def track_path(self, path):
+        """No-op. The path is the series of $ld:ai:graph:node events.
+
+        Kept so the caller does not need to change; 0.2.4 retired the single
+        $ld:ai:graph:path event that this used to send.
+        """
+        log_debug(f"GRAPH: path {' -> '.join(path)}")
 from dotenv import load_dotenv
 from utils.logger import log_student, log_debug
 import boto3
@@ -62,14 +194,14 @@ class FixedConfigManager:
                 "  python bootstrap/create_configs.py"
             )
 
-    def _get_default_config(self, config_key: str) -> AIAgentConfigDefault:
+    def _get_default_config(self, config_key: str) -> dict:
         """Get fallback config from .ai_config_defaults.json
 
         Args:
             config_key: The AI config key (e.g., 'support-agent')
 
         Returns:
-            AIAgentConfigDefault object with config from the defaults file
+            A dict in the shape the SDK serves, validated by parse_ai_config
 
         Raises:
             ValueError: If config key not found in defaults
@@ -85,22 +217,31 @@ class FixedConfigManager:
 
         config_data = self.config_defaults[config_key]
 
-        # Convert JSON config to AIAgentConfigDefault
-        # Note: Tools are managed by LaunchDarkly and not part of defaults
-        return AIAgentConfigDefault(
-            enabled=config_data.get("enabled", True),
-            model=ModelConfig(
-                name=config_data["model"]["name"],
-                parameters=config_data["model"].get("parameters", {})
-            ),
-            provider=ProviderConfig(
-                name=config_data["provider"]["name"]
-            ),
-            instructions=config_data.get("instructions", "You are a helpful assistant.")
-        )
+        # Configs are plain dicts now, so this shape is what the SDK serves
+        # rather than an AIAgentConfigDefault. Tools are managed by
+        # LaunchDarkly and not part of defaults.
+        candidate = {
+            "model": {
+                "name": config_data["model"]["name"],
+                "parameters": config_data["model"].get("parameters", {}),
+            },
+            "provider": {"name": config_data["provider"]["name"]},
+            "instructions": config_data.get("instructions", "You are a helpful assistant."),
+        }
+
+        # Validated rather than trusted: a stale defaults file should fail
+        # loudly here instead of being served to a model.
+        result = parse_ai_config(candidate)
+        if not result.success:
+            raise ValueError(
+                f"Fallback config '{config_key}' in .ai_config_defaults.json is not valid: "
+                f"{result.error.get('message')}\n\nRegenerate it with:\n"
+                "  python bootstrap/create_configs.py"
+            )
+        return result.data
     
     def _initialize_launchdarkly_client(self):
-        """Initialize LaunchDarkly client and AI client"""
+        """Initialize LaunchDarkly client and hand it to the AI SDK"""
         config = ldclient.Config(self.sdk_key)
         ldclient.set_config(config)
         self.ld_client = ldclient.get()
@@ -115,7 +256,8 @@ class FixedConfigManager:
         if not self.ld_client.is_initialized():
             raise RuntimeError("LaunchDarkly client initialization failed")
 
-        self.ai_client = LDAIClient(self.ld_client)
+        # There is no separate AI client to build. init_client is a coroutine,
+        # so this client is handed over on first use in _ensure_ai_client.
 
     def _initialize_bedrock_session(self):
         """Initialize AWS Bedrock session if AUTH_METHOD=sso"""
@@ -160,21 +302,22 @@ class FixedConfigManager:
             log_student(f"Run: aws sso login{profile_hint}")
             raise
 
-    def build_context(self, user_id: str, user_context: dict = None) -> Context:
+    def build_context(self, user_id: str, user_context: dict = None) -> dict:
         """Build a LaunchDarkly context with consistent attributes.
 
         This ensures the same context is used for AI Config evaluation
         and standard tracking.
         """
-        context_builder = Context.builder(user_id).kind('user')
-        
+        # Contexts are plain dicts now; there is no builder.
+        context = {"kind": "user", "key": user_id}
+
         if user_context:
             # Set all attributes from user_context for consistency
             for key, value in user_context.items():
-                context_builder.set(key, value)
+                context[key] = value
                 log_debug(f"CONFIG MANAGER: Set {key}={value}")
-        
-        return context_builder.build()
+
+        return context
     
 
     async def get_config(self, user_id: str, config_key: str = None, user_context: dict = None):
@@ -195,41 +338,65 @@ class FixedConfigManager:
         ai_config_key = config_key or os.getenv('LAUNCHDARKLY_AI_CONFIG_KEY', 'support-agent')
         log_debug(f"CONFIG MANAGER: Using AI config key: {ai_config_key}")
 
-        # Load default from .ai_config_defaults.json (fails with helpful error if not found)
-        default_config = self._get_default_config(ai_config_key)
-        log_debug(f"CONFIG MANAGER: Loaded fallback default - model: {default_config.model.name}")
+        await self._ensure_ai_client()
 
-        # Call LaunchDarkly using new SDK pattern - agent_config(key, context, default)
-        result = self.ai_client.agent_config(ai_config_key, ld_user_context, default=default_config)
-        log_debug("CONFIG MANAGER: ✅ Got config (from LaunchDarkly or fallback)")
+        # There is no `default=` parameter on this SDK, so the fallback is
+        # applied here. inspect_config never raises and reports enabled=False
+        # on any failure, which keeps this to one branch.
+        inspected = await inspect_config(ai_config_key, ld_user_context)
 
-        # Debug the actual configuration received (basic info only)
-        try:
-            config_dict = result.to_dict()
-            log_debug(f"CONFIG MANAGER: Model: {config_dict.get('model', {}).get('name', 'unknown')}")
-            if hasattr(result, 'tracker') and hasattr(result.tracker, '_variation_key'):
-                log_debug(f"CONFIG MANAGER: Variation: {result.tracker._variation_key}")
-        except Exception as debug_e:
-            log_debug(f"CONFIG MANAGER: Could not debug result: {debug_e}")
+        if inspected["enabled"] and inspected["config"]:
+            config = inspected["config"]
+            meta = inspected["meta"] or {}
+            log_debug("CONFIG MANAGER: ✅ Got config from LaunchDarkly")
+            log_debug(f"CONFIG MANAGER: Model: {(config.get('model') or {}).get('name', 'unknown')}")
+            # The variation key is public metadata now, not a private tracker
+            # attribute read behind a hasattr guard.
+            log_debug(f"CONFIG MANAGER: Variation: {meta.get('variationKey', 'unknown')}")
+            return config
 
-        return result
+        log_student(f"CONFIG MANAGER: '{ai_config_key}' not served, using .ai_config_defaults.json")
+        return self._get_default_config(ai_config_key)
+
+    async def _ensure_ai_client(self):
+        """Hand the existing client to the AI SDK. Idempotent."""
+        # client= is keyword-only in effect: a positional argument is read as
+        # the options dict, not as a client.
+        await init_client(client=self.ld_client)
+
+    async def get_agent_graph(self, user_id: str, graph_key: str, user_context: dict = None):
+        """Resolve an agent graph and a tracker for a hand-rolled traversal.
+
+        This method did not exist: agent_service called it but nothing defined
+        it, so the graph path raised AttributeError before any of this ran. It
+        is written here against resolve_graph(), which the SDK documents as the
+        path "for framework-native runners" -- i.e. callers that walk the graph
+        themselves, which is what agent_service does.
+
+        resolve_graph returns topology only and records nothing, so the tracker
+        is ours. Returns (graph, tracker); the graph exposes `enabled`, `root`,
+        `edges_from`, and `reverse_traverse` as attributes.
+        """
+        await self._ensure_ai_client()
+        ld_user_context = self.build_context(user_id, user_context)
+
+        graph = await resolve_graph(graph_key, context=ld_user_context)
+        return graph, GraphTracker(graph_key, ld_user_context)
     
 
     def flush(self):
         """Flush metrics and clear SDK cache"""
         self.ld_client.flush()
 
-    def track_feedback(self, tracker, thumbs_up: bool):
-        """Track user feedback with LaunchDarkly"""
-        if not tracker:
-            return False
+    def track_feedback(self, context, thumbs_up: bool):
+        """Track user feedback with LaunchDarkly.
 
+        There is no tracker and no feedback API, so this emits the legacy event
+        directly. `context` replaces the tracker argument, because the event
+        has to land on the same context the config was evaluated with.
+        """
         try:
-            # Use LaunchDarkly's feedback tracking
-            feedback_dict = {
-                "kind": FeedbackKind.Positive if thumbs_up else FeedbackKind.Negative
-            }
-            tracker.track_feedback(feedback_dict)
+            self.ld_client.track(FEEDBACK_EVENTS[bool(thumbs_up)], context, None, 1)
             log_student(f"FEEDBACK TRACKED: {'👍 Positive' if thumbs_up else '👎 Negative'}")
             self.ld_client.flush()
             return True
