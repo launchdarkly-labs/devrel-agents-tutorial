@@ -141,7 +141,7 @@ class AgentGraphExecutor:
                         graph_tracker.track_tool_call(node_key, tool_name)
 
                 # Update context with results (generic)
-                self._update_context(node_key, config, result, ctx)
+                self._update_context(node_key, config, result, ctx, current_node.meta)
 
                 # Find next node (edges already fetched above)
                 if not edges:
@@ -174,8 +174,8 @@ class AgentGraphExecutor:
             handoff = edge.handoff or {}
             route = handoff.get("route", "").lower().strip()
             if route:
-                route_map[route] = edge.target_config
-            log_student(f"  EDGE: → {edge.target_config} (route={route})")
+                route_map[route] = edge.target_key
+            log_student(f"  EDGE: → {edge.target_key} (route={route})")
 
         # Exact match only - fail closed on unrecognized routes
         if routing and routing in route_map:
@@ -189,13 +189,13 @@ class AgentGraphExecutor:
 
         # Default: first edge (fallback)
         if edges:
-            default = edges[0].target_config
+            default = edges[0].target_key
             log_student(f"  DEFAULT: → {default}")
             return nodes.get(default)
 
         return None
 
-    def _update_context(self, node_key: str, config, result: dict, ctx: dict):
+    def _update_context(self, node_key: str, config, result: dict, ctx: dict, meta: dict = None):
         """Update context with agent results - fully generic."""
         # Aggregate tokens
         if "_token_usage" in result:
@@ -210,16 +210,17 @@ class AgentGraphExecutor:
         if "tool_calls" in result:
             ctx["tool_calls"] = result["tool_calls"]
 
-        # Get variation key
-        var_key = "default"
-        if hasattr(config, 'tracker') and hasattr(config.tracker, '_variation_key'):
-            var_key = config.tracker._variation_key
+        # The variation key is public metadata on the node now. The previous
+        # version read a private tracker attribute behind a hasattr guard,
+        # which on a plain dict is always False and so always reported
+        # "default" no matter which variation actually ran.
+        var_key = (meta or {}).get("variationKey") or "unknown"
 
         # Record agent config - fully generic, include all result fields
         agent_info = {
             "agent_name": node_key,
             "variation_key": var_key,
-            "model": config.model.name if hasattr(config, 'model') else "unknown",
+            "model": ((config or {}).get("model") or {}).get("name", "unknown"),
             "tools_used": result.get("tool_calls", []),
         }
 

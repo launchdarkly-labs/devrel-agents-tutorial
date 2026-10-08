@@ -109,11 +109,13 @@ def create_generic_agent(agent_config, config_manager, valid_routes: List[str] =
             # Get max_tool_calls from config
             max_tool_calls = 20  # Default higher for tool-using agents
             try:
-                config_dict = agent_config.to_dict()
-                # Try multiple possible paths for custom parameters
-                custom = config_dict.get('model', {}).get('custom', {}) or {}
+                # Plain dict, so no to_dict(). parse_ai_config passes
+                # model.custom through untouched; older configs put the same
+                # values under model.parameters.custom.
+                model_dict = agent_config.get('model') or {}
+                custom = model_dict.get('custom') or {}
                 if not custom:
-                    custom = config_dict.get('model', {}).get('parameters', {}).get('custom', {}) or {}
+                    custom = (model_dict.get('parameters') or {}).get('custom') or {}
                 if 'max_tool_calls' in custom:
                     max_tool_calls = int(custom['max_tool_calls'])
                     log_student(f"CONFIG: max_tool_calls={max_tool_calls} from LaunchDarkly")
