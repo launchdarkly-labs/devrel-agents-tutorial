@@ -384,6 +384,14 @@ class FixedConfigManager:
         return graph, GraphTracker(graph_key, ld_user_context)
     
 
+    def clear_cache(self):
+        """No-op, kept because AgentService calls it on startup.
+
+        Nothing is cached here: every get_config goes through inspect_config,
+        which evaluates against LaunchDarkly each time.
+        """
+        return None
+
     def flush(self):
         """Flush metrics and clear SDK cache"""
         self.ld_client.flush()

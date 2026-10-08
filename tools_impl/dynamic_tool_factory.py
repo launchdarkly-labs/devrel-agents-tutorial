@@ -20,22 +20,26 @@ def extract_tool_configs_from_launchdarkly(config) -> tuple[List[str], Dict[str,
     tools_list = []
     tool_configs = {}
 
-    # Get tools from the initial config (tools are stable, instructions are dynamic)
-    if hasattr(config, 'tools') and config.tools:
-        tools_list = list(config.tools)
+    # Configs are plain dicts now, so there is no to_dict() and no attribute
+    # access. Both lookups below used to fail into the except branch, which
+    # returned no tools at all rather than erroring.
+    config = config or {}
 
-    # Try to get tool configurations from config dict structure
+    # A top-level `tools` key is what the local defaults file writes.
+    for tool_name in config.get('tools') or []:
+        if tool_name not in tools_list:
+            tools_list.append(tool_name)
+
+    # LaunchDarkly serves tools under model.parameters.tools, with the schema.
     try:
-        config_dict = config.to_dict()
-        if 'model' in config_dict and 'parameters' in config_dict['model'] and 'tools' in config_dict['model']['parameters']:
-            tools_data = config_dict['model']['parameters']['tools']
-            for tool in tools_data:
-                if 'name' in tool:
-                    tool_name = tool['name']
-                    if tool_name not in tools_list:
-                        tools_list.append(tool_name)
-                    # Extract tool parameters/schema from LaunchDarkly
-                    tool_configs[tool_name] = tool.get('parameters', {})
+        tools_data = ((config.get('model') or {}).get('parameters') or {}).get('tools') or []
+        for tool in tools_data:
+            if 'name' in tool:
+                tool_name = tool['name']
+                if tool_name not in tools_list:
+                    tools_list.append(tool_name)
+                # Extract tool parameters/schema from LaunchDarkly
+                tool_configs[tool_name] = tool.get('parameters', {})
 
         log_debug(f"EXTRACTED TOOLS FROM LAUNCHDARKLY: {tools_list}")
         if tool_configs:
