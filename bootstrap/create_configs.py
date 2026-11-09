@@ -792,7 +792,7 @@ def main():
     with open(manifest_path) as f:
         manifest = yaml.safe_load(f)
     
-    project_key = manifest["project"]["key"]
+    project_key = os.getenv("LD_PROJECT_KEY") or manifest["project"]["key"]
     bootstrap = MultiAgentBootstrap(api_key)
 
     print("🚀 Starting multi-agent system bootstrap...")

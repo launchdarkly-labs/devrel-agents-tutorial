@@ -1,7 +1,10 @@
 """LaunchDarkly AI agent helpers - model creation and metric tracking."""
 import asyncio
 import nest_asyncio
-nest_asyncio.apply()  # Allow nested event loops (fixes FastAPI + asyncio.run conflict)
+try:
+    nest_asyncio.apply()  # Allow nested event loops (fixes FastAPI + asyncio.run conflict)
+except ValueError:
+    pass  # uvicorn's uvloop can't be patched; the async agent path doesn't need it
 
 import time
 import os

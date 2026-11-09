@@ -55,7 +55,7 @@ requires-dist = [
     { name = "langchain-mistralai", specifier = ">=0.2.12" },
     { name = "langchain-openai", specifier = ">=0.3.31" },
     { name = "langgraph", specifier = ">=0.0.40" },
-    { name = "launchdarkly-ai-server", specifier = "==0.2.4" },
+    { name = "launchdarkly-ai-server", specifier = ">=1.0.0" },
     { name = "launchdarkly-server-sdk", specifier = ">=9.0.0" },
     { name = "mcp", specifier = ">=1.13.1" },
     { name = "numpy", specifier = ">=1.24.0" },
@@ -984,14 +984,14 @@ wheels = [
 
 [[package]]
 name = "launchdarkly-ai-server"
-version = "0.2.4"
+version = "1.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "opentelemetry-api" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/77/ba/ae8af286682bb054e6e35af6ea0459832246e61e7ceb1578748518260b0d/launchdarkly_ai_server-0.2.4.tar.gz", hash = "sha256:8f20ff80811c530a98f54e2e1fa8e3f24d3b599ceae45b023bae72c8b517f80e", size = 161860, upload-time = "2026-09-30T23:30:42.274Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/34/36/f195554b78a7a5133a0e357c86e1d1ca86abbe993d287bdbe24b1c4d50e6/launchdarkly_ai_server-1.0.0.tar.gz", hash = "sha256:96aee683d5c7ec735e255d647c3d308e7df170a0c47472682458e98b7e6955d6", size = 499538, upload-time = "2026-10-30T21:41:08.044Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f3/0a/dbe2090ab16bb2aeba7c27d86c9ae11d922ba852d6a91392db2cb556931c/launchdarkly_ai_server-0.2.4-py3-none-any.whl", hash = "sha256:d504671564c28eaca3e72ed3b74c00f1f461b730265af56e2d6b9d321177398c", size = 98988, upload-time = "2026-09-30T23:30:41.094Z" },
+    { url = "https://files.pythonhosted.org/packages/eb/d9/b510a3dd300f78223ba3820dc50959e4ade77737f119d4ea7151daa8d32b/launchdarkly_ai_server-1.0.0-py3-none-any.whl", hash = "sha256:b4d69daeab54f59ab78740d52d2164b2ffaa51022c88a99e35ccd9af51852537", size = 219765, upload-time = "2026-10-30T21:41:06.92Z" },
 ]
 
 [[package]]

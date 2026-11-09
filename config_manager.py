@@ -6,6 +6,7 @@ import os
 import json
 from pathlib import Path
 import asyncio
+import uuid
 import ldclient
 from launchdarkly_ai_server import (
     get_client,
@@ -25,58 +26,56 @@ FEEDBACK_EVENTS = {
 
 
 class GraphTracker:
-    """Emits the graph events that the SDK used to emit for a hand-rolled walk.
+    """Emits the graph events for a hand-rolled walk of a resolved graph.
 
-    graph().invoke() records these itself, but this service traverses the graph
-    by hand through resolve_graph(), so nothing records them for it. The method
-    names match what agent_service already calls.
-
-    The event keys are the CURRENT ones, which differ from the previous SDK:
-
-        $ld:ai:graph:handoff      -> handoff_success / handoff_failure
-        $ld:ai:graph:invocation   -> invocation_success / invocation_failure
-        $ld:ai:graph:total        -> total_tokens
-        $ld:ai:tool               -> tool_call
-        $ld:ai:graph:path         -> graph:node, one event per node entered
-
-    Any LaunchDarkly metric keyed on the old names needs recreating against the
-    new ones. There is no replacement for the old graph:redirect event.
+    graph().invoke() records these itself, but this service walks the graph
+    by hand through resolve_graph(), so nothing records them for it. Event
+    names and payload fields match what the SDK's own runner sends, so the
+    graph and per-config monitoring views pick them up.
     """
 
     def __init__(self, graph_key: str, context: dict):
         self._graph_key = graph_key
-        self._context = context
-        self._data = {"graphKey": graph_key}
+        self._context = ldclient.Context.from_dict(context)
+        self._data = {"runId": str(uuid.uuid4()), "configKey": graph_key, "graphKey": graph_key}
         self._nodes_entered = 0
 
-    def _track(self, event: str, value=1, extra: dict | None = None):
+    def _send(self, event: str, data: dict, value=1):
         try:
-            data = {**self._data, **extra} if extra else self._data
             get_client().track(event, self._context, data, value)
         except Exception as e:
             log_debug(f"GRAPH TRACK ERROR ({event}): {e}")
 
-    def track_node_invocation(self, node_key: str):
-        """Record this node as it is entered.
+    def _track(self, event: str, value=1, extra: dict | None = None):
+        self._send(event, {**self._data, **(extra or {})}, value)
 
-        0.2.4 added $ld:ai:graph:node for exactly this, and the ordered series
-        of these events is the path the walk took. Emitted on entry rather than
-        at the end so a node that then fails still leaves its step behind.
-        """
+    def _node_data(self, node) -> dict:
+        config = node.config or {}
+        meta = node.meta or {}
+        return {
+            "runId": self._data["runId"],
+            "graphKey": self._graph_key,
+            "configKey": node.key,
+            "variationKey": meta.get("variationKey", ""),
+            "version": meta.get("version", 1),
+            "modelName": (config.get("model") or {}).get("name", ""),
+            "providerName": (config.get("provider") or {}).get("name", ""),
+        }
+
+    def track_node_invocation(self, node_key: str):
+        """Record this node as it is entered; the ordered series is the path."""
         log_debug(f"GRAPH: entering node {node_key}")
-        self._track(
-            "$ld:ai:graph:node", 1, {"nodeKey": node_key, "index": self._nodes_entered}
-        )
+        self._track("$ld:ai:graph:node", 1, {"nodeKey": node_key, "index": self._nodes_entered})
         self._nodes_entered += 1
 
     def track_handoff_success(self, source_key: str, target_key: str):
-        self._track("$ld:ai:graph:handoff_success")
+        self._track("$ld:ai:graph:handoff_success", 1, {"sourceKey": source_key, "targetKey": target_key})
 
     def track_handoff_failure(self, source_key: str, routing):
-        self._track("$ld:ai:graph:handoff_failure")
+        self._track("$ld:ai:graph:handoff_failure", 1, {"sourceKey": source_key, "targetKey": routing})
 
-    def track_tool_call(self, node_key: str, tool_name: str):
-        self._track("$ld:ai:tool_call")
+    def track_tool_call(self, node, tool_name: str):
+        self._send("$ld:ai:tool_call", {**self._node_data(node), "toolKey": tool_name})
 
     def track_invocation_success(self):
         self._track("$ld:ai:graph:invocation_success")
@@ -84,63 +83,25 @@ class GraphTracker:
     def track_invocation_failure(self):
         self._track("$ld:ai:graph:invocation_failure")
 
-    def track_node_success(self, node_key: str, config: dict):
-        self._track_generation("$ld:ai:generation:success", node_key, config, 1)
-
-    def track_node_error(self, node_key: str, config: dict):
-        self._track_generation("$ld:ai:generation:error", node_key, config, 1)
-
-    def _track_generation(self, event: str, node_key: str, config: dict, value):
-        model = (config or {}).get("model") or {}
-        data = {
-            "graphKey": self._graph_key,
-            "configKey": node_key,
-            "modelName": model.get("name", "unknown"),
-            "providerName": ((config or {}).get("provider") or {}).get("name", "unknown"),
-        }
-        try:
-            get_client().track(event, self._context, data, value)
-        except Exception as e:
-            log_debug(f"GRAPH TRACK ERROR ({event}): {e}")
+    def track_node_result(self, node, duration_ms: int, success: bool, usage: dict | None = None):
+        """Per-node duration, success or error, and tokens, as invoke() sends them."""
+        data = self._node_data(node)
+        self._send("$ld:ai:duration:total", data, duration_ms)
+        self._send("$ld:ai:generation:success" if success else "$ld:ai:generation:error", data)
+        usage = usage or {}
+        total = usage.get("input", 0) + usage.get("output", 0)
+        if total:
+            self._send("$ld:ai:tokens:total", data, total)
+            self._send("$ld:ai:tokens:input", data, usage.get("input", 0))
+            self._send("$ld:ai:tokens:output", data, usage.get("output", 0))
 
     def track_latency(self, latency_ms: int):
         self._track("$ld:ai:graph:duration:total", latency_ms)
 
-    def track_node_duration(self, node_key: str, config: dict, duration_ms: int):
-        """Record one node's generation duration.
-
-        The caller used to build this event by reaching into the tracker's
-        _ld_client and _context and reading five private attributes off the
-        node's config tracker. Configs are plain dicts now, so the model and
-        provider come from public keys instead.
-        """
-        model = (config or {}).get("model") or {}
-        data = {
-            "graphKey": self._graph_key,
-            "configKey": node_key,
-            "modelName": model.get("name", "unknown"),
-            "providerName": ((config or {}).get("provider") or {}).get("name", "unknown"),
-        }
-        try:
-            get_client().track("$ld:ai:duration:total", self._context, data, duration_ms)
-        except Exception as e:
-            log_debug(f"GRAPH TRACK ERROR (duration): {e}")
-
     def track_total_tokens(self, total: int):
-        """Total tokens across the walk.
-
-        Takes an int. The previous tracker took a TokenUsage object; this event
-        carries a single numeric value.
-        """
         self._track("$ld:ai:graph:total_tokens", total)
 
-    def track_path(self, path):
-        """No-op. The path is the series of $ld:ai:graph:node events.
 
-        Kept so the caller does not need to change; 0.2.4 retired the single
-        $ld:ai:graph:path event that this used to send.
-        """
-        log_debug(f"GRAPH: path {' -> '.join(path)}")
 from dotenv import load_dotenv
 from utils.logger import log_student, log_debug
 import boto3
@@ -367,15 +328,8 @@ class FixedConfigManager:
     async def get_agent_graph(self, user_id: str, graph_key: str, user_context: dict = None):
         """Resolve an agent graph and a tracker for a hand-rolled traversal.
 
-        This method did not exist: agent_service called it but nothing defined
-        it, so the graph path raised AttributeError before any of this ran. It
-        is written here against resolve_graph(), which the SDK documents as the
-        path "for framework-native runners" -- i.e. callers that walk the graph
-        themselves, which is what agent_service does.
-
-        resolve_graph returns topology only and records nothing, so the tracker
-        is ours. Returns (graph, tracker); the graph exposes `enabled`, `root`,
-        `edges_from`, and `reverse_traverse` as attributes.
+        resolve_graph() returns topology only and records nothing, so the
+        tracker is ours. Returns (graph, tracker).
         """
         await self._ensure_ai_client()
         ld_user_context = self.build_context(user_id, user_context)
@@ -399,12 +353,12 @@ class FixedConfigManager:
     def track_feedback(self, context, thumbs_up: bool):
         """Track user feedback with LaunchDarkly.
 
-        There is no tracker and no feedback API, so this emits the legacy event
-        directly. `context` replaces the tracker argument, because the event
-        has to land on the same context the config was evaluated with.
+        The AI SDK has no feedback API, so this emits the event directly on
+        the same context the config was evaluated with.
         """
         try:
-            self.ld_client.track(FEEDBACK_EVENTS[bool(thumbs_up)], context, None, 1)
+            ld_context = ldclient.Context.from_dict(context)
+            self.ld_client.track(FEEDBACK_EVENTS[bool(thumbs_up)], ld_context, None, 1)
             log_student(f"FEEDBACK TRACKED: {'👍 Positive' if thumbs_up else '👎 Negative'}")
             self.ld_client.flush()
             return True

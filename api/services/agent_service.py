@@ -46,8 +46,6 @@ class AgentGraphExecutor:
         sanitized_history: list = None
     ) -> Dict[str, Any]:
         """Execute agents by traversing the LaunchDarkly Agent Graph."""
-        # get_agent_graph is async now and returns the tracker alongside the
-        # topology, because resolve_graph records nothing on its own.
         graph, graph_tracker = await self.config_manager.get_agent_graph(user_id, graph_key, user_context)
 
         if not graph.enabled:
@@ -72,9 +70,6 @@ class AgentGraphExecutor:
 
         # Build node lookup
         nodes = {}
-        # Nodes expose `key` as an attribute rather than a get_key() method,
-        # and reverse_traverse is a coroutine -- without the await the lookup
-        # silently stays empty and every handoff target looks unknown.
         await graph.reverse_traverse(lambda node, _: nodes.update({node.key: node}), {})
         log_student(f"GRAPH: '{graph_key}' with {len(nodes)} nodes: {list(nodes.keys())}")
 
@@ -125,20 +120,12 @@ class AgentGraphExecutor:
                 result = await agent.ainvoke(ctx)
 
                 duration_ms = int((time.time() - node_start) * 1000)
-                self._track_duration(graph_tracker, node_key, config, duration_ms)
-
-                # The node's success/error is emitted here rather than inside
-                # the agent, which no longer has a tracker.
-                if graph_tracker:
-                    if result.get("_error"):
-                        graph_tracker.track_node_error(node_key, config)
-                    elif not result.get("_skipped"):
-                        graph_tracker.track_node_success(node_key, config)
-
-                # Track tool calls to LaunchDarkly
-                if graph_tracker and result.get("tool_calls"):
-                    for tool_name in result["tool_calls"]:
-                        graph_tracker.track_tool_call(node_key, tool_name)
+                if graph_tracker and not result.get("_skipped"):
+                    graph_tracker.track_node_result(
+                        current_node, duration_ms, not result.get("_error"), result.get("_token_usage")
+                    )
+                    for tool_name in result.get("tool_calls") or []:
+                        graph_tracker.track_tool_call(current_node, tool_name)
 
                 # Update context with results (generic)
                 self._update_context(node_key, config, result, ctx, current_node.meta)
@@ -210,10 +197,12 @@ class AgentGraphExecutor:
         if "tool_calls" in result:
             ctx["tool_calls"] = result["tool_calls"]
 
-        # The variation key is public metadata on the node now. The previous
-        # version read a private tracker attribute behind a hasattr guard,
-        # which on a plain dict is always False and so always reported
-        # "default" no matter which variation actually ran.
+        # Downstream nodes read ctx["messages"], so redacted text has to replace
+        # the original message or the PII reaches them anyway.
+        if result.get("redacted"):
+            ctx["processed_input"] = result["redacted"]
+            ctx["messages"] = [HumanMessage(content=result["redacted"])]
+
         var_key = (meta or {}).get("variationKey") or "unknown"
 
         # Record agent config - fully generic, include all result fields
@@ -231,23 +220,11 @@ class AgentGraphExecutor:
 
         ctx["agent_configs"].append(agent_info)
 
-    def _track_duration(self, graph_tracker, node_key: str, config, duration_ms: int):
-        """Track node duration.
-
-        Takes the NODE key. The previous version was handed the graph key and
-        recovered the node's config key from a private tracker attribute; the
-        caller has the node key directly.
-        """
-        if not graph_tracker or not config:
-            return
-        graph_tracker.track_node_duration(node_key, config, duration_ms)
-
     def _track_graph_metrics(self, graph_tracker, ctx: dict, path: list, start_time: float):
         """Track overall graph metrics."""
         if not graph_tracker:
             return
 
-        graph_tracker.track_path(path)
         latency_ms = int((time.time() - start_time) * 1000)
         graph_tracker.track_latency(latency_ms)
         log_student(f"LATENCY: {latency_ms}ms")
