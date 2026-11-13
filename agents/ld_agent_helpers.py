@@ -1,14 +1,16 @@
 """LaunchDarkly AI agent helpers - model creation and metric tracking."""
 import asyncio
 import nest_asyncio
-nest_asyncio.apply()  # Allow nested event loops (fixes FastAPI + asyncio.run conflict)
+try:
+    nest_asyncio.apply()  # Allow nested event loops (fixes FastAPI + asyncio.run conflict)
+except ValueError:
+    pass  # uvicorn's uvloop can't be patched; the async agent path doesn't need it
 
 import time
 import os
 from typing import List, Any, Tuple
 from langchain.chat_models import init_chat_model
 from langgraph.prebuilt import create_react_agent
-from ldai.tracker import TokenUsage
 from utils.logger import log_student
 from langchain_aws import ChatBedrockConverse
 from langchain_core.tools import StructuredTool
@@ -145,36 +147,37 @@ def wrap_tool_with_counter(tool: Any, counter: ToolCallCounter) -> StructuredToo
     )
 
 
-async def track_langgraph_metrics_async(tracker, coro, prev_message_count=0):
-    """Track duration and tokens for async agent invocations."""
+async def collect_langgraph_usage_async(coro, prev_message_count=0):
+    """Run an agent invocation and attach its token usage to the result.
+
+    This was track_langgraph_metrics_async, which took a tracker and emitted
+    duration, success, tokens, and error itself. There is no tracker any more,
+    and the caller that owns the graph tracker emits those events, so this only
+    measures and reports.
+
+    The duration is logged rather than emitted for the same reason: emitting it
+    here as well as in the traversal is what double-counted it before.
+    """
     start_time = time.time()
-    try:
-        result = await coro
-        duration_ms = int((time.time() - start_time) * 1000)
-        tracker.track_duration(duration_ms)
-        tracker.track_success()
-        log_student(f"AGENT: duration={duration_ms}ms")
+    result = await coro
+    duration_ms = int((time.time() - start_time) * 1000)
+    log_student(f"AGENT: duration={duration_ms}ms")
 
-        # Extract tokens from new messages
-        total_in, total_out, total = 0, 0, 0
-        if "messages" in result:
-            for msg in result['messages'][prev_message_count:]:
-                if hasattr(msg, "usage_metadata") and msg.usage_metadata:
-                    usage = msg.usage_metadata
-                    total_in += usage.get("input_tokens", 0)
-                    total_out += usage.get("output_tokens", 0)
-                    total += usage.get("total_tokens", 0)
+    # Extract tokens from new messages
+    total_in, total_out, total = 0, 0, 0
+    if "messages" in result:
+        for msg in result['messages'][prev_message_count:]:
+            if hasattr(msg, "usage_metadata") and msg.usage_metadata:
+                usage = msg.usage_metadata
+                total_in += usage.get("input_tokens", 0)
+                total_out += usage.get("output_tokens", 0)
+                total += usage.get("total_tokens", 0)
 
-        if total > 0:
-            tracker.track_tokens(TokenUsage(input=total_in, output=total_out, total=total))
-            log_student(f"AGENT TOKENS: {total} ({total_in} in, {total_out} out)")
+    if total > 0:
+        log_student(f"AGENT TOKENS: {total} ({total_in} in, {total_out} out)")
 
-        result["_token_usage"] = {"input": total_in, "output": total_out, "total": total}
-        return result
-
-    except Exception:
-        tracker.track_error()
-        raise
+    result["_token_usage"] = {"input": total_in, "output": total_out, "total": total}
+    return result
 
 
 async def create_agent_with_fresh_config(
@@ -199,32 +202,32 @@ async def create_agent_with_fresh_config(
 
         # Create model
         from utils.bedrock_helpers import normalize_bedrock_provider
-        normalized = normalize_bedrock_provider(config.provider.name)
+        # Configs are plain dicts now.
+        provider_name = (config.get("provider") or {}).get("name") or ""
+        model_cfg = config.get("model") or {}
+        normalized = normalize_bedrock_provider(provider_name)
         langchain_provider = map_provider_to_langchain(normalized)
 
         if langchain_provider == 'bedrock' and os.getenv('AUTH_METHOD', '').lower() == 'sso':
             if not hasattr(config_manager, 'boto3_session') or not config_manager.boto3_session:
                 raise ValueError("Bedrock SSO requires AWS session. Run: aws sso login")
             llm = create_bedrock_chat_model(
-                model_id=config.model.name,
+                model_id=model_cfg.get("name"),
                 session=config_manager.boto3_session,
                 region=config_manager.aws_region
             )
-            log_student(f"ROUTING: Bedrock SSO - {config.model.name}")
+            log_student(f"ROUTING: Bedrock SSO - {model_cfg.get('name')}")
         else:
-            fallback = 'anthropic' if config.provider.name.lower() == 'anthropic' else langchain_provider
-            llm = init_chat_model(model=config.model.name, model_provider=fallback)
-            log_student(f"ROUTING: {fallback} - {config.model.name}")
+            fallback = 'anthropic' if provider_name.lower() == 'anthropic' else langchain_provider
+            llm = init_chat_model(model=model_cfg.get("name"), model_provider=fallback)
+            log_student(f"ROUTING: {fallback} - {model_cfg.get('name')}")
 
         # Get max_tool_calls from config
         max_tool_calls = 5
-        try:
-            config_dict = config.to_dict()
-            custom = config_dict.get('model', {}).get('custom', {})
-            if 'max_tool_calls' in custom:
-                max_tool_calls = int(custom['max_tool_calls'])
-        except Exception:
-            pass
+        # model.custom is a public key now; to_dict() is gone.
+        custom = model_cfg.get('custom') or {}
+        if 'max_tool_calls' in custom:
+            max_tool_calls = int(custom['max_tool_calls'])
 
         # Wrap tools with counter
         counter = ToolCallCounter(max_calls=max_tool_calls)
@@ -236,10 +239,12 @@ async def create_agent_with_fresh_config(
         agent = create_react_agent(
             model=llm,
             tools=wrapped_tools,
-            prompt=config.instructions
+            prompt=config.get("instructions")
         )
 
-        return agent, config.tracker, False, recursion_limit
+        # The second element was config.tracker. There is no tracker, and the
+        # caller emits this node's events, so the config is returned instead.
+        return agent, config, False, recursion_limit
 
     except Exception as e:
         log_student(f"ERROR creating agent: {e}")
@@ -282,18 +287,10 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                 initial_state = {"messages": messages}
                 prev_count = len(messages)
 
-                # Use graph node tracker if available
-                active_tracker = (
-                    graph_node_config.tracker
-                    if graph_node_config and hasattr(graph_node_config, 'tracker')
-                    else tracker
-                )
-
                 _rate_limit_llm_call()
 
                 try:
-                    response = await track_langgraph_metrics_async(
-                        active_tracker,
+                    response = await collect_langgraph_usage_async(
                         agent.ainvoke(initial_state, {"recursion_limit": recursion_limit}),
                         prev_count
                     )

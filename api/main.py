@@ -80,22 +80,14 @@ async def submit_feedback(feedback: FeedbackRequest):
     try:
         log_student(f"FEEDBACK: {feedback.feedback} from {feedback.source}")
 
-        # Get LaunchDarkly tracker and submit feedback
         try:
-            # Get a real LaunchDarkly AI config to get the tracker with user context
-            support_config = await agent_service.config_manager.get_config(
+            context = agent_service.config_manager.build_context(
                 feedback.user_id,
-                "support-agent",
                 feedback.user_context
             )
-
-            # Convert feedback format
-            thumbs_up = feedback.feedback == "positive"
-
-            # Track feedback using config_manager
             success = agent_service.config_manager.track_feedback(
-                support_config.tracker,
-                thumbs_up=thumbs_up
+                context,
+                thumbs_up=feedback.feedback == "positive"
             )
 
             if success:

@@ -50,7 +50,7 @@ class TrafficGenerator:
         
         try:
             response = self.claude.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-sonnet-4-6",
                 max_tokens=800,
                 messages=[{
                     "role": "user",
@@ -107,7 +107,7 @@ Complexity guide:
 
         try:
             response = self.claude.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-sonnet-4-6",
                 max_tokens=150,
                 messages=[{"role": "user", "content": prompt}]
             )
@@ -181,7 +181,7 @@ Most users don't give feedback unless the answer is notably good or bad."""
 
         try:
             response = self.claude.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-sonnet-4-6",
                 max_tokens=10,
                 messages=[{"role": "user", "content": prompt}],
                 timeout=2
