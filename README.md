@@ -41,10 +41,8 @@ Open http://localhost:8501
 ### Agents
 | File | Purpose |
 |------|---------|
-| `agents/supervisor_agent.py` | Routes requests based on PII likelihood (uses an AgentControl config) |
-| `agents/security_agent.py` | Detects and redacts PII (uses an AgentControl config) |
-| `agents/support_agent.py` | Answers questions with tools (uses an AgentControl config + tools) |
-| `agents/ld_agent_helpers.py` | Shared helpers - model creation, metric tracking |
+| `agents/generic_agent.py` | Runs any graph node (supervisor, security, support) from its AgentControl config and tools |
+| `agents/ld_agent_helpers.py` | Shared helpers - model creation, tool call limits |
 
 ### Tools
 | File | Purpose |
@@ -78,7 +76,7 @@ Open http://localhost:8501
 ┌─────────────────────────────────────────────────────────────┐
 │                     config_manager.py                        │
 │  • get_agent_graph() → fetches graph topology               │
-│  • get_config() → fetches the config for each agent         │
+│  • track_feedback() → sends thumbs up/down events           │
 │  • Handles targeting based on user context                  │
 └─────────────────────────────────────────────────────────────┘
                               │

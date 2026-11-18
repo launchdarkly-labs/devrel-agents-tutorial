@@ -257,6 +257,10 @@ class MultiAgentBootstrap:
         payload["modelConfigKey"] = model_config_key
         print(f"   Using modelConfigKey: {model_config_key}")
 
+        # Custom parameters such as max_tool_calls live in the variation's model.custom
+        if variation_data.get("customParameters"):
+            payload["model"] = {"custom": variation_data["customParameters"]}
+
         response = http.post(url, headers=self.headers, json=payload, timeout=30)
         
         if response.status_code in [200, 201]:

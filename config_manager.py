@@ -3,16 +3,12 @@
 Simplified ConfigManager for LaunchDarkly AI Agent integration
 """
 import os
-import json
-from pathlib import Path
-import asyncio
 import uuid
 import ldclient
 from launchdarkly_ai_server import (
     get_client,
     init_client,
     inspect_config,
-    parse_ai_config,
     resolve_graph,
 )
 
@@ -115,92 +111,11 @@ class FixedConfigManager:
         if not self.sdk_key:
             raise ValueError("LD_SDK_KEY environment variable is required")
 
-        # Load defaults from .ai_config_defaults.json
-        self._load_config_defaults()
-
         self._initialize_launchdarkly_client()
 
         # Initialize AWS Bedrock session for SSO authentication
         self._initialize_bedrock_session()
 
-    def _load_config_defaults(self):
-        """Load AI config defaults from .ai_config_defaults.json
-
-        This file contains fallback configs used when LaunchDarkly is unavailable.
-        It's created by the bootstrap script: python bootstrap/create_configs.py
-        """
-        defaults_path = Path(".ai_config_defaults.json")
-
-        if not defaults_path.exists():
-            raise FileNotFoundError(
-                ".ai_config_defaults.json not found!\n\n"
-                "Run the bootstrap script to create AI Configs and generate this file:\n"
-                "  python bootstrap/create_configs.py"
-            )
-
-        try:
-            with open(defaults_path, 'r') as f:
-                data = json.load(f)
-
-            self.config_defaults = data.get("configs", {})
-            metadata = data.get("_metadata", {})
-
-            log_debug(f"DEFAULTS: Loaded {len(self.config_defaults)} config defaults from {metadata.get('environment', 'unknown')}")
-            log_debug(f"DEFAULTS: Generated at {metadata.get('generated_at', 'unknown')}")
-
-        except json.JSONDecodeError as e:
-            raise ValueError(
-                f"Failed to parse .ai_config_defaults.json: {e}\n\n"
-                "The file may be corrupted. Regenerate it by running:\n"
-                "  python bootstrap/create_configs.py"
-            )
-
-    def _get_default_config(self, config_key: str) -> dict:
-        """Get fallback config from .ai_config_defaults.json
-
-        Args:
-            config_key: The AI config key (e.g., 'support-agent')
-
-        Returns:
-            A dict in the shape the SDK serves, validated by parse_ai_config
-
-        Raises:
-            ValueError: If config key not found in defaults
-        """
-        if config_key not in self.config_defaults:
-            available_keys = list(self.config_defaults.keys())
-            raise ValueError(
-                f"Config '{config_key}' not found in .ai_config_defaults.json!\n\n"
-                f"Available configs: {', '.join(available_keys)}\n\n"
-                "To add this config, create it in LaunchDarkly and run:\n"
-                "  python bootstrap/create_configs.py"
-            )
-
-        config_data = self.config_defaults[config_key]
-
-        # Configs are plain dicts now, so this shape is what the SDK serves
-        # rather than an AIAgentConfigDefault. Tools are managed by
-        # LaunchDarkly and not part of defaults.
-        candidate = {
-            "model": {
-                "name": config_data["model"]["name"],
-                "parameters": config_data["model"].get("parameters", {}),
-            },
-            "provider": {"name": config_data["provider"]["name"]},
-            "instructions": config_data.get("instructions", "You are a helpful assistant."),
-        }
-
-        # Validated rather than trusted: a stale defaults file should fail
-        # loudly here instead of being served to a model.
-        result = parse_ai_config(candidate)
-        if not result.success:
-            raise ValueError(
-                f"Fallback config '{config_key}' in .ai_config_defaults.json is not valid: "
-                f"{result.error.get('message')}\n\nRegenerate it with:\n"
-                "  python bootstrap/create_configs.py"
-            )
-        return result.data
-    
     def _initialize_launchdarkly_client(self):
         """Initialize LaunchDarkly client and hand it to the AI SDK"""
         config = ldclient.Config(self.sdk_key)
@@ -281,44 +196,6 @@ class FixedConfigManager:
         return context
     
 
-    async def get_config(self, user_id: str, config_key: str = None, user_context: dict = None):
-        """Get LaunchDarkly AI Config with fallback to .ai_config_defaults.json
-
-        Fallback chain:
-        1. Try LaunchDarkly (live config with targeting)
-        2. If that fails, use .ai_config_defaults.json (validated production defaults)
-        3. If config not in defaults file, raise helpful error
-        """
-        log_debug(f"CONFIG MANAGER: Getting config for user_id={user_id}, config_key={config_key}")
-        log_debug(f"CONFIG MANAGER: User context: {user_context}")
-
-        # Build context using centralized method
-        ld_user_context = self.build_context(user_id, user_context)
-        log_debug(f"CONFIG MANAGER: Built LaunchDarkly context: {ld_user_context}")
-
-        ai_config_key = config_key or os.getenv('LAUNCHDARKLY_AI_CONFIG_KEY', 'support-agent')
-        log_debug(f"CONFIG MANAGER: Using AI config key: {ai_config_key}")
-
-        await self._ensure_ai_client()
-
-        # There is no `default=` parameter on this SDK, so the fallback is
-        # applied here. inspect_config never raises and reports enabled=False
-        # on any failure, which keeps this to one branch.
-        inspected = await inspect_config(ai_config_key, ld_user_context)
-
-        if inspected["enabled"] and inspected["config"]:
-            config = inspected["config"]
-            meta = inspected["meta"] or {}
-            log_debug("CONFIG MANAGER: ✅ Got config from LaunchDarkly")
-            log_debug(f"CONFIG MANAGER: Model: {(config.get('model') or {}).get('name', 'unknown')}")
-            # The variation key is public metadata now, not a private tracker
-            # attribute read behind a hasattr guard.
-            log_debug(f"CONFIG MANAGER: Variation: {meta.get('variationKey', 'unknown')}")
-            return config
-
-        log_student(f"CONFIG MANAGER: '{ai_config_key}' not served, using .ai_config_defaults.json")
-        return self._get_default_config(ai_config_key)
-
     async def _ensure_ai_client(self):
         """Hand the existing client to the AI SDK. Idempotent."""
         # client= is keyword-only in effect: a positional argument is read as
@@ -341,8 +218,8 @@ class FixedConfigManager:
     def clear_cache(self):
         """No-op, kept because AgentService calls it on startup.
 
-        Nothing is cached here: every get_config goes through inspect_config,
-        which evaluates against LaunchDarkly each time.
+        Nothing is cached here: every graph and config is evaluated against
+        LaunchDarkly on each request.
         """
         return None
 

@@ -81,6 +81,7 @@ class AgentGraphExecutor:
             prev_node_key = None
             visited = set()
             hop_count = 0
+            must_redact = False
 
             # Traverse until terminal node
             while current_node:
@@ -130,6 +131,9 @@ class AgentGraphExecutor:
                 # Fail closed: following an edge after a failed security check would pass the raw PII on.
                 if result.get("_error"):
                     raise RuntimeError(f"{node_key} failed: {result['_error']}")
+                # Same for a sanitize handoff that came back without redacted text.
+                if must_redact and not result.get("redacted"):
+                    raise RuntimeError(f"{node_key} returned no redacted text")
 
                 # Update context with results (generic)
                 self._update_context(node_key, config, result, ctx, current_node.meta)
@@ -140,6 +144,10 @@ class AgentGraphExecutor:
                     break
 
                 next_node = self._select_next_node(edges, result, nodes, graph_tracker, source_key=node_key)
+                must_redact = next_node is not None and any(
+                    e.target_key == next_node.key and (e.handoff or {}).get("action") == "sanitize"
+                    for e in edges
+                )
                 prev_node_key = node_key
                 current_node = next_node
 
