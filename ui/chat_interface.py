@@ -1,6 +1,5 @@
 import streamlit as st
 import requests
-import json
 import os
 from dotenv import load_dotenv
 
@@ -42,9 +41,6 @@ def get_user_context(user_id, sample_users):
 API_HOST = os.getenv('API_HOST', 'localhost')
 API_PORT = os.getenv('API_PORT', '8000')
 API_BASE_URL = f"http://{API_HOST}:{API_PORT}"
-
-# Get UI configuration from environment
-UI_PORT = int(os.getenv('UI_PORT', '8501'))
 
 st.set_page_config(
     page_title="LangGraph Multi-Agent System",
@@ -164,9 +160,6 @@ st.markdown("""
     background: linear-gradient(135deg, #4c51bf 0%, #553c9a 100%);
 }
 
-/* Purple, pink, and green button variations inspired by LaunchDarkly cards */
-/* Use JavaScript to target buttons by text content */
-
 /* Chat message styling */
 .stChatMessage {
     background: rgba(255, 255, 255, 0.05);
@@ -217,55 +210,6 @@ st.markdown("""
     }
 }
 </style>
-
-<script>
-// Apply different colors to buttons based on their text content
-document.addEventListener('DOMContentLoaded', function() {
-    function styleButtons() {
-        const buttons = document.querySelectorAll('.stButton button');
-        
-        buttons.forEach(button => {
-            const text = button.textContent.trim();
-            
-            // Reset any existing styles
-            button.style.background = '';
-            button.style.color = '';
-            
-            // Apply colors based on button text
-            if (text === 'Basic Search' || text === 'ArXiv Research') {
-                // Pink buttons
-                button.style.background = 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)';
-                button.style.color = 'white';
-            } else if (text === 'RAG + Reranking' || text === 'OpenAlex Research') {
-                // Purple buttons
-                button.style.background = 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)';
-                button.style.color = 'white';
-            } else if (text === 'Security Check' || text === 'Full Research Stack') {
-                // Green buttons
-                button.style.background = 'linear-gradient(135deg, #10b981 0%, #047857 100%)';
-                button.style.color = 'white';
-            }
-        });
-    }
-    
-    // Style buttons on page load
-    styleButtons();
-    
-    // Style buttons when new content is added (Streamlit reruns)
-    const observer = new MutationObserver(function(mutations) {
-        mutations.forEach(function(mutation) {
-            if (mutation.type === 'childList') {
-                styleButtons();
-            }
-        });
-    });
-    
-    observer.observe(document.body, {
-        childList: true,
-        subtree: true
-    });
-});
-</script>
 """, unsafe_allow_html=True)
 
 # Simplified header section
@@ -278,41 +222,79 @@ st.markdown("""
 
 def process_tool_display(tools, tool_details):
     """Single function to process tools and tool_details for consistent UI display"""
+    tools = tools or []
+    tool_details = tool_details or []
     tool_list = []
-    
-    # Handle None values
-    if tools is None:
-        tools = []
-    if tool_details is None:
-        tool_details = []
-    
-    # Define mapping from actual tool names to display names
-    mcp_name_mapping = {
-        "search_papers": "arxiv_search",
-        "search_works": "openalex_search"
-    }
-    
-    for i, tool in enumerate(tools):
-        tool_name = tool if isinstance(tool, str) else tool.get("name", str(tool))
-        
-        # Get search query from matching tool_details with proper name mapping
-        # Use index-based matching for multiple instances of the same tool
+
+    for i, tool_name in enumerate(tools):
+        # tool_details is in call order, so match by index for repeated tools
         search_query = ""
-        if i < len(tool_details):
-            detail = tool_details[i]
-            detail_name = detail.get("name")
-            # Check both direct match and mapped match
-            mapped_name = mcp_name_mapping.get(detail_name, detail_name)
-            if mapped_name == tool_name:
-                search_query = detail.get("search_query", "") or ""
-        
+        if i < len(tool_details) and tool_details[i].get("name") == tool_name:
+            search_query = tool_details[i].get("search_query") or ""
+
         # Add tool with search query if available
         if search_query:
             tool_list.append(f"{tool_name} ('{search_query}')")
         else:
             tool_list.append(tool_name)
-    
+
     return tool_list
+
+def show_workflow_details(metadata):
+    """Show each agent's served configuration and the backend console output"""
+    with st.expander("Workflow Details"):
+        agent_configurations = metadata.get("agent_configurations")
+        if agent_configurations:
+            security = next((a for a in agent_configurations if a["agent_name"] == "security-agent"), {})
+
+            # Display each agent's configuration
+            for agent_config in agent_configurations:
+                st.markdown(f"**{agent_config['agent_name']}:**")
+
+                config_data = {
+                    "model": agent_config["model"],
+                    "variation_key": agent_config["variation_key"]
+                }
+
+                # Show available tools if any
+                if agent_config.get("tools"):
+                    config_data["tools_available"] = agent_config["tools"]
+
+                # Show tools actually used, with their search queries
+                tools_used = process_tool_display(agent_config.get("tools_used"), agent_config.get("tool_details"))
+                if tools_used:
+                    config_data["tools_used"] = tools_used
+
+                # Show redacted text for supervisor agent only if PII was detected
+                if agent_config["agent_name"] == "supervisor-agent" and security.get("detected") and security.get("redacted"):
+                    config_data["redacted_text"] = security["redacted"]
+
+                # Show PII findings for security agent
+                if agent_config["agent_name"] == "security-agent" and agent_config.get("detected") is not None:
+                    config_data["security_clearance"] = {
+                        "detected": agent_config["detected"],
+                        "types": agent_config.get("types", []),
+                        "redacted": agent_config.get("redacted", "")
+                    }
+
+                st.json(config_data)
+                st.markdown("---")
+        else:
+            # No per-agent details (e.g. an error response)
+            config_data = {
+                "model": metadata["primary_model"],
+                "variation_key": metadata["primary_variation"]
+            }
+            if metadata.get("tools_used"):
+                config_data["tools_used"] = metadata["tools_used"]
+            st.json(config_data)
+
+    with st.expander("Backend Console Output"):
+        if metadata.get("console_logs"):
+            for log in metadata["console_logs"]:
+                st.code(log, language="text")
+        else:
+            st.markdown("*Console output not captured*")
 
 # Enhanced example queries section
 st.markdown("""
@@ -397,103 +379,32 @@ def send_feedback(message_id, feedback):
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.write(message["content"])
-        if message["role"] == "assistant" and "metadata" in message:
+        if message["role"] == "assistant":
             # Show feedback buttons for assistant messages
-            if "message_id" in message:
-                message_id = message["message_id"]
-                current_feedback = message.get("feedback")
-                
-                col1, col2, col3 = st.columns([1, 1, 8])
-                with col1:
-                    st.button("👍", key=f"hist_thumbs_up_{message_id}", disabled=current_feedback == "positive",
-                              help="Helpful response", on_click=send_feedback, args=(message_id, "positive"))
+            message_id = message["message_id"]
+            current_feedback = message.get("feedback")
 
-                with col2:
-                    st.button("👎", key=f"hist_thumbs_down_{message_id}", disabled=current_feedback == "negative",
-                              help="Not helpful", on_click=send_feedback, args=(message_id, "negative"))
+            col1, col2, col3 = st.columns([1, 1, 8])
+            with col1:
+                st.button("👍", key=f"hist_thumbs_up_{message_id}", disabled=current_feedback == "positive",
+                          help="Helpful response", on_click=send_feedback, args=(message_id, "positive"))
 
-                # Show current feedback status
-                if current_feedback:
-                    feedback_emoji = "👍" if current_feedback == "positive" else "👎"
-                    st.caption(f"Feedback: {feedback_emoji}")
-            with st.expander("Workflow Details"):
-                metadata = message["metadata"]
-                if "agent_configurations" in metadata:
-                    # Display each agent's configuration
-                    for agent_config in metadata["agent_configurations"]:
-                        st.markdown(f"**{agent_config['agent_name']}:**")
-                        
-                        # Process both available tools and tools used
-                        tools_available = agent_config.get("tools", [])
-                        tools_used = agent_config.get("tools_used", [])
-                        tool_details = agent_config.get("tool_details", [])
-                        
-                        # Process tools used with details for display
-                        processed_tools_used = process_tool_display(tools_used, tool_details)
-                        
-                        config_data = {
-                            "model": agent_config["model"],
-                            "variation_key": agent_config["variation_key"]
-                        }
-                        
-                        # Show available tools if any
-                        if tools_available:
-                            config_data["tools_available"] = tools_available
-                        
-                        # Show tools actually used if any
-                        if processed_tools_used:
-                            config_data["tools_used"] = processed_tools_used
-                        
-                        # Show redacted text for supervisor agent only if PII was detected
-                        if agent_config.get("agent_name") == "supervisor-agent":
-                            # Look for redacted text from security agent in metadata
-                            agent_data = metadata.get("agent_configurations", [])
-                            for agent in agent_data:
-                                if (agent.get("agent_name") == "security-agent" and 
-                                    agent.get("detected") == True and 
-                                    agent.get("redacted")):
-                                    config_data["redacted_text"] = agent.get("redacted", "")
-                                    break
-                        
-                        # Show PII findings for security agent
-                        if agent_config.get("agent_name") == "security-agent":
-                            # Show tools used (if any)
-                            if tool_details:
-                                for detail in tool_details:
-                                    if detail.get("name") == "pii_detection" and detail.get("pii_result"):
-                                        # Use the PII result directly from the tool (new schema format)
-                                        config_data["pii_analysis"] = detail["pii_result"]
-                            
-                            # Show security clearance status from agent response
-                            # This will be passed from the API response
-                            agent_data = metadata.get("agent_configurations", [])
-                            for agent in agent_data:
-                                if agent.get("agent_name") == "security-agent":
-                                    if agent.get("detected") is not None:
-                                        config_data["security_clearance"] = {
-                                            "detected": agent.get("detected"),
-                                            "types": agent.get("types", []),
-                                            "redacted": agent.get("redacted", "")
-                                        }
-                            
-                        st.json(config_data)
-                        st.markdown("---")
-                else:
-                    # Fallback for old format
-                    st.json(metadata)
-            
-            with st.expander("Backend Console Output"):
-                if message["metadata"].get("console_logs"):
-                    for log in message["metadata"]["console_logs"]:
-                        st.code(log, language="text")
-                else:
-                    st.markdown("*Console output not captured*")
+            with col2:
+                st.button("👎", key=f"hist_thumbs_down_{message_id}", disabled=current_feedback == "negative",
+                          help="Not helpful", on_click=send_feedback, args=(message_id, "negative"))
+
+            # Show current feedback status
+            if current_feedback:
+                feedback_emoji = "👍" if current_feedback == "positive" else "👎"
+                st.caption(f"Feedback: {feedback_emoji}")
+
+            show_workflow_details(message["metadata"])
 
 # Handle input sources
 prompt = None
 
 # Check for example query first
-if "example_query" in st.session_state and st.session_state.example_query:
+if st.session_state.get("example_query"):
     prompt = st.session_state.example_query
 
 # Always show chat input - it should never disappear
@@ -509,16 +420,16 @@ if user_text is not None:
 if prompt:
     # Add user message
     st.session_state.messages.append({"role": "user", "content": prompt})
-    
+
     # Display user message
     with st.chat_message("user"):
         st.write(prompt)
-    
+
     # Get agent response
     try:
         # Get user context for LaunchDarkly targeting
         user_context = get_user_context(st.session_state.user_id, sample_users)
-        
+
         # SECURITY BOUNDARY: Send only sanitized conversation history to API
         # Raw messages (with PII) are never sent to backend - support agent isolation maintained
         response = requests.post(
@@ -530,24 +441,20 @@ if prompt:
                 "sanitized_conversation_history": st.session_state.sanitized_messages  # PII-free history only
             }
         )
-        
+
         if response.status_code == 200:
             data = response.json()
-            
-            # Extract console logs if available
-            console_logs = data.get("console_logs", [])
-            
+
             # SECURITY BOUNDARY: Extract sanitized messages from security agent
             # Support agent only ever sees these PII-free versions
             sanitized_user_message = prompt  # Default fallback
-            
+
             # Extract redacted user message from security agent output
-            if "agent_configurations" in data:
-                for agent_config in data["agent_configurations"]:
-                    if agent_config.get("agent_name") == "security-agent" and agent_config.get("redacted"):
-                        sanitized_user_message = agent_config["redacted"]
-                        break
-            
+            for agent_config in data.get("agent_configurations") or []:
+                if agent_config.get("agent_name") == "security-agent" and agent_config.get("redacted"):
+                    sanitized_user_message = agent_config["redacted"]
+                    break
+
             # Update sanitized conversation history (PII-free, for API calls)
             st.session_state.sanitized_messages.append({
                 "role": "user",
@@ -557,170 +464,74 @@ if prompt:
                 "role": "assistant",
                 "content": data["response"]
             })
-            
+
             # Add assistant message with all agent configurations
             metadata = {
                 "primary_variation": data["variation_key"],
                 "primary_model": data["model"],
                 "tools_used": data["tool_calls"],
-                "console_logs": console_logs
+                "console_logs": data.get("console_logs", []),
+                "agent_configurations": data.get("agent_configurations") or []
             }
-            
-            # Add individual agent configurations if available
-            if "agent_configurations" in data and data["agent_configurations"]:
-                metadata["agent_configurations"] = data["agent_configurations"]
-            
+
             # Add message with unique ID for feedback tracking
             message_id = f"msg_{len(st.session_state.messages)}"
             st.session_state.messages.append({
-                "role": "assistant", 
+                "role": "assistant",
                 "content": data["response"],
                 "metadata": metadata,
                 "message_id": message_id,
                 "user_query": prompt,
                 "feedback": None
             })
-            
+
             # Display assistant message
             with st.chat_message("assistant"):
                 st.write(data["response"])
-                
-                # Add improved feedback system after the response
-                message_obj = None
-                for msg in st.session_state.messages:
-                    if msg.get("message_id") == message_id:
-                        message_obj = msg
-                        break
-                
-                if message_obj:
-                    current_feedback = message_obj.get("feedback")
-                    
-                    # Show feedback status if already provided
-                    if current_feedback:
-                        feedback_emoji = "👍" if current_feedback == "positive" else "👎"
-                        st.caption(f"Feedback recorded: {feedback_emoji}")
-                    else:
-                        # Show feedback options
-                        st.markdown("**Was this response helpful?**")
-                        col1, col2, col3 = st.columns([1, 1, 8])
 
-                        with col1:
-                            st.button("👍 Helpful", key=f"new_thumbs_up_{message_id}", help="This response was helpful",
-                                      on_click=send_feedback, args=(message_id, "positive"))
+                # Show feedback options
+                st.markdown("**Was this response helpful?**")
+                col1, col2, col3 = st.columns([1, 1, 8])
 
-                        with col2:
-                            st.button("👎 Not helpful", key=f"new_thumbs_down_{message_id}", help="This response was not helpful",
-                                      on_click=send_feedback, args=(message_id, "negative"))
+                with col1:
+                    st.button("👍 Helpful", key=f"new_thumbs_up_{message_id}", help="This response was helpful",
+                              on_click=send_feedback, args=(message_id, "positive"))
 
-                with st.expander("Workflow Details"):
-                    if "agent_configurations" in data and data["agent_configurations"]:
-                        # Display each agent's configuration
-                        for agent_config in data["agent_configurations"]:
-                            st.markdown(f"**{agent_config['agent_name']}:**")
-                            
-                            # Process both available tools and tools used
-                            tools_available = agent_config.get("tools", [])
-                            tools_used = agent_config.get("tools_used", [])
-                            tool_details = agent_config.get("tool_details", [])
-                            
-                            # Process tools used with details for display
-                            processed_tools_used = process_tool_display(tools_used, tool_details)
-                            
-                            config_data = {
-                                "model": agent_config["model"],
-                                "variation_key": agent_config["variation_key"]
-                            }
-                            
-                            # Show available tools if any
-                            if tools_available:
-                                config_data["tools_available"] = tools_available
-                            
-                            # Show tools actually used if any
-                            if processed_tools_used:
-                                config_data["tools_used"] = processed_tools_used
-                            
-                            # Show redacted text for supervisor agent only if PII was detected
-                            if agent_config.get("agent_name") == "supervisor-agent":
-                                # Look for redacted text from security agent in data
-                                for agent in data["agent_configurations"]:
-                                    if (agent.get("agent_name") == "security-agent" and 
-                                        agent.get("detected") == True and 
-                                        agent.get("redacted")):
-                                        config_data["redacted_text"] = agent.get("redacted", "")
-                                        break
-                            
-                            # Show PII findings for security agent
-                            if agent_config.get("agent_name") == "security-agent" and tool_details:
-                                for detail in tool_details:
-                                    if detail.get("name") == "pii_detection" and detail.get("pii_result"):
-                                        # Use the PII result directly from the tool (new schema format)
-                                        config_data["pii_analysis"] = detail["pii_result"]
-                                
-                            st.json(config_data)
-                            st.markdown("---")
-                    else:
-                        # Fallback to single configuration - use shared tool processing
-                        tools_used = data.get("tool_calls", [])
-                        # Convert old format to new format for compatibility
-                        tool_details = []
-                        processed_tools = process_tool_display(tools_used, tool_details)
-                        
-                        config_data = {
-                            "model": data["model"],
-                            "variation_key": data["variation_key"]
-                        }
-                        
-                        if processed_tools:
-                            config_data["tools_used"] = processed_tools
-                            
-                        st.json(config_data)
-                
-                with st.expander("Backend Console Output"):
-                    if metadata.get("console_logs"):
-                        for log in metadata["console_logs"]:
-                            st.code(log, language="text")
-                    else:
-                        st.markdown("*Console output not captured*")
+                with col2:
+                    st.button("👎 Not helpful", key=f"new_thumbs_down_{message_id}", help="This response was not helpful",
+                              on_click=send_feedback, args=(message_id, "negative"))
+
+                show_workflow_details(metadata)
 
             # Clear example query only after successful processing to avoid losing it on reruns
-            if "example_query" in st.session_state and st.session_state.example_query == prompt:
+            if st.session_state.get("example_query") == prompt:
                 del st.session_state.example_query
         else:
             st.error(f"Error: {response.status_code}")
-            
+
     except Exception as e:
         st.error(f"Connection error: {e}")
 
 # Sidebar for user settings
 with st.sidebar:
     st.header("Context")
-    
-    # User ID selection with improved styling
+
     user_options = [user['id'] for user in sample_users]
-    # Find default index for user_other_paid_001
-    default_index = 0
-    if "user_other_paid_001" in user_options:
-        default_index = user_options.index("user_other_paid_001")
-    elif st.session_state.user_id in user_options:
-        default_index = user_options.index(st.session_state.user_id)
-    
-    selected_user_id = st.selectbox("User ID", user_options, index=default_index,
+    selected_user_id = st.selectbox("User ID", user_options, index=user_options.index("user_other_paid_001"),
                                    help="Different User IDs may receive different AI configurations via LaunchDarkly")
-    
+
     # Show user context for selected user
-    if sample_users:
-        user_context = get_user_context(selected_user_id, sample_users)
-        st.caption(f"Context: {user_context['country']} {user_context['plan']} user")
-    
+    user_context = get_user_context(selected_user_id, sample_users)
+    st.caption(f"Context: {user_context['country']} {user_context['plan']} user")
+
     if selected_user_id != st.session_state.user_id:
         st.session_state.user_id = selected_user_id
         # Clear both message histories when switching users
         st.session_state.messages = []
         st.session_state.sanitized_messages = []
         st.rerun()
-    
+
     if st.button("Clear Chat"):
         st.session_state.messages = []
         st.session_state.sanitized_messages = []
         st.rerun()
-    

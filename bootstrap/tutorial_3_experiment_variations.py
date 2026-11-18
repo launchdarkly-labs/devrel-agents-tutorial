@@ -37,35 +37,6 @@ class Tutorial3VariationBootstrap:
             "LD-API-Version": "beta"
         }
 
-    def verify_security_agent_variations(self) -> bool:
-        """Verify that existing security agent variations are available for experiments"""
-
-        print("\n🔍 Verifying security agent variations...")
-
-        # Check if security-agent AI Config exists with required variations
-        url = f"{self.base_url}/projects/{self.project_key}/ai-configs/security-agent/variations"
-        response = requests.get(url, headers=self.headers)
-
-        if response.status_code != 200:
-            print(f"❌ Error: security-agent variations not found (status: {response.status_code})")
-            print(f"   Response: {response.text}")
-            print("   Please complete tutorial-2 first to create the base AI Configs")
-            return False
-
-        variations = response.json().get("items", [])
-        variation_keys = [var["key"] for var in variations]
-        required_variations = ["baseline", "enhanced"]
-
-        missing_variations = [var for var in required_variations if var not in variation_keys]
-
-        if missing_variations:
-            print(f"❌ Error: Missing required security agent variations: {missing_variations}")
-            print("   Please ensure security-agent has baseline and enhanced variations")
-            return False
-
-        print("  ✅ Security agent variations exist (baseline, enhanced)")
-        return True
-
     def create_premium_model_variations(self) -> bool:
         """Create the 1 premium model variation for premium model experiment"""
 
@@ -90,15 +61,15 @@ class Tutorial3VariationBootstrap:
 
         print(f"\n📝 Creating {len(variations)} variations for {ai_config_key}...")
 
+        # Map model name to LaunchDarkly modelConfigKey
+        model_config_key_map = {
+            "claude-opus-5-5": "Anthropic.claude-opus-5-5",
+        }
+
         for variation in variations:
             url = f"{self.base_url}/projects/{self.project_key}/ai-configs/{ai_config_key}/variations"
-            
-            # Map model name to LaunchDarkly modelConfigKey
+
             model_name = variation["model"]["name"]
-            model_config_key_map = {
-                "claude-opus-5-5": "Anthropic.claude-opus-5-5",
-            }
-            
             model_config_key = model_config_key_map.get(model_name)
 
             payload = {
@@ -108,7 +79,7 @@ class Tutorial3VariationBootstrap:
                 "instructions": variation["instructions"],
                 "tools": [{"key": tool, "version": 1} for tool in variation["tools"]],
             }
-            
+
             # Use modelConfigKey if available, otherwise fallback to modelName/provider
             if model_config_key:
                 payload["modelConfigKey"] = model_config_key
@@ -118,39 +89,30 @@ class Tutorial3VariationBootstrap:
                 payload["provider"] = {"name": variation["model"]["provider"]}
                 print(f"  Using modelName/provider: {model_name}")
 
-            # Add custom parameters if they exist
-            if variation["customParameters"]:
-                # Custom parameters should be in the payload root for AI Config variations
-                payload.update(variation["customParameters"])
+            # Custom parameters should be in the payload root for AI Config variations
+            payload.update(variation["customParameters"])
 
-            try:
-                response = requests.post(url, json=payload, headers=self.headers)
+            response = requests.post(url, json=payload, headers=self.headers)
 
-                if response.status_code == 201:
-                    print(f"  ✅ Created variation: {variation['key']}")
-                elif response.status_code == 409:
-                    print(f"  ⚠️  Variation already exists: {variation['key']}, attempting to update...")
-                    # Try to update the existing variation
-                    get_url = f"{url}/{variation['key']}"
-                    # Remove 'messages' field for PATCH (not supported in agent mode)
-                    update_payload = {k: v for k, v in payload.items() if k != 'messages'}
-                    update_response = requests.patch(get_url, json=update_payload, headers=self.headers)
-                    if update_response.status_code == 200:
-                        print(f"  ✅ Updated variation: {variation['key']}")
-                    else:
-                        print(f"  ❌ Failed to update {variation['key']}: {update_response.status_code}")
-                        print(f"     Response: {update_response.text}")
+            if response.status_code == 201:
+                print(f"  ✅ Created variation: {variation['key']}")
+            elif response.status_code == 409:
+                print(f"  ⚠️  Variation already exists: {variation['key']}, attempting to update...")
+                # Remove 'messages' field for PATCH (not supported in agent mode)
+                update_payload = {k: v for k, v in payload.items() if k != 'messages'}
+                update_response = requests.patch(f"{url}/{variation['key']}", json=update_payload, headers=self.headers)
+                if update_response.status_code == 200:
+                    print(f"  ✅ Updated variation: {variation['key']}")
                 else:
-                    print(f"  ❌ Failed to create {variation['key']}: {response.status_code}")
-                    print(f"     Response: {response.text}")
-                    return False
-
-                # Small delay to avoid rate limiting
-                time.sleep(0.5)
-
-            except Exception as e:
-                print(f"  ❌ Error creating {variation['key']}: {str(e)}")
+                    print(f"  ❌ Failed to update {variation['key']}: {update_response.status_code}")
+                    print(f"     Response: {update_response.text}")
+            else:
+                print(f"  ❌ Failed to create {variation['key']}: {response.status_code}")
+                print(f"     Response: {response.text}")
                 return False
+
+            # Small delay to avoid rate limiting
+            time.sleep(0.5)
 
         return True
 
@@ -202,10 +164,6 @@ class Tutorial3VariationBootstrap:
 
         print("\n📋 Creating experiment variations...")
 
-        # Skip security agent verification - not needed for premium model experiment
-        print("\n⏭️  Skipping security agent verification (not required for premium model experiment)")
-
-        # Create premium model variations
         if not self.create_premium_model_variations():
             print("❌ Failed to create premium model variations")
             sys.exit(1)
@@ -218,7 +176,7 @@ class Tutorial3VariationBootstrap:
         print("3. Follow tutorial-3 for metrics and experiment setup")
         print("\nCreated variations:")
         print("  Premium Model: claude-opus-treatment")
-        print("  Security Agent: Uses existing baseline and enhanced variations")
+        print("  Security Agent: Uses existing basic-security and strict-security variations")
         print("  Note: Both experiments use existing other-paid configuration as control")
 
 if __name__ == "__main__":

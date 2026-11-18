@@ -225,19 +225,14 @@ Most users don't give feedback unless the answer is notably good or bad."""
 
     def run(self, num_queries, delay):
         """Main execution loop"""
-        print(f"\n🚀 DEBUG: Starting {num_queries} queries with {delay}s delay\n")
+        print(f"\n🚀 Starting {num_queries} queries with {delay}s delay\n")
 
         # Step 1: Get topics from knowledge base
-        print("🔍 DEBUG: Step 1 - Analyzing knowledge base...")
         topics = self.analyze_knowledge_base()
-        print(f"✅ DEBUG: Got {len(topics)} topics: {topics[:3]}...")
         complexities = ["basic", "intermediate", "advanced"]
 
         # Step 2: Generate and process queries
-        print(f"🔍 DEBUG: Step 2 - Starting loop for {num_queries} queries...")
         for i in range(num_queries):
-            print(f"\n🔍 DEBUG: Loop iteration {i+1}/{num_queries} starting...")
-
             # Random selection
             topic = random.choice(topics)
             complexity = random.choice(complexities)
@@ -246,36 +241,26 @@ Most users don't give feedback unless the answer is notably good or bad."""
             inject_pii = random.random() < (self.pii_percentage / 100.0)
             pii_indicator = " [PII]" if inject_pii else ""
 
-            print(f"🔍 DEBUG: Selected topic='{topic}', complexity='{complexity}', inject_pii={inject_pii}")
-
             print(f"\n[{i+1}/{num_queries}] {topic} ({complexity}){pii_indicator}")
 
             # Generate query
-            print("🔍 DEBUG: Calling generate_query...")
             query = self.generate_query(topic, complexity, inject_pii)
-            print(f"✅ DEBUG: Generated query: {query[:50]}...")
             print(f"  Q: {query[:80]}...")
 
             # Add small delay to prevent Claude API rate limiting
-            print("🔍 DEBUG: Adding 1s delay before API calls...")
             time.sleep(1)
 
             # Send to API
-            print("🔍 DEBUG: Calling send_chat...")
             chat_data = self.send_chat(query)
-            print(f"✅ DEBUG: send_chat returned: success={chat_data['success']}")
 
             if chat_data["success"]:
                 print(f"  A: {chat_data['response'][:80]}...")
 
                 # Add small delay before evaluation
-                print("🔍 DEBUG: Adding 1s delay before evaluation...")
                 time.sleep(1)
 
                 # Evaluate response
-                print("🔍 DEBUG: Calling evaluate_response...")
                 feedback = self.evaluate_response(query, chat_data["response"])
-                print(f"✅ DEBUG: evaluate_response returned: {feedback}")
 
                 if feedback == "positive":
                     print("  👍 Positive feedback")
@@ -285,20 +270,14 @@ Most users don't give feedback unless the answer is notably good or bad."""
                     print("  😐 No feedback")
 
                 # Send feedback to API
-                print("🔍 DEBUG: Calling send_feedback...")
                 self.send_feedback(chat_data, query, feedback)
-                print("✅ DEBUG: send_feedback completed")
             else:
                 print("  ❌ API call failed")
 
-            print(f"🔍 DEBUG: Loop iteration {i+1}/{num_queries} completed")
-
             # Delay between requests
             if delay > 0 and i < num_queries - 1:
-                print(f"🔍 DEBUG: Sleeping for {delay}s...")
                 time.sleep(delay)
 
-        print(f"\n🔍 DEBUG: Loop completed, reached end of run() method")
         print("\n✅ Complete\n")
 
 def main():

@@ -246,7 +246,7 @@ uv run python bootstrap/tutorial_3_experiment_variations.py
  </CodeBlock>
 </CodeBlocks>
 
-This creates the `claude-opus-treatment` variation for the "Premium model value analysis" experiment. To verify the script worked correctly, open your `support-agent` config in LaunchDarkly. You should now see the `claude-opus-treatment` variation alongside your existing variations. The "Security agent analysis" experiment will use your existing baseline and enhanced variations. Both experiments use the existing `other-paid` configuration as their control group.
+This creates the `claude-opus-treatment` variation for the "Premium model value analysis" experiment. To verify the script worked correctly, open your `support-agent` config in LaunchDarkly. You should now see the `claude-opus-treatment` variation alongside your existing variations. The "Security agent analysis" experiment will use your existing `basic-security` and `strict-security` variations. Both experiments use the existing `other-paid` configuration as their control group.
 
 ## Step 3: Configure the security agent experiment
 
