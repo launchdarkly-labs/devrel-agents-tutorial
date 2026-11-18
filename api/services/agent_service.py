@@ -181,12 +181,13 @@ class AgentGraphExecutor:
             target = route_map[routing]
             log_student(f"  MATCHED: routing='{routing}' → {target}")
             return nodes.get(target)
-        elif routing:
+        if route_map:
             log_student(f"  UNRECOGNIZED ROUTE: '{routing}' not in {list(route_map.keys())}")
             if graph_tracker:
                 graph_tracker.track_handoff_failure(source_key, routing)
+            raise ValueError(f"{source_key} chose no valid route: {routing!r}")
 
-        # Default: first edge (fallback)
+        # Edges without routes hand off to the first target
         if edges:
             default = edges[0].target_key
             log_student(f"  DEFAULT: → {default}")
@@ -258,7 +259,7 @@ class AgentService:
         self.graph_executor = AgentGraphExecutor(self.config_manager)
 
     def flush_metrics(self):
-        self.config_manager.close()
+        self.config_manager.flush()
 
     async def process_message(
         self,
