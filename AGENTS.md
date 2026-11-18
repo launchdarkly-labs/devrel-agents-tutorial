@@ -4,7 +4,7 @@ Companion code for the LaunchDarkly tutorial series *Chaos to Clarity: Defensibl
 
 ## Setup and commands
 
-- Python 3.11 via `uv`. `uv sync` installs runtime deps; `uv sync --group dev` adds pytest and ruff.
+- Python 3.12 via `uv`. `uv sync` installs runtime deps; `uv sync --group dev` adds pytest and ruff.
 - `cp .env.example .env`. `LD_SDK_KEY` is always required. Choose one model auth path: `AUTH_METHOD=sso` (AWS Bedrock, needs `AWS_PROFILE` + `AWS_REGION`) or `AUTH_METHOD=api-key` (`ANTHROPIC_API_KEY`/`OPENAI_API_KEY`). `OPENAI_API_KEY` is also needed to rebuild embeddings.
 - API: `uv run uvicorn api.main:app --reload --port 8000`. Smoke check: `curl localhost:8000/health`, then POST `/chat`.
 - UI: `uv run streamlit run ui/chat_interface.py --server.port 8501`.

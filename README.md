@@ -67,7 +67,7 @@ In the next 20 minutes, you'll have a LangGraph multi-agent system with:
 
 You'll need:
 
-- **Python 3.9+** with `uv` package manager ([install uv](https://docs.astral.sh/uv/getting-started/installation/))
+- **Python 3.12+** with `uv` package manager ([install uv](https://docs.astral.sh/uv/getting-started/installation/))
 - **LaunchDarkly account** ([sign up for free](https://app.launchdarkly.com/signup))
 
 **Choose your AI provider setup:**
