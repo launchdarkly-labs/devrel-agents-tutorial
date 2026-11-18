@@ -22,7 +22,7 @@ def create_generic_agent(agent_config, config_manager, valid_routes: List[str] =
     """
     from agents.ld_agent_helpers import (
         create_model_for_config, _rate_limit_llm_call,
-        wrap_tool_with_counter, ToolCallCounter
+        wrap_tool_with_counter, ToolCallCounter, MaxToolCallsExceeded
     )
     from tools_impl.dynamic_tool_factory import create_dynamic_tools_from_launchdarkly
     import time
@@ -94,6 +94,10 @@ def create_generic_agent(agent_config, config_manager, valid_routes: List[str] =
 
                 return result
 
+            except MaxToolCallsExceeded as e:
+                # The configured limit doing its job, not a failed generation.
+                log_student(f"TOOL LIMIT: {e}")
+                return {"response": f"Tool call limit reached. {e}"}
             except Exception as e:
                 log_student(f"AGENT ERROR: {e}")
                 return {
