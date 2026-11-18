@@ -41,9 +41,6 @@ env/
 ehthumbs.db
 Thumbs.db
 
-# Tests
-tests/
-
 # Documentation
 docs/
 

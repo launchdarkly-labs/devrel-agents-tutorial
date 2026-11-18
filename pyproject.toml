@@ -52,3 +52,8 @@ dev = [
 
 [tool.setuptools]
 packages = ["api", "agents"]
+
+[tool.pytest.ini_options]
+# api/segmentation_test.py is a live script that needs the running API, not a unit test
+testpaths = ["tests"]
+asyncio_mode = "auto"
