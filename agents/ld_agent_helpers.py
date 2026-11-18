@@ -10,7 +10,7 @@ from typing import List, Any, Tuple
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage
 from langchain_core.tools import StructuredTool
-from langgraph.prebuilt import create_react_agent
+from langgraph.prebuilt import ToolNode, create_react_agent
 from utils.logger import log_student
 from utils.bedrock_helpers import ensure_bedrock_inference_profile
 from langchain_aws import ChatBedrockConverse
@@ -115,6 +115,15 @@ def ci_safe_provider_and_model(provider_name: str, model_name: str) -> tuple[str
     return (provider_name, model_name)
 
 
+def _tool_error_message(e: Exception) -> str:
+    """Tell the model a tool failed, but stop the run once the tool call limit is reached."""
+    # ToolNode turns every tool exception into a message for the model by default,
+    # which would let the agent keep calling tools past max_tool_calls.
+    if isinstance(e, MaxToolCallsExceeded):
+        raise e
+    return f"Error: {e!r}\n Please fix your mistakes."
+
+
 def wrap_tool_with_counter(tool: Any, counter: ToolCallCounter) -> Any:
     """
     Wrap a tool to track invocation count.
@@ -187,7 +196,7 @@ async def create_agent_with_fresh_config(
 
     agent = create_react_agent(
         model=llm,
-        tools=wrapped_tools,
+        tools=ToolNode(wrapped_tools, handle_tool_errors=_tool_error_message),
         prompt=agent_config.instructions
     )
 
