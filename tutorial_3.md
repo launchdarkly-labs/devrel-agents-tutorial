@@ -312,7 +312,7 @@ Here is how to set up your experiment:
     - `other-paid`: `50%`
     - `international-standard`: `0%`
     - `claude-opus-treatment`: `50%`
-    - To set these percentages, first scroll down to the **Control** field and set `Basic Security` as the control variation, otherwise you won't be able to allocate 50% traffic to it.
+    - To set these percentages, first scroll down to the **Control** field and set `other-paid` as the control variation, otherwise you won't be able to allocate 50% traffic to it.
 - **Control:** `other-paid`
 - **Statistical approach:** `Bayesian`
 - **Threshold:** `90%`
@@ -360,8 +360,9 @@ uv run python -u tools/concurrent_traffic_generator.py --queries 200 --concurren
 
 This configuration includes:
 
-- 200 queries by default. You can edit the script to change this number.
+- 200 queries, set by `--queries` (the default is 50).
 - 10 concurrent requests running in parallel.
+- 15% of queries with PII by default, set by `--pii-percentage`.
 - 2000-second timeout (33 minutes) per request to handle MCP tool rate limits.
 
 Runtime depends largely on if you retain MCP tool enablement as these take much longer to complete.
@@ -386,35 +387,52 @@ uv run python tools/traffic_generator.py --queries 50 --delay 2
 
 What happens during traffic simulation:
 
-1. **Knowledge extraction:** Claude analyzes your docs and identifies 20+ realistic topics
+1. **Topic generation:** Claude lists reinforcement learning topics from the sample Sutton & Barto textbook in `kb/` (20 for the concurrent generator, 15 for the sequential one)
 2. **Query generation:** Each test randomly selects from these topics for diversity
-3. **AI-powered evaluation:** Claude judges responses as thumbs_up/thumbs_down/neutral
+3. **AI-powered evaluation:** Claude judges each response as `positive` (thumbs up), `negative` (thumbs down), or `none` (no rating), and the generator sends positive and negative feedback to the API
 4. **Automatic tracking:** All metrics flow to LaunchDarkly in real-time
 
-Here is an example of the traffic generation output you might see:
+Here is the output of a short run with `--queries 10 --concurrency 5`. A 200-query run prints the same lines, one per query:
 
 <CodeBlocks>
 <CodeBlock title="Data output">
 
 ```
-📚 Analyzing knowledge base...
-✅ Generated 23 topics
+🚀 Concurrent Traffic Generator
+======================================================================
+Queries: 10
+Concurrency: 5 parallel requests
+Timeout: 2000s (33 minutes) per request
+Target: http://localhost:8000
+======================================================================
 
-⚡ Sending 200 requests with 10 concurrent workers...
+📚 Generating base topics...
+✅ Generated 20 base topics
+🔄 Generating 10 queries concurrently (15% with PII)...
+📝 Generated 10/10 queries...
+✅ Generated 10 queries concurrently (2 with PII, 8 clean)
 
-✅ [1/200] Success (23.4s) - other_paid: What is reinforcement learning?...
-✅ [2/200] Success (45.2s) - other_paid: How does Q-learning work?...
-⏱️  [15/200] Timeout (>2000s) - other_paid: Complex research query...
-                              ↑ This is normal - MCP rate limits
-✅ [200/200] Success (387.1s) - other_paid: Explain temporal difference...
+⚡ Sending 10 requests with 5 concurrent workers...
+
+✅ [1/10] Success (13.3s) - other_paid: Hi, I'm Dana Whitfield, a Senior ML Engineer at Brightpath A...
+✅ [2/10] Success (18.8s) - other_paid: What's the basic idea behind dynamic programming in reinforc...
+✅ [3/10] Success (24.6s) - other_paid: How does SARSA differ from Q-learning in terms of how they u...
+✅ [4/10] Success (27.3s) - other_paid: How does value iteration's convergence guarantee depend on t...
+✅ [5/10] Success (18.0s) - other_paid: How do Monte Carlo methods differ from temporal difference l...
+✅ [6/10] Success (10.4s) - other_paid: What's the basic idea behind dynamic programming in reinforc...
+✅ [7/10] Success (37.9s) - other_paid: How does the Dyna-Q algorithm's use of simulated experience ...
+✅ [8/10] Success (22.9s) - other_paid: How does on-policy prediction with function approximation di...
+✅ [9/10] Success (15.6s) - other_paid: Hi, I'm Sarah Johnson, a Product Manager at Brightwave Analy...
+✅ [10/10] Success (32.4s) - other_paid: How does SARSA's on-policy update interact with function app...
 
 ======================================================================
 ✅ COMPLETE
 ======================================================================
-Total time: 45.3 minutes (2718s)
-Successful: 195/200 (97.5%)
-Failed: 5/200 (2.5%)
-Average: 13.6s per query (with concurrency)
+Total time: 1.0 minutes (61s)
+Successful: 10/10 (100.0%)
+Failed: 0/10 (0.0%)
+Average: 6.1s per query (with concurrency)
+======================================================================
 ```
 
 </CodeBlock>

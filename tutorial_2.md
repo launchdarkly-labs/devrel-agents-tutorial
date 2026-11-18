@@ -130,7 +130,7 @@ uv run python create_configs.py
 **What the script creates**:
 - **3 new tools**: `search_v1` (basic search), `arxiv_search` and `openalex_search` (MCP research tools)
 - **4 combined user segments** with [geographic and tier targeting rules](https://launchdarkly.com/docs/home/flags/segments)
-- **Updated configs**: `security-agent` with 2 new geographic variations
+- **Updated configs**: `security-agent` with 2 new geographic variations (`basic-security`, `strict-security`) and `support-agent` with 5 new variations, each with its own `max_tool_calls`
 - **Complete [targeting rules](https://launchdarkly.com/docs/home/flags/target)** that route users to appropriate variations
 - **Intelligently reuses** existing resources: `supervisor-agent`, `search_v2`, and `reranking` tools from Part 1
 
@@ -165,7 +165,9 @@ def create_segment(self, project_key, segment_data):
 model_config_key_map = {
     "claude-sonnet-5-5": "Anthropic.claude-sonnet-5-5",
     "claude-haiku-5-5": "Anthropic.claude-haiku-5-5",
+    "claude-opus-5-5": "Anthropic.claude-opus-5-5",
     "gpt-6.2-sol": "OpenAI.gpt-6.2-sol",
+    "gpt-6.1-terra": "OpenAI.gpt-6.1-terra",
     "gpt-6-luna": "OpenAI.gpt-6-luna",
     "mistral-small-latest": "Mistral.mistral-small-latest"
 }
@@ -223,27 +225,64 @@ The script handles the complexity of LaunchDarkly's API while letting you define
 ✅ AI Config 'support-agent' exists
 
 🧩 Creating variations...
+  🔧 Using modelConfigKey: Anthropic.claude-haiku-5-5
+  ✅ Variation 'basic-security' created
+  🔧 Using modelConfigKey: Mistral.mistral-small-latest
   ✅ Variation 'strict-security' created
+  🔧 Using modelConfigKey: Anthropic.claude-haiku-5-5
   ✅ Variation 'eu-free' created
+  🔧 Using modelConfigKey: Anthropic.claude-sonnet-5-5
   ✅ Variation 'eu-paid' created
+  🔧 Using modelConfigKey: OpenAI.gpt-6-luna
   ✅ Variation 'other-free' created
+  🔧 Using modelConfigKey: OpenAI.gpt-6.2-sol
   ✅ Variation 'other-paid' created
+  🔧 Using modelConfigKey: Anthropic.claude-haiku-5-5
+  ✅ Variation 'international-standard' created
 
 📦 Creating segments (for targeting rules)...
 ✅ Empty segment 'eu-free' created
+  🔧 Adding 1 rules to segment 'eu-free'
   ✅ Rules added to segment 'eu-free' (final count: 1)
 ✅ Empty segment 'eu-paid' created
+  🔧 Adding 1 rules to segment 'eu-paid'
   ✅ Rules added to segment 'eu-paid' (final count: 1)
 ✅ Empty segment 'other-free' created
+  🔧 Adding 1 rules to segment 'other-free'
   ✅ Rules added to segment 'other-free' (final count: 1)
 ✅ Empty segment 'other-paid' created
+  🔧 Adding 1 rules to segment 'other-paid'
   ✅ Rules added to segment 'other-paid' (final count: 1)
 
 🎯 Updating targeting rules...
+  ⏭️  Skipping targeting for 'supervisor-agent' (empty rules)
+📊 Available targeting variations for 'security-agent': ['pii-detector', 'basic-security', 'strict-security']
+  ✅ Added rule: segment 'eu-free' -> variation 'strict-security'
+  ✅ Added rule: segment 'eu-paid' -> variation 'strict-security'
+  ✅ Added rule: segment 'other-free' -> variation 'basic-security'
+  ✅ Added rule: segment 'other-paid' -> variation 'basic-security'
+  ✅ Set fallthrough to variation 'basic-security'
 ✅ Targeting rules updated for 'security-agent'
+📊 Available targeting variations for 'support-agent': ['rag-search-enhanced', 'eu-free', 'eu-paid', 'other-free', 'other-paid', 'international-standard']
+  ✅ Added rule: segment 'eu-free' -> variation 'eu-free'
+  ✅ Added rule: segment 'eu-paid' -> variation 'eu-paid'
+  ✅ Added rule: segment 'other-free' -> variation 'other-free'
+  ✅ Added rule: segment 'other-paid' -> variation 'other-paid'
+  ✅ Set fallthrough to variation 'international-standard'
 ✅ Targeting rules updated for 'support-agent'
 
 ✨ Bootstrap complete!
+
+🎯 Next steps:
+   1. Check your LaunchDarkly dashboard to verify configurations
+   2. Test different user contexts with the demo
+   3. Monitor usage patterns and adjust targeting rules
+
+🔄 IMPORTANT REMINDER:
+   • Future changes: Use LaunchDarkly UI only
+   • Instructions: Modify in LaunchDarkly, not YAML
+   • Targeting: Update in LaunchDarkly dashboard
+   • This YAML file is now a historical record
 ```
 
 **In your LaunchDarkly dashboard**, navigate to your `multi-agent-chatbot` project. You should see:
@@ -320,20 +359,68 @@ Testing Geographic + Business Tier Targeting Matrix
    MCP Tools: Yes (should be: Yes) ✅
 
 📝 RESPONSE:
-   Length: 847 chars
-   Tools Called: ['search_v2', 'arxiv_search']
-   Preview: Based on your request, I'll search both internal documentation and recent academic research...
+   Length: 697 chars
+   Tools Called: []
+   Preview: Your message came through as "[Message withheld: the security check failed]", so I didn't receive yo...
 
 🎯 RESULT: ✅ PASSED
 
 🔄 Running: EU Free → Claude Haiku + Basic Tools
-[Similar detailed output for EU Free user...]
+
+============================================================
+🧪 TESTING: DE free user (ID: user_eu_free_001)
+============================================================
+📊 SUPPORT AGENT:
+   Model: claude-haiku-5-5 (expected: claude-haiku-5-5) ✅
+   Variation: eu-free (expected: eu-free) ✅
+   Tools: ['search_v1'] ✅
+   Expected: ['search_v1']
+   MCP Tools: No (should be: No) ✅
+
+📝 RESPONSE:
+   Length: 258 chars
+   Tools Called: []
+   Preview: I didn't receive your message. It was withheld because a security check failed, so I can't see what ...
+
+🎯 RESULT: ✅ PASSED
 
 🔄 Running: US Paid → GPT-6.2 Sol + Full MCP Tools
-[Similar detailed output for US Paid user...]
+
+============================================================
+🧪 TESTING: US paid user (ID: user_other_paid_001)
+============================================================
+📊 SUPPORT AGENT:
+   Model: gpt-6.2-sol (expected: gpt-6.2-sol) ✅
+   Variation: other-paid (expected: other-paid) ✅
+   Tools: ['search_v1', 'search_v2', 'reranking', 'arxiv_search', 'openalex_search'] ✅
+   Expected: ['search_v1', 'search_v2', 'reranking', 'arxiv_search', 'openalex_search']
+   MCP Tools: Yes (should be: Yes) ✅
+
+📝 RESPONSE:
+   Length: 374 chars
+   Tools Called: []
+   Preview: What question or decision should the documentation research help you answer? Share the topic, any re...
+
+🎯 RESULT: ✅ PASSED
 
 🔄 Running: US Free → GPT-6 Luna + Basic Tools
-[Similar detailed output for US Free user...]
+
+============================================================
+🧪 TESTING: US free user (ID: user_other_free_001)
+============================================================
+📊 SUPPORT AGENT:
+   Model: gpt-6-luna (expected: gpt-6-luna) ✅
+   Variation: other-free (expected: other-free) ✅
+   Tools: ['search_v1'] ✅
+   Expected: ['search_v1']
+   MCP Tools: No (should be: No) ✅
+
+📝 RESPONSE:
+   Length: 78 chars
+   Tools Called: []
+   Preview: Of course. What documentation topic or question would you like me to research?...
+
+🎯 RESULT: ✅ PASSED
 
 ======================================================================
 📊 FINAL RESULTS
@@ -353,6 +440,8 @@ Testing Geographic + Business Tier Targeting Matrix
 
 This confirms your targeting matrix is working correctly across all user segments!
 
+The test checks routing, not answers. Its query contains PII, so it goes through the security agent first. If Mistral's free tier rate limits the EU security agent (look for `SECURITY ERROR: ... 429` in the server logs), the security check fails closed: the support agent receives `[Message withheld: the security check failed]` instead of your message, as in the EU previews above, and the test still passes.
+
 ## Step 5: Experience Segmentation in the Chat UI (3 minutes)
 
 Now let's see your segmentation in action through the user interface. With your backend already running from Step 4, start the UI:
@@ -367,7 +456,7 @@ Open http://localhost:8501 and test different user types:
 1. **User Dropdown**: Find the user dropdown by using the **>> icon** to open the  **left nav menu**.. Select different regions (eu, other) and plans (Free, Paid).
 2. **Ask Questions**: Try "Search for machine learning papers."
 3. **Watch Workflow**: In the server logs, watch which model and tools get used for each user type.
-4. **Verify Routing**: EU users get Mistral for security. Other users get GPT. Paid users get MCP tools.
+4. **Verify Routing**: EU users get Mistral for security. Other users get Claude Haiku for security and GPT for support. Paid users get MCP tools.
 
 <Frame caption="Select different user types to test segmentation in the chat interface">
 ![Chat Interface User Selection](screenshots/chat_interface.png)

@@ -209,24 +209,24 @@ aws sts get-caller-identity --profile your-sso-profile-name
 
 ### 🚨 **Bedrock Model ID Requirements:**
 
-When configuring AI models in LaunchDarkly for Bedrock, you should use **inference profile IDs** (with region prefix):
+With `AUTH_METHOD=sso`, every Claude model goes through Bedrock, which needs **inference profile IDs** (with region prefix). You can keep picking **Anthropic → claude-haiku-5-5** in the steps below; the app converts it for you.
 
-**✅ BEST PRACTICE - Inference Profile IDs (with region prefix):**
+**✅ BEST PRACTICE - Inference Profile IDs (pick the Bedrock provider in LaunchDarkly):**
 ```
-us.anthropic.claude-sonnet-4-6-v2:0
-us.anthropic.claude-3-7-sonnet-20250219-v1:0
-eu.anthropic.claude-haiku-4-5-20251001-v2:0
+us.anthropic.claude-haiku-5-5
+eu.anthropic.claude-sonnet-5-5
+global.anthropic.claude-opus-5-5
 ```
 
-**⚠️ AUTO-CORRECTED - Direct Model IDs (will be fixed automatically):**
+**⚠️ AUTO-CORRECTED - Anthropic and direct Bedrock model IDs (will be fixed automatically):**
 ```
-anthropic.claude-3-7-sonnet-20250219-v1:0  → us.anthropic.claude-3-7-sonnet-20250219-v1:0
-anthropic.claude-sonnet-4-6-v2:0  → us.anthropic.claude-sonnet-4-6-v2:0
+claude-haiku-5-5              → us.anthropic.claude-haiku-5-5
+anthropic.claude-sonnet-5-5   → us.anthropic.claude-sonnet-5-5
 ```
 
 **How Auto-Correction Works:**
 
-The system automatically converts direct model IDs to inference profile IDs to prevent `ValidationException` errors from Bedrock. The region prefix is determined by:
+The system automatically converts Anthropic model names and direct model IDs to inference profile IDs to prevent `ValidationException` errors from Bedrock. The region prefix is determined by:
 
 1. **`BEDROCK_INFERENCE_REGION`** env var (if set) - explicit user preference
 2. **`AWS_REGION`** env var (e.g., `us-east-1` → `us` prefix) - automatic detection
@@ -247,7 +247,7 @@ aws bedrock list-inference-profiles --region us-east-1 --profile your-sso-profil
 
 **Why Inference Profiles?**
 
-Bedrock requires inference profile IDs for on-demand throughput. The region prefix (`us.`, `eu.`, `ap.`, etc.) enables cross-region inference profiles for better availability and failover.
+Bedrock requires inference profile IDs for on-demand throughput. The region prefix (`us.`, `eu.`, `global.`, etc.) enables cross-region inference profiles for better availability and failover.
 
 ## Step 2: Add Your Business Knowledge (2 minutes)
 
@@ -298,7 +298,7 @@ In the LaunchDarkly app sidebar, click **Agents**, then **Library**. On the foll
 </div>
 
 ### Create the RAG vector search tool:
-Note: we will be creating a simple search_v1 during part 3 when we learn about experimentation.
+Note: Part 2 creates a simple keyword search tool, search_v1, for free users.
 Create a tool using the following configuration:
 > 
 > **Key:** 
@@ -607,7 +607,7 @@ Limit how many times your agent can call tools in a single interaction:
    ```
 4. Click **Save changes**
 5. In your chat, ask a complex question that would normally trigger multiple searches
-6. **What you'll notice:** The agent now makes at most 2 tool calls, forcing it to be more selective about its searches
+6. **What you'll notice:** The agent makes at most 2 tool calls. If it tries a third, the run stops and the reply starts with "I've reached the tool call limit for this request." The server logs show `TOOL CALL #1/2`, `TOOL CALL #2/2`, then `TOOL LIMIT REACHED`
 
 ### Feature 3: Change Agent Behavior
 
@@ -661,7 +661,7 @@ Your multi-agent system is running with dynamic control and ready for optimizati
 
 1. **Different Instructions**: Make agents more helpful, more cautious, or more thorough
 2. **Tool Combinations**: Add/remove tools to see impact on quality
-3. **Model Comparisons**: Try different models for different agents
+3. **Model Comparisons**: Try different models for different agents. Keep the supervisor and security agents on a model that supports structured output, such as `claude-haiku-5-5`, a GPT model, or Mistral. Other Claude 5.5 models don't, so the security agent fails closed and every message reaches the support agent as `[Message withheld: the security check failed]`
 4. **Cost Limits**: Find the sweet spot between quality and cost
 
 Every change is instant, measurable, and reversible.
