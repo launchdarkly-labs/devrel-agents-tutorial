@@ -127,6 +127,10 @@ class AgentGraphExecutor:
                     for tool_name in result.get("tool_calls") or []:
                         graph_tracker.track_tool_call(current_node, tool_name)
 
+                # Fail closed: following an edge after a failed security check would pass the raw PII on.
+                if result.get("_error"):
+                    raise RuntimeError(f"{node_key} failed: {result['_error']}")
+
                 # Update context with results (generic)
                 self._update_context(node_key, config, result, ctx, current_node.meta)
 
