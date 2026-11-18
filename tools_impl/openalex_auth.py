@@ -9,6 +9,7 @@ Tokens are saved to .openalex_tokens.json and refreshed automatically after that
 """
 import asyncio
 import json
+import os
 import time
 import webbrowser
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -36,8 +37,11 @@ class FileTokenStorage:
         data[key] = value.model_dump(mode="json")
         if key == "tokens":
             data["expires_at"] = time.time() + (value.expires_in or 3600) - 60
-        TOKEN_FILE.write_text(json.dumps(data))
-        TOKEN_FILE.chmod(0o600)
+        # Created owner-only, so the tokens are never readable by other users
+        fd = os.open(TOKEN_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        os.fchmod(fd, 0o600)  # the mode above only applies when the file is new
+        with os.fdopen(fd, "w") as f:
+            f.write(json.dumps(data))
 
     async def get_tokens(self):
         data = self._read()
@@ -54,6 +58,8 @@ class FileTokenStorage:
                 })
             response.raise_for_status()
             tokens = OAuthToken.model_validate(response.json())
+            # A refresh response may omit the refresh token, which means keep using the old one
+            tokens.refresh_token = tokens.refresh_token or data["tokens"]["refresh_token"]
             await self.set_tokens(tokens)
             return tokens
         return OAuthToken.model_validate(data["tokens"])

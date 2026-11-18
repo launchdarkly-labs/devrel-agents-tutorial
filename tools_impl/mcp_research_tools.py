@@ -1,19 +1,23 @@
 from langchain.tools import BaseTool, StructuredTool
 from langchain_mcp_adapters.tools import load_mcp_tools
 from tools_impl.openalex_auth import OPENALEX_MCP_URL, TOKEN_FILE, openalex_auth
-import asyncio
 import os
+import threading
 import traceback
 
 # Process-lifetime singleton to prevent repeated MCP server startup
 _MCP_SINGLETON = None
-_MCP_LOCK = asyncio.Lock()
+# A thread lock, because each initialization runs on its own event loop
+_MCP_LOCK = threading.Lock()
 
 
-def _query_only(search_works: BaseTool) -> BaseTool:
+def _query_only(search_works: BaseTool, connection: dict) -> BaseTool:
     """OpenAlex search_works takes dozens of optional filters, and models fill in
     every one, which the server rejects. Expose only the query."""
     async def search(query: str) -> str:
+        # The OAuth provider reads the token file only once, so give each call a fresh
+        # one; reading the file is what refreshes expired tokens.
+        connection["auth"] = openalex_auth()
         return await search_works.ainvoke({"query": query, "limit": 5})
     return StructuredTool.from_function(
         coroutine=search,
@@ -31,13 +35,13 @@ class MCPResearchTools:
         """Load tools from the configured research servers, once per process"""
         global _MCP_SINGLETON
 
-        async with _MCP_LOCK:
+        with _MCP_LOCK:
             if _MCP_SINGLETON is not None:
                 self.tools = _MCP_SINGLETON.tools
                 print(f"🔄 MCP: Reusing singleton with {len(self.tools)} tools")
                 return
 
-            print("  MCP: Initializing process-lifetime singleton...")
+        print("  MCP: Initializing process-lifetime singleton...")
 
         server_configs = {}
 
@@ -64,10 +68,12 @@ class MCPResearchTools:
             return
 
         # Load tools from each server individually, so one failing server doesn't block the other
+        all_loaded = True
         for server_name, config in server_configs.items():
             try:
                 server_tools = await load_mcp_tools(None, connection=config)
             except Exception as e:
+                all_loaded = False
                 print(f" ERROR: Failed to load tools from {server_name}: {e}")
                 print(f" TRACEBACK: {traceback.format_exc()}")
                 continue
@@ -77,10 +83,14 @@ class MCPResearchTools:
                 if tool.name == "search_papers":
                     self.tools["arxiv_search"] = tool
                 elif tool.name == "search_works":
-                    self.tools["openalex_search"] = _query_only(tool)
+                    self.tools["openalex_search"] = _query_only(tool, config)
+
+        # A server that failed to load is retried on the next request instead of being cached as missing
+        if not all_loaded:
+            return
 
         # Store singleton for process lifetime reuse
-        async with _MCP_LOCK:
+        with _MCP_LOCK:
             if _MCP_SINGLETON is None:
                 _MCP_SINGLETON = self
                 print(" MCP: Singleton initialized for process lifetime")
