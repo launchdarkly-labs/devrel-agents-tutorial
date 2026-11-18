@@ -50,8 +50,7 @@ def create_generic_agent(agent_config, config_manager, valid_routes: List[str] =
                 model = create_model_for_config(
                     provider=provider_name,
                     model=model_cfg.get("name"),
-                    config_manager=config_manager,
-                    temperature=0.3
+                    config_manager=config_manager
                 )
 
                 log_student(f"CONFIG: {provider_name} - {model_cfg.get('name')}")
@@ -68,7 +67,7 @@ def create_generic_agent(agent_config, config_manager, valid_routes: List[str] =
 
                 # If this node has outgoing edges with routes, inject route options into instructions
                 if self.valid_routes:
-                    route_instruction = f"\n\nYou must select one of these routes: {self.valid_routes}. Return your choice in this exact JSON format at the end of your response: {{\"route\": \"<selected_route>\"}}"
+                    route_instruction = f"\n\nYou must select one of these routes: {self.valid_routes}. End your response with one JSON object on a single line containing your choice and any fields your instructions ask for, for example: {{\"route\": \"<selected_route>\"}}"
                     instructions = instructions + route_instruction
                     log_student(f"ROUTES AVAILABLE: {self.valid_routes}")
 
@@ -142,8 +141,8 @@ def create_generic_agent(agent_config, config_manager, valid_routes: List[str] =
 
             for msg in result.get("messages", []):
                 if isinstance(msg, AIMessage):
-                    if msg.content:
-                        response_text = msg.content
+                    if msg.text:
+                        response_text = msg.text
                     if hasattr(msg, 'tool_calls') and msg.tool_calls:
                         for tc in msg.tool_calls:
                             # Handle both dict and object access
@@ -157,10 +156,10 @@ def create_generic_agent(agent_config, config_manager, valid_routes: List[str] =
                             "total": msg.usage_metadata.get("total_tokens", 0)
                         }
 
-            # Extract route if present
-            route = self._extract_route(response_text)
+            route, fields = self._extract_route(response_text)
 
             return {
+                **fields,
                 "response": response_text,
                 "routing_decision": route,
                 "tool_calls": tool_calls,
@@ -173,7 +172,7 @@ def create_generic_agent(agent_config, config_manager, valid_routes: List[str] =
             full_messages = [SystemMessage(content=instructions)] + messages
             response = await model.ainvoke(full_messages)
 
-            response_text = response.content if hasattr(response, 'content') else str(response)
+            response_text = response.text
 
             # Extract token usage
             token_usage = {"input": 0, "output": 0, "total": 0}
@@ -184,20 +183,20 @@ def create_generic_agent(agent_config, config_manager, valid_routes: List[str] =
                     "total": response.usage_metadata.get("total_tokens", 0)
                 }
 
-            # Extract route if present
-            route = self._extract_route(response_text)
+            route, fields = self._extract_route(response_text)
             if route:
                 log_student(f"ROUTE SELECTED: {route}")
 
             return {
+                **fields,
                 "response": response_text,
                 "routing_decision": route,
                 "tool_calls": [],
                 "_token_usage": token_usage
             }
 
-        def _extract_route(self, response_text: str) -> Optional[str]:
-            """Extract route from response JSON with strict validation."""
+        def _extract_route(self, response_text: str) -> tuple[Optional[str], dict]:
+            """Extract the route and any other fields from the response JSON."""
             import json
             import re
 
@@ -214,6 +213,7 @@ def create_generic_agent(agent_config, config_manager, valid_routes: List[str] =
                     try:
                         data = json.loads(match.group(1))
                         route = data.get("route", "").lower().strip()
+                        fields = {k: v for k, v in data.items() if k != "route" and not k.startswith("_")}
 
                         # Exact match validation against valid routes
                         if self.valid_routes:
@@ -221,14 +221,14 @@ def create_generic_agent(agent_config, config_manager, valid_routes: List[str] =
                             if route in valid_lower:
                                 # Return the original casing from valid_routes
                                 idx = valid_lower.index(route)
-                                return self.valid_routes[idx]
+                                return self.valid_routes[idx], fields
                             else:
                                 log_student(f"INVALID ROUTE: '{route}' not in {self.valid_routes}")
-                                return None
-                        return route
+                                return None, fields
+                        return route, fields
                     except json.JSONDecodeError:
                         continue
 
-            return None
+            return None, {}
 
     return GenericAgent()

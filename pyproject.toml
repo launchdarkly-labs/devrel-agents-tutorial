@@ -1,7 +1,7 @@
 [project]
 name = "agents-demo"
 version = "0.1.0"
-description = "LaunchDarkly AI Configs tutorial with LangGraph agents"
+description = "LaunchDarkly AgentControl tutorial with LangGraph agents"
 requires-python = ">=3.12"
 dependencies = [
     # Agent Framework
@@ -12,9 +12,9 @@ dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
     "pydantic>=2.10.0",
-    # LaunchDarkly. The AI SDK is in open beta, so it is pinned exactly.
-    "launchdarkly-server-sdk>=9.0.0",
-    "launchdarkly-ai-server==0.2.4",
+    # LaunchDarkly
+    "launchdarkly-server-sdk>=9.18.4",
+    "launchdarkly-ai-server>=1.1.0",
     # AWS Bedrock Integration
     "langchain-aws>=0.2.0",
     "boto3>=1.35.0",

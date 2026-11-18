@@ -1,8 +1,5 @@
 """LaunchDarkly AI agent helpers - model creation and metric tracking."""
 import asyncio
-import nest_asyncio
-nest_asyncio.apply()  # Allow nested event loops (fixes FastAPI + asyncio.run conflict)
-
 import time
 import os
 from typing import List, Any, Tuple
@@ -76,7 +73,7 @@ def create_bedrock_chat_model(model_id: str, session: boto3.Session, region: str
     )
 
 
-def create_model_for_config(provider: str, model: str, config_manager, temperature: float = 0.0):
+def create_model_for_config(provider: str, model: str, config_manager):
     """Create LangChain chat model based on provider and auth method."""
     from utils.bedrock_helpers import normalize_bedrock_provider
 
@@ -89,14 +86,16 @@ def create_model_for_config(provider: str, model: str, config_manager, temperatu
             return create_bedrock_chat_model(
                 model_id=model,
                 session=config_manager.boto3_session,
-                region=config_manager.aws_region,
-                temperature=temperature
+                region=config_manager.aws_region
             )
         else:
             fallback = 'anthropic' if provider.lower() == 'anthropic' else langchain_provider
-            return init_chat_model(model=model, model_provider=fallback, temperature=temperature)
+            return init_chat_model(model=model, model_provider=fallback)
+    elif langchain_provider == 'openai':
+        # GPT-6 models accept function tools only on the Responses API
+        return init_chat_model(model=model, model_provider=langchain_provider, use_responses_api=True)
     else:
-        return init_chat_model(model=model, model_provider=langchain_provider, temperature=temperature)
+        return init_chat_model(model=model, model_provider=langchain_provider)
 
 
 def extract_token_usage(response) -> dict:

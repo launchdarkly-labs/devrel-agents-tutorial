@@ -1,4 +1,4 @@
-# Multi-Agent Chatbot with LaunchDarkly AI Configs
+# Multi-Agent Chatbot with LaunchDarkly AgentControl
 
 Demo application for the [Agent Graphs tutorial](https://docs.launchdarkly.com/tutorials/agent-graphs).
 
@@ -10,7 +10,7 @@ cp .env.example .env
 
 uv sync
 uv run python initialize_embeddings.py --force
-uv run python bootstrap/create_configs.py
+(cd bootstrap && uv run python create_configs.py)
 
 # Terminal 1
 uv run uvicorn api.main:app --reload --port 8000
@@ -34,22 +34,22 @@ Open http://localhost:8501
 ### LaunchDarkly Integration
 | File | Purpose |
 |------|---------|
-| `config_manager.py` | **Core LD integration** - fetches AI Configs and Agent Graphs |
+| `config_manager.py` | **Core LD integration** - fetches AgentControl configs and agent graphs |
 | `api/services/agent_service.py` | **Graph orchestration** - traverses Agent Graph, routes between agents |
-| `bootstrap/create_configs.py` | Creates AI Configs, tools, segments, and targeting rules in LD |
+| `bootstrap/create_configs.py` | Creates AgentControl configs, tools, segments, and targeting rules in LD |
 
 ### Agents
 | File | Purpose |
 |------|---------|
-| `agents/supervisor_agent.py` | Routes requests based on PII likelihood (uses LD AI Config) |
-| `agents/security_agent.py` | Detects and redacts PII (uses LD AI Config) |
-| `agents/support_agent.py` | Answers questions with tools (uses LD AI Config + tools) |
+| `agents/supervisor_agent.py` | Routes requests based on PII likelihood (uses an AgentControl config) |
+| `agents/security_agent.py` | Detects and redacts PII (uses an AgentControl config) |
+| `agents/support_agent.py` | Answers questions with tools (uses an AgentControl config + tools) |
 | `agents/ld_agent_helpers.py` | Shared helpers - model creation, metric tracking |
 
 ### Tools
 | File | Purpose |
 |------|---------|
-| `tools_impl/dynamic_tool_factory.py` | Creates tools from LD AI Config definitions |
+| `tools_impl/dynamic_tool_factory.py` | Creates tools from AgentControl config definitions |
 | `tools_impl/search_v1.py` | Basic keyword search |
 | `tools_impl/search_v2.py` | Semantic vector search |
 | `tools_impl/reranking.py` | BM25 relevance scoring |
@@ -70,7 +70,7 @@ Open http://localhost:8501
 ┌─────────────────────────────────────────────────────────────┐
 │                    LaunchDarkly Dashboard                    │
 │  • Agent Graph (chatbot-flow)                               │
-│  • AI Configs (supervisor, security, support)               │
+│  • AgentControl configs (supervisor, security, support)     │
 │  • Targeting rules (free/paid, EU/other)                    │
 └─────────────────────────────────────────────────────────────┘
                               │
@@ -78,7 +78,7 @@ Open http://localhost:8501
 ┌─────────────────────────────────────────────────────────────┐
 │                     config_manager.py                        │
 │  • get_agent_graph() → fetches graph topology               │
-│  • get_config() → fetches AI Config for each agent          │
+│  • get_config() → fetches the config for each agent         │
 │  • Handles targeting based on user context                  │
 └─────────────────────────────────────────────────────────────┘
                               │
@@ -95,7 +95,7 @@ Open http://localhost:8501
 │                      agents/*.py                             │
 │  • Each agent receives config from LD                       │
 │  • Uses config.instructions, config.model                   │
-│  • Tracks metrics via config.tracker                        │
+│  • Executor sends metrics through the graph tracker         │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -103,7 +103,7 @@ Open http://localhost:8501
 
 | Change | Deploy Required? |
 |--------|-----------------|
-| Model (gpt-4o → claude-sonnet) | No |
+| Model (gpt-6-luna → claude-sonnet-5-5) | No |
 | Prompt/instructions | No |
 | Graph edges (routing) | No |
 | Targeting rules (user segments) | No |
