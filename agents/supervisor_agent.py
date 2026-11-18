@@ -2,7 +2,7 @@ from typing import TypedDict, List, Annotated, Literal
 from langgraph.graph import StateGraph, add_messages
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage, SystemMessage
 from .support_agent import create_support_agent
-from .security_agent import create_security_agent
+from .security_agent import create_security_agent, WITHHELD_MESSAGE
 from .ld_agent_helpers import create_chat_model, ci_safe_provider_and_model, _rate_limit_llm_call
 from config_manager import FixedConfigManager as ConfigManager
 from utils.logger import log_student, log_debug
@@ -149,13 +149,15 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
 
             async def call_prescreen():
                 response = await prescreen_model.ainvoke([screening_message])
+                if response["parsed"] is None:
+                    raise ValueError(f"{model} returned no structured routing decision; use a model that supports structured output")
                 return response["parsed"], response["raw"].usage_metadata
 
             ld_context = config_manager.build_context(user_id, user_context)
             screening_result = await config_manager.track(supervisor_config, ld_context, call_prescreen)
 
-            # Log the intelligent decision
-            log_student(f"ROUTING: {screening_result.recommended_route} ({screening_result.confidence:.1f}) - {screening_result.reasoning}")
+            # The reasoning can quote the PII, so only the route and confidence are logged
+            log_student(f"ROUTING: {screening_result.recommended_route} ({screening_result.confidence:.1f})")
 
             # Update workflow stage based on decision
             if screening_result.recommended_route == "security_agent":
@@ -226,8 +228,7 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
         SECURITY ISOLATION WORKFLOW:
         1. Prepare security agent input with raw user data
         2. Execute security agent to detect and redact PII
-        3. Create sanitized message history for support agent
-        4. Update state with security results and sanitized data
+        3. Update state with security results and the redacted text
 
         CRITICAL PII BOUNDARY:
         - Input: Raw user data (may contain PII)
@@ -255,18 +256,12 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             # Extract PII schema fields from security agent
             detected = result.get("detected", False)
             types = result.get("types", [])
-            redacted_text = result.get("redacted", state["user_input"])
+            # An empty redaction must not fall back to the raw input, which may contain PII
+            redacted_text = result.get("redacted") or WITHHELD_MESSAGE
 
-            # Create sanitized message history - replace original user input with redacted version
-            sanitized_messages = [
-                HumanMessage(content=redacted_text) if isinstance(msg, HumanMessage) else msg
-                for msg in state.get("messages", [])
-            ]
-
-            # Add the security agent's response
             security_response = AIMessage(content=result["response"])
-            sanitized_messages.append(security_response)
 
+            # sanitized_messages keeps the earlier, already redacted turns; the support node adds this one
             return {
                 "messages": [security_response],  # Only add security response to main message flow
                 "workflow_stage": "post_security_support",  # Route to support with sanitized data
@@ -275,7 +270,6 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
                 "pii_detected": detected,
                 "pii_types": types,
                 "redacted_text": redacted_text,
-                "sanitized_messages": sanitized_messages,  # Store clean message history
             }
 
         except Exception as e:
@@ -300,7 +294,7 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
 
         CRITICAL SECURITY BOUNDARY ENFORCEMENT:
         - Support agent NEVER sees raw user input containing PII
-        - All message history is pre-sanitized by security agent
+        - Message history only holds earlier turns that were already redacted
         - Support agent operates in completely PII-isolated environment
 
         LANGGRAPH PATTERNS:
@@ -308,9 +302,10 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
         - Orchestrates child agent with controlled input
         - Manages tool execution and result aggregation
         """
-        # Use processed (redacted) text if the security agent ran, otherwise the original input
-        processed_input = state.get("processed_user_input", "")
-        if not processed_input.strip():
+        # Use the redacted text if the security agent ran; the original input only on the direct route
+        if state.get("security_cleared"):
+            processed_input = state.get("processed_user_input") or WITHHELD_MESSAGE
+        else:
             processed_input = state["user_input"]
 
         pii_detected = state.get("pii_detected", False)

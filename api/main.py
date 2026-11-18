@@ -23,7 +23,8 @@ async def chat(request: ChatRequest):
     with capture_console_output() as console_logs:
         message_text = request.message or ""
         log_student(f"API: Processing request from {request.user_id}")
-        log_debug(f"API: Message: '{message_text[:50]}{'...' if len(message_text) > 50 else ''}', Context: {request.user_context}")
+        # The raw message may contain PII, so only its length is logged
+        log_debug(f"API: Message: {len(message_text)} chars, Context: {request.user_context}")
 
         # Server-side guard against empty/whitespace messages
         if not message_text.strip():
@@ -88,5 +89,5 @@ async def submit_feedback(feedback: FeedbackRequest):
         log_debug("FEEDBACK: Failed to submit feedback to LaunchDarkly")
         return FeedbackResponse(success=False, message="Failed to submit feedback to metrics tracking")
 
-    log_debug(f"FEEDBACK SUBMITTED: {feedback.feedback} for {feedback.variation_key}")
+    log_debug(f"FEEDBACK SUBMITTED: {feedback.feedback} for support-agent variation {support_config.variation_key}")
     return FeedbackResponse(success=True, message="Feedback submitted successfully")

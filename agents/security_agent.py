@@ -6,6 +6,8 @@ from pydantic import BaseModel
 from utils.logger import log_student
 from .ld_agent_helpers import create_chat_model, ci_safe_provider_and_model, _rate_limit_llm_call
 
+WITHHELD_MESSAGE = "[Message withheld: the security check failed]"
+
 class PIIDetectionResponse(BaseModel):
     """Structured response for PII detection results"""
     detected: bool
@@ -112,6 +114,8 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
 
             async def call_model():
                 response = await structured_model.ainvoke(full_messages)
+                if response["parsed"] is None:
+                    raise ValueError(f"{model} returned no structured PII result; use a model that supports structured output")
                 return response["parsed"], response["raw"].usage_metadata
 
             ld_context = config_manager.build_context(user_id, user_context)
@@ -137,7 +141,7 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
                 "messages": [error_response],
                 "detected": False,
                 "types": [],
-                "redacted": "[Message withheld: the security check failed]"
+                "redacted": WITHHELD_MESSAGE
             }
 
 
@@ -154,7 +158,8 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
         # Get PII results from state (set directly by call_model with structured output)
         pii_detected = state.get("detected", False)
         pii_types = state.get("types", [])
-        redacted_text = state.get("redacted", state.get("user_input", ""))
+        # An empty redaction must not fall back to the raw input, which may contain PII
+        redacted_text = state.get("redacted") or WITHHELD_MESSAGE
 
         if pii_detected:
             pii_summary = f"Found {', '.join(pii_types)}" if pii_types else "Sensitive data detected"
