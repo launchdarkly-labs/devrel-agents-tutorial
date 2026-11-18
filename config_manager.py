@@ -4,6 +4,8 @@ Simplified ConfigManager for LaunchDarkly AI Agent integration
 """
 import os
 import json
+import logging
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -24,6 +26,12 @@ from utils.logger import log_student, log_debug
 import boto3
 
 load_dotenv()
+
+# The tutorial doesn't export traces, so skip the SDK's "OpenTelemetry not installed" warning
+logging.getLogger("launchdarkly_ai_server.lifecycle").setLevel(logging.ERROR)
+
+# How long to serve local defaults before trying to reach LaunchDarkly again
+CLIENT_RETRY_SECONDS = 60
 
 # The AI SDK has no feedback API, so these are sent as custom events. LaunchDarkly's
 # built-in feedback metrics listen for these exact keys.
@@ -88,6 +96,7 @@ class FixedConfigManager:
         self.sdk_key = os.getenv('LD_SDK_KEY')
         if not self.sdk_key:
             raise ValueError("LD_SDK_KEY environment variable is required")
+        self._client_retry_at = 0.0
 
         # Load defaults from .ai_config_defaults.json
         self._load_config_defaults()
@@ -100,13 +109,17 @@ class FixedConfigManager:
         this is safe to await on every request.
 
         Returns False if the client can't connect, so get_config serves the
-        local defaults.
+        local defaults. A failed connection takes up to 10 seconds, so after one
+        the local defaults are served for CLIENT_RETRY_SECONDS before retrying.
         """
+        if time.monotonic() < self._client_retry_at:
+            return False
         try:
             await init_client({"sdkKey": self.sdk_key})
             return True
         except RuntimeError as e:
-            log_student(f"CONFIG MANAGER: LaunchDarkly client unavailable: {e}")
+            self._client_retry_at = time.monotonic() + CLIENT_RETRY_SECONDS
+            log_student(f"CONFIG MANAGER: LaunchDarkly client unavailable, retrying in {CLIENT_RETRY_SECONDS}s: {e}")
             return False
 
     def _initialize_bedrock_session(self):

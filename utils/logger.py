@@ -1,5 +1,9 @@
 import os
 from typing import Any
+from dotenv import load_dotenv
+
+# Modules import this logger before they load .env, so load it here for LOG_MODE
+load_dotenv()
 
 # Get log mode from environment variable (default to STUDENT for educational clarity)
 LOG_MODE = os.getenv('LOG_MODE', 'STUDENT').upper()

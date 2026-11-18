@@ -7,6 +7,7 @@ from typing import Dict, List, Any, Optional
 import os
 import asyncio
 import concurrent.futures
+import contextvars
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field, create_model
 from utils.logger import log_student, log_debug
@@ -201,10 +202,10 @@ def _create_dynamic_mcp_tool(tool_name: str) -> Optional[BaseTool]:
             log_debug(f"MCP initialization error: {e}")
         return mcp_client.tools
 
-    # Run MCP initialization in thread with timeout
+    # Run MCP initialization in thread with timeout; copy_context keeps its output in the request's console logs
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
         try:
-            mcp_tool = executor.submit(initialize_mcp_tools).result(timeout=30).get(tool_name)
+            mcp_tool = executor.submit(contextvars.copy_context().run, initialize_mcp_tools).result(timeout=30).get(tool_name)
         except concurrent.futures.TimeoutError:
             log_debug(f"MCP TIMEOUT: {tool_name} not available")
             return None
