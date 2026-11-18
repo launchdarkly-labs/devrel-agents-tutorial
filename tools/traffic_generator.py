@@ -2,7 +2,7 @@
 """
 Simple Traffic Generator with AI
 
-1. Analyze knowledge base for topics
+1. Ask Claude for topics from the sample textbook in kb/
 2. Generate queries using random topic/complexity
 3. Send to API
 4. Get AI feedback on response
@@ -44,37 +44,38 @@ class TrafficGenerator:
         self.user_counter += 1
         return f"user_{self.session_id}_{self.user_counter}"
 
-    def analyze_knowledge_base(self):
-        """Ask Claude to analyze KB and return topics"""
-        print("Analyzing knowledge base...")
+    def generate_topics(self):
+        """Ask Claude for topics from the sample textbook (Sutton & Barto)"""
+        print("📚 Generating base topics...")
         
         try:
             response = self.claude.messages.create(
                 model="claude-haiku-5-5",
                 max_tokens=800,
+                thinking={"type": "disabled"},
                 messages=[{
                     "role": "user",
-                    "content": "List 15 technical topics that users would ask about regarding LaunchDarkly, feature flags, A/B testing, or deployment strategies. Just return a simple list of topics."
+                    "content": "List 15 reinforcement learning topics from the Sutton & Barto textbook. Just return a simple list of topics."
                 }]
             )
             
             # Parse topics from response
             topics_text = response.content[0].text
-            topics = [line.strip().strip('-•*123456789.') for line in topics_text.split('\n') if line.strip()]
+            topics = [line.strip().lstrip('-•*0123456789. ') for line in topics_text.split('\n') if line.strip()]
             topics = [t for t in topics if len(t) > 3][:15]  # Clean and limit to 15
             
             if not topics:
                 raise ValueError("No topics extracted")
                 
-            print(f"Found {len(topics)} topics")
+            print(f"✅ Generated {len(topics)} base topics")
             return topics
             
         except Exception as e:
-            print(f"KB analysis failed, using defaults: {e}")
+            print(f"❌ Error generating topics, using defaults: {e}")
             return [
-                "feature flags", "A/B testing", "user targeting",
-                "rollout strategies", "SDK integration", "metrics",
-                "deployment", "configuration", "debugging"
+                "Q-learning", "SARSA", "Policy gradients", "Actor-critic methods",
+                "Temporal difference learning", "Monte Carlo methods", "Dynamic programming",
+                "Exploration vs exploitation", "Markov Decision Processes", "Value functions"
             ]
 
     def generate_query(self, topic, complexity, inject_pii=False):
@@ -109,10 +110,11 @@ Complexity guide:
             response = self.claude.messages.create(
                 model="claude-haiku-5-5",
                 max_tokens=150,
+                thinking={"type": "disabled"},
                 messages=[{"role": "user", "content": prompt}]
             )
             return response.content[0].text.strip()
-        except:
+        except Exception:
             # Fallback query
             if inject_pii:
                 pii_templates = {
@@ -167,6 +169,7 @@ Complexity guide:
 
     def evaluate_response(self, query, response):
         """Ask Claude to evaluate if user would give feedback"""
+        # Every Claude call here disables thinking: Haiku 5.5 thinks by default, which uses up these small max_tokens budgets
         prompt = f"""Based on this Q&A, would a user give feedback?
 
 Question: {query[:200]}
@@ -177,14 +180,14 @@ Reply with ONLY one of these:
 - negative (poor answer, user would thumbs down)  
 - none (okay answer, user wouldn't bother rating)
 
-Most users don't give feedback unless the answer is notably good or bad."""
+Users give a thumbs up to answers that fully and correctly answer the question, a thumbs down to answers that are wrong, evasive, or ask for information the question already gave, and no rating to answers that only partly help."""
 
         try:
             response = self.claude.messages.create(
                 model="claude-haiku-5-5",
                 max_tokens=10,
-                messages=[{"role": "user", "content": prompt}],
-                timeout=2
+                thinking={"type": "disabled"},
+                messages=[{"role": "user", "content": prompt}]
             )
             
             feedback = response.content[0].text.strip().lower()
@@ -195,7 +198,7 @@ Most users don't give feedback unless the answer is notably good or bad."""
             else:
                 return "none"
                 
-        except:
+        except Exception:
             return "none"  # Default to no feedback on error
 
     def send_feedback(self, chat_data, query, feedback_type):
@@ -216,19 +219,19 @@ Most users don't give feedback unless the answer is notably good or bad."""
                     "model": chat_data.get("model", "unknown"),
                     "tool_calls": chat_data.get("tool_calls", []),  # Add required tool_calls field
                     "source": "simulated",
-                    "user_context": self.user_context  # Add context for LaunchDarkly targeting
+                    "user_context": {**self.user_context, "user": chat_data["user_id"]}  # Same context as the chat request
                 },
                 timeout=10
             )
-        except:
+        except Exception:
             pass  # Ignore feedback errors
 
     def run(self, num_queries, delay):
         """Main execution loop"""
         print(f"\n🚀 Starting {num_queries} queries with {delay}s delay\n")
 
-        # Step 1: Get topics from knowledge base
-        topics = self.analyze_knowledge_base()
+        # Step 1: Get topics from the sample textbook
+        topics = self.generate_topics()
         complexities = ["basic", "intermediate", "advanced"]
 
         # Step 2: Generate and process queries

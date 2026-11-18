@@ -4,8 +4,14 @@ Tutorial 2 Segmentation Test Script
 Tests the geographic + business tier targeting matrix to ensure correct model and tool routing.
 """
 
+import os
 import requests
 from typing import Dict, Any
+from dotenv import load_dotenv
+
+load_dotenv()
+
+API_BASE_URL = f"http://{os.getenv('API_HOST', 'localhost')}:{os.getenv('API_PORT', '8000')}"
 
 def test_user_scenario(user_context: Dict[str, Any], expected_config: Dict[str, Any]) -> Dict[str, Any]:
     """Test a specific user scenario and validate the configuration"""
@@ -20,7 +26,8 @@ def test_user_scenario(user_context: Dict[str, Any], expected_config: Dict[str, 
     }
 
     try:
-        response = requests.post("http://localhost:8000/chat", json=payload, timeout=45)
+        # Paid users can make many tool calls, and the first MCP call starts the MCP servers
+        response = requests.post(f"{API_BASE_URL}/chat", json=payload, timeout=300)
 
         if response.status_code != 200:
             return {

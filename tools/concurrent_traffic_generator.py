@@ -54,6 +54,7 @@ class ConcurrentTrafficGenerator:
 
     def evaluate_response(self, query, response):
         """Ask Claude to evaluate if user would give feedback"""
+        # Every Claude call here disables thinking: Haiku 5.5 thinks by default, which uses up these small max_tokens budgets
         prompt = f"""Based on this Q&A, would a user give feedback?
 
 Question: {query[:200]}
@@ -64,12 +65,13 @@ Reply with ONLY one of these:
 - negative (poor answer, user would thumbs down)
 - none (okay answer, user wouldn't bother rating)
 
-Most users don't give feedback unless the answer is notably good or bad."""
+Users give a thumbs up to answers that fully and correctly answer the question, a thumbs down to answers that are wrong, evasive, or ask for information the question already gave, and no rating to answers that only partly help."""
 
         try:
             ai_response = self.claude.messages.create(
                 model="claude-haiku-5-5",
                 max_tokens=10,
+                thinking={"type": "disabled"},
                 messages=[{"role": "user", "content": prompt}]
             )
 
@@ -81,7 +83,7 @@ Most users don't give feedback unless the answer is notably good or bad."""
             else:
                 return "none"
 
-        except:
+        except Exception:
             return "none"  # Default to no feedback on error
 
     def generate_base_topics(self):
@@ -90,6 +92,7 @@ Most users don't give feedback unless the answer is notably good or bad."""
             response = self.claude.messages.create(
                 model="claude-haiku-5-5",
                 max_tokens=800,
+                thinking={"type": "disabled"},
                 messages=[{
                     "role": "user",
                     "content": """List 20 reinforcement learning topics from the Sutton & Barto textbook.
@@ -147,10 +150,11 @@ Complexity guide:
             response = self.claude.messages.create(
                 model="claude-haiku-5-5",
                 max_tokens=100,
+                thinking={"type": "disabled"},
                 messages=[{"role": "user", "content": prompt}]
             )
             return response.content[0].text.strip()
-        except:
+        except Exception:
             # Fallback
             if inject_pii:
                 return f"Hi, I'm John Smith (john.smith@email.com) and I need help with {topic}"
@@ -204,7 +208,7 @@ Complexity guide:
                             },
                             timeout=10
                         )
-                    except:
+                    except Exception:
                         pass  # Feedback is optional
                 
                 with self.lock:
