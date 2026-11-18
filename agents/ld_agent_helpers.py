@@ -4,13 +4,15 @@ LaunchDarkly AI agent helpers.
 Creates agents with dynamic configuration from LaunchDarkly AI Configs.
 Routes between Bedrock (SSO) and direct API providers based on AUTH_METHOD.
 """
-import asyncio
 import time
 import os
 from typing import List, Any, Tuple
 from langchain.chat_models import init_chat_model
+from langchain_core.messages import HumanMessage
+from langchain_core.tools import StructuredTool
 from langgraph.prebuilt import create_react_agent
 from utils.logger import log_student
+from utils.bedrock_helpers import ensure_bedrock_inference_profile
 from langchain_aws import ChatBedrockConverse
 import boto3
 
@@ -48,34 +50,19 @@ def create_bedrock_chat_model(model_id: str, session: boto3.Session, region: str
     Auto-corrects direct model IDs to inference profiles.
     Region from BEDROCK_INFERENCE_REGION env var or AWS_REGION.
     """
-    try:
-        from utils.bedrock_helpers import ensure_bedrock_inference_profile
+    corrected_model_id = ensure_bedrock_inference_profile(model_id, region)
 
-        # Auto-correct to inference profile if needed
-        corrected_model_id = ensure_bedrock_inference_profile(model_id, region)
+    log_student(f"BEDROCK: Creating model {corrected_model_id} in region {region}")
 
-        log_student(f"BEDROCK: Creating model {corrected_model_id} in region {region}")
+    model = ChatBedrockConverse(
+        client=session.client(service_name='bedrock-runtime', region_name=region),
+        model_id=corrected_model_id,
+        region_name=region,
+        **kwargs
+    )
 
-        # Create Bedrock client using the provided session
-        bedrock_client = session.client(
-            service_name='bedrock-runtime',
-            region_name=region
-        )
-
-        # Create the ChatBedrockConverse model
-        model = ChatBedrockConverse(
-            client=bedrock_client,
-            model_id=corrected_model_id,
-            region_name=region,
-            **kwargs
-        )
-
-        log_student(f"BEDROCK: Successfully created {corrected_model_id}")
-        return model
-
-    except Exception as e:
-        log_student(f"BEDROCK ERROR: Failed to create model {model_id}: {e}")
-        raise
+    log_student(f"BEDROCK: Successfully created {corrected_model_id}")
+    return model
 
 def _rate_limit_llm_call():
     """Simple rate limiter for LLM calls"""
@@ -92,16 +79,40 @@ def _rate_limit_llm_call():
 
 
 def map_provider_to_langchain(provider_name):
-    """Map LaunchDarkly provider names to LangChain provider names."""
-    provider_mapping = {
-        'anthropic': 'bedrock',   # CHANGED: Route through Bedrock
-        'bedrock': 'bedrock',     # NEW: Explicit Bedrock provider
-        'gemini': 'google_genai',
-        'openai': 'openai',
-        'mistral': 'mistralai'
-    }
-    lower_provider = provider_name.lower()
-    return provider_mapping.get(lower_provider, lower_provider)
+    """Map LaunchDarkly provider names (e.g. 'Anthropic', 'bedrock:anthropic') to LangChain provider names."""
+    provider = provider_name.lower()
+    if provider.startswith('bedrock:'):
+        return 'bedrock'
+    return {'gemini': 'google_genai', 'mistral': 'mistralai'}.get(provider, provider)
+
+
+def create_chat_model(provider_name: str, model_name: str, config_manager):
+    """
+    Create the LangChain chat model for a LaunchDarkly AI Config.
+
+    Anthropic and Bedrock models go through Bedrock when AUTH_METHOD=sso,
+    otherwise through their direct API.
+    """
+    provider = map_provider_to_langchain(provider_name)
+
+    if provider in ('anthropic', 'bedrock') and os.getenv('AUTH_METHOD', 'api-key').lower() == 'sso':
+        return create_bedrock_chat_model(
+            model_id=model_name,
+            session=config_manager.boto3_session,
+            region=config_manager.aws_region
+        )
+
+    # GPT-6 models accept function tools only on the Responses API
+    responses_api = {"use_responses_api": True} if provider == "openai" else {}
+    return init_chat_model(model=model_name, model_provider=provider, **responses_api)
+
+
+def ci_safe_provider_and_model(provider_name: str, model_name: str) -> tuple[str, str]:
+    """Under CI_SAFE_MODE, use OpenAI when only an OpenAI key is available."""
+    ci = os.getenv("CI_SAFE_MODE", "").lower() in {"1", "true", "yes"}
+    if ci and not os.getenv("ANTHROPIC_API_KEY") and os.getenv("OPENAI_API_KEY"):
+        return ("openai", "gpt-6-luna")
+    return (provider_name, model_name)
 
 
 def wrap_tool_with_counter(tool: Any, counter: ToolCallCounter) -> Any:
@@ -113,57 +124,26 @@ def wrap_tool_with_counter(tool: Any, counter: ToolCallCounter) -> Any:
 
     Uses a closure-based approach to avoid pickling issues.
     """
-    from langchain_core.tools import StructuredTool
-
-    # Store original methods
-    original_run = tool._run if hasattr(tool, '_run') else None
-    original_arun = tool._arun if hasattr(tool, '_arun') else None
+    def count_call(kwargs):
+        counter.increment()
+        query = kwargs.get('query') or kwargs.get('search_query')
+        query_info = f" | Query: '{query}'" if query else ""
+        log_student(f"TOOL CALL #{counter.count}/{counter.max_calls}: {tool.name}{query_info}")
 
     def counted_run(**kwargs) -> str:
-        """Wrapped synchronous execution"""
-        counter.increment()
-
-        # Extract and log search query if present
-        query_info = ""
-        if 'query' in kwargs:
-            query_info = f" | Query: '{kwargs['query']}'"
-        elif 'search_query' in kwargs:
-            query_info = f" | Query: '{kwargs['search_query']}'"
-
-        log_student(f"TOOL CALL #{counter.count}/{counter.max_calls}: {tool.name}{query_info}")
-
-        if original_run:
-            return original_run(**kwargs)
-        else:
-            raise NotImplementedError(f"Tool {tool.name} has no _run method")
+        count_call(kwargs)
+        return tool._run(**kwargs)
 
     async def counted_arun(**kwargs) -> str:
-        """Wrapped asynchronous execution"""
-        counter.increment()
+        count_call(kwargs)
+        return await tool._arun(**kwargs)
 
-        # Extract and log search query if present
-        query_info = ""
-        if 'query' in kwargs:
-            query_info = f" | Query: '{kwargs['query']}'"
-        elif 'search_query' in kwargs:
-            query_info = f" | Query: '{kwargs['search_query']}'"
-
-        log_student(f"TOOL CALL #{counter.count}/{counter.max_calls}: {tool.name}{query_info}")
-
-        if original_arun:
-            return await original_arun(**kwargs)
-        elif original_run:
-            return original_run(**kwargs)
-        else:
-            raise NotImplementedError(f"Tool {tool.name} has no run method")
-
-    # Create new StructuredTool with wrapped methods
     return StructuredTool(
         name=tool.name,
         description=tool.description,
         func=counted_run,
-        coroutine=counted_arun if original_arun or original_run else None,
-        args_schema=tool.args_schema if hasattr(tool, 'args_schema') else None
+        coroutine=counted_arun,
+        args_schema=tool.args_schema
     )
 
 
@@ -172,137 +152,67 @@ async def create_agent_with_fresh_config(
     config_key: str,
     user_id: str,
     user_context: dict,
-    tools: List[Any] = None
-) -> Tuple[Any, Any, bool, int]:
+    tools: List[Any]
+) -> Tuple[Any, Any, int]:
     """
     Create LangChain agent with LaunchDarkly AI Config.
 
     Routes to Bedrock (AUTH_METHOD=sso) or direct API based on config.
-    Returns: (agent, served_config, disabled, max_tool_calls)
+    Returns: (agent, served_config, recursion_limit)
     """
-    if tools is None:
-        tools = []
+    agent_config = await config_manager.get_config(
+        user_id=user_id,
+        config_key=config_key,
+        user_context=user_context
+    )
 
-    try:
-        # Fetch config from LaunchDarkly
-        agent_config = await config_manager.get_config(
-            user_id=user_id,
-            config_key=config_key,
-            user_context=user_context
-        )
+    llm = create_chat_model(agent_config.provider_name, agent_config.model_name, config_manager)
+    log_student(f"ROUTING: Using {agent_config.provider_name} for {agent_config.model_name}")
 
-        # Map provider and create LangChain model
-        from utils.bedrock_helpers import normalize_bedrock_provider
+    # Extract max_tool_calls from LaunchDarkly config
+    max_tool_calls = 5  # Default value
+    if 'max_tool_calls' in agent_config.custom:
+        max_tool_calls = int(agent_config.custom['max_tool_calls'])
+        log_student(f"EXTRACTED max_tool_calls from LaunchDarkly: {max_tool_calls}")
 
-        # Normalize provider name to handle bedrock:anthropic format
-        normalized_provider = normalize_bedrock_provider(agent_config.provider_name)
-        langchain_provider = map_provider_to_langchain(normalized_provider)
+    # Wrap tools with call counter to track invocations
+    counter = ToolCallCounter(max_calls=max_tool_calls)
+    wrapped_tools = [wrap_tool_with_counter(tool, counter) for tool in tools]
 
-        # Check if we need to use Bedrock
-        if langchain_provider == 'bedrock':
-            # Get AUTH_METHOD to determine routing
-            auth_method = os.getenv('AUTH_METHOD', 'api-key').lower()
+    # Calculate effective recursion limit
+    # Formula: max_tool_calls * 3 + 10 headroom
+    # Each tool call cycle: think → tool_call → tool_result → think
+    effective_recursion_limit = max_tool_calls * 3 + 10
+    log_student(f"CONFIG: max_tool_calls={max_tool_calls}, effective_recursion_limit={effective_recursion_limit}")
 
-            if auth_method == 'sso':
-                # Use Bedrock with SSO authentication
-                if not hasattr(config_manager, 'boto3_session') or not config_manager.boto3_session:
-                    raise ValueError("Bedrock authentication requires AWS SSO session. Run: aws sso login")
+    agent = create_react_agent(
+        model=llm,
+        tools=wrapped_tools,
+        prompt=agent_config.instructions
+    )
 
-                # Use model ID directly from LaunchDarkly AI Config (FR-006 compliance)
-                bedrock_model_id = agent_config.model_name
-
-                # 🚨 DEBUG: Log what we received from LaunchDarkly
-                log_student("DEBUG: LaunchDarkly AI Config details:")
-                log_student(f"  - Provider: {agent_config.provider_name}")
-                log_student(f"  - Model ID: {bedrock_model_id}")
-                log_student(f"  - Region: {config_manager.aws_region}")
-
-                # Create Bedrock model using our factory
-                llm = create_bedrock_chat_model(
-                    model_id=bedrock_model_id,
-                    session=config_manager.boto3_session,
-                    region=config_manager.aws_region
-                )
-                log_student(f"ROUTING: Using Bedrock SSO with direct model ID: {bedrock_model_id}")
-            else:
-                # Fall back to direct API access for backward compatibility
-                # Route 'anthropic' through 'anthropic' provider directly when using api-key auth
-                fallback_provider = 'anthropic' if agent_config.provider_name.lower() == 'anthropic' else langchain_provider
-                llm = init_chat_model(
-                    model=agent_config.model_name,
-                    model_provider=fallback_provider,
-                )
-                log_student(f"ROUTING: Using direct API for {agent_config.model_name} via {fallback_provider}")
-        else:
-            # Use standard LangChain initialization for non-Bedrock providers
-            # GPT-6 models accept function tools only on the Responses API
-            responses_api = {"use_responses_api": True} if langchain_provider == "openai" else {}
-            llm = init_chat_model(
-                model=agent_config.model_name,
-                model_provider=langchain_provider,
-                **responses_api,
-            )
-            log_student(f"ROUTING: Using {langchain_provider} for {agent_config.model_name}")
-
-        # Extract max_tool_calls from LaunchDarkly config
-        max_tool_calls = 5  # Default value
-        try:
-            custom_params = agent_config.custom
-            if 'max_tool_calls' in custom_params:
-                max_tool_calls = int(custom_params['max_tool_calls'])
-                log_student(f"EXTRACTED max_tool_calls from LaunchDarkly: {max_tool_calls}")
-        except Exception as e:
-            log_student(f"DEBUG: Error extracting max_tool_calls: {e}")
-
-        # Wrap tools with call counter to track invocations
-        counter = ToolCallCounter(max_calls=max_tool_calls)
-        wrapped_tools = [wrap_tool_with_counter(tool, counter) for tool in tools]
-
-        # Calculate effective recursion limit
-        # Formula: max_tool_calls * 3 + 10 headroom
-        # Each tool call cycle: think → tool_call → tool_result → think
-        effective_recursion_limit = max_tool_calls * 3 + 10
-        log_student(f"CONFIG: max_tool_calls={max_tool_calls}, effective_recursion_limit={effective_recursion_limit}")
-
-        # Create React agent with wrapped tools
-        agent = create_react_agent(
-            model=llm,
-            tools=wrapped_tools,
-            prompt=agent_config.instructions
-        )
-
-        return agent, agent_config, False, effective_recursion_limit
-
-    except Exception as e:
-        log_student(f"ERROR in create_agent_with_fresh_config: {e}")
-        default_recursion_limit = 5 * 3 + 10  # Default: 5 tool calls * 3 + headroom
-        return None, None, True, default_recursion_limit
+    return agent, agent_config, effective_recursion_limit
 
 
-def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any] = None):
+def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any]):
     """
     Create agent wrapper that fetches fresh LaunchDarkly config on each invocation.
 
     Enables dynamic A/B testing and real-time config changes without restarts.
     Tracks tokens, costs, and errors automatically.
     """
-    if tools is None:
-        tools = []
-
     class LaunchDarklyAgent:
         async def ainvoke(self, request_data: dict) -> dict:
             """
             Async invocation - fetches config and executes without blocking event loop
             """
+            user_input = request_data.get("user_input", "")
             try:
-                # Extract request parameters
-                user_input = request_data.get("user_input", "")
                 user_id = request_data.get("user_id", "agent_user")
                 user_context = request_data.get("user_context", {})
-                messages = request_data.get("messages", [])
+                agent_messages = request_data.get("messages") or [HumanMessage(content=user_input)]
 
-                # Create agent with config
-                agent, served, disabled, effective_recursion_limit = await create_agent_with_fresh_config(
+                agent, served, effective_recursion_limit = await create_agent_with_fresh_config(
                     config_manager=config_manager,
                     config_key=config_key,
                     user_id=user_id,
@@ -310,24 +220,6 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                     tools=tools
                 )
 
-                if disabled:
-                    log_student(f"{config_key}: AI Config is disabled")
-                    return {
-                        "user_input": user_input,
-                        "response": f"AI Config {config_key} is disabled",
-                        "tool_calls": [],
-                        "tool_details": [],
-                        "messages": []
-                    }
-
-                # Prepare messages for agent
-                if messages:
-                    agent_messages = messages
-                else:
-                    from langchain_core.messages import HumanMessage
-                    agent_messages = [HumanMessage(content=user_input)]
-
-                # Build state
                 initial_state = {"messages": agent_messages}
                 prev_message_count = len(agent_messages)
 
@@ -364,42 +256,34 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                         "messages": []
                     }
 
-                # Extract new messages
-                new_messages = response['messages'][prev_message_count:]
-
-                # Parse response
+                # Parse the new AI messages into a response and the tool calls made
                 ai_response = ""
                 tool_calls_summary = []
                 tool_details = []
 
-                for msg in new_messages:
-                    # Get AI message content
-                    if getattr(msg, 'type', None) == 'ai' and msg.content:
-                        if isinstance(msg.content, list):
-                            for content_item in msg.content:
-                                if isinstance(content_item, dict) and content_item.get('type') == 'text':
-                                    ai_response += content_item.get('text', '') + " "
-                        else:
-                            ai_response += str(msg.content) + " "
+                for msg in response['messages'][prev_message_count:]:
+                    if msg.type != 'ai':
+                        continue
 
-                    # Track tool calls
-                    if hasattr(msg, 'tool_calls') and msg.tool_calls:
-                        for tool_call in msg.tool_calls:
-                            tool_name = tool_call.get('name')
-                            if tool_name:
-                                tool_calls_summary.append(tool_name)
+                    if isinstance(msg.content, list):
+                        for content_item in msg.content:
+                            if isinstance(content_item, dict) and content_item.get('type') == 'text':
+                                ai_response += content_item.get('text', '') + " "
+                    elif msg.content:
+                        ai_response += str(msg.content) + " "
 
-                                args = tool_call.get('args') or {}
-                                detail = {"name": tool_name, "args": args}
-                                if 'query' in args:
-                                    detail["search_query"] = args['query']
-                                elif 'search_query' in args:
-                                    detail["search_query"] = args['search_query']
-                                tool_details.append(detail)
+                    for tool_call in msg.tool_calls:
+                        args = tool_call.get('args') or {}
+                        detail = {"name": tool_call['name'], "args": args}
+                        search_query = args.get('query') or args.get('search_query')
+                        if search_query:
+                            detail["search_query"] = search_query
+                        tool_calls_summary.append(tool_call['name'])
+                        tool_details.append(detail)
 
                 return {
                     "user_input": user_input,
-                    "response": ai_response.strip() if ai_response else "I understand your question. Let me help you with that.",
+                    "response": ai_response.strip() or "I understand your question. Let me help you with that.",
                     "tool_calls": tool_calls_summary,
                     "tool_details": tool_details,
                     "messages": response['messages']
@@ -411,32 +295,6 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                 log_student(f"Traceback: {traceback.format_exc()}")
                 return {
                     "user_input": user_input,
-                    "response": f"I apologize, but I encountered an error: {e}",
-                    "tool_calls": [],
-                    "tool_details": [],
-                    "messages": []
-                }
-
-        def invoke(self, request_data: dict) -> dict:
-            """
-            Synchronous invocation - runs async code in new event loop
-            """
-            try:
-                # Try to run in existing event loop first
-                try:
-                    asyncio.get_running_loop()
-                    # We're in an async context, create task
-                    import concurrent.futures
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        future = executor.submit(asyncio.run, self.ainvoke(request_data))
-                        return future.result()
-                except RuntimeError:
-                    # No event loop, create one
-                    return asyncio.run(self.ainvoke(request_data))
-            except Exception as e:
-                log_student(f"SYNC INVOKE ERROR in {config_key}: {e}")
-                return {
-                    "user_input": request_data.get("user_input", ""),
                     "response": f"I apologize, but I encountered an error: {e}",
                     "tool_calls": [],
                     "tool_details": [],

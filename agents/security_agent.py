@@ -1,15 +1,15 @@
 from typing import TypedDict, List, Annotated
 from langgraph.graph import StateGraph, add_messages
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
-from langchain.chat_models import init_chat_model
 from config_manager import FixedConfigManager as ConfigManager
 from pydantic import BaseModel
 from utils.logger import log_student
+from .ld_agent_helpers import create_chat_model, ci_safe_provider_and_model, _rate_limit_llm_call
 
 class PIIDetectionResponse(BaseModel):
     """Structured response for PII detection results"""
     detected: bool
-    types: List[str] 
+    types: List[str]
     redacted: str
 
 class AgentState(TypedDict):
@@ -61,14 +61,7 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
     - Returns structured results (detected, types, redacted)
     - No external tools required for PII detection
     """
-    
-    # Clear cache to ensure latest config
-    config_manager.clear_cache()
-    
-    # NOTE: Model will be created at runtime with fresh LaunchDarkly config
-    
-    
-    # NOTE: Instructions are fetched on each call using LaunchDarkly pattern
+    # NOTE: Model and instructions are fetched on each call from LaunchDarkly
 
     async def call_model(state: AgentState):
         """
@@ -92,7 +85,6 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
             messages = state["messages"]
 
             # Fetch config dynamically for each call
-            # Get latest config from LaunchDarkly
             user_context = state.get("user_context", {})
             user_id = state.get("user_id", "security_user")
 
@@ -103,70 +95,9 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
             )
 
             # Create model with structured output and up-to-date instructions
-            from agents.ld_agent_helpers import map_provider_to_langchain, create_bedrock_chat_model
-            from utils.bedrock_helpers import normalize_bedrock_provider
-            import os
-
-            # CI_SAFE_MODE: Prefer OpenAI when Anthropic unavailable
-            def _select_provider_and_model(default_provider: str, default_model: str) -> tuple[str, str]:
-                ci = os.getenv("CI_SAFE_MODE", "").lower() in {"1", "true", "yes"}
-                anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-                openai_key = os.getenv("OPENAI_API_KEY")
-                if ci and (not anthropic_key) and openai_key:
-                    return ("openai", "gpt-6-luna")
-                return (default_provider, default_model)
-
-            selected_provider, selected_model = _select_provider_and_model(
-                agent_config.provider_name,
-                agent_config.model_name
-            )
-
-            # Normalize provider name to handle bedrock:anthropic format
-            normalized_provider = normalize_bedrock_provider(selected_provider)
-            langchain_provider = map_provider_to_langchain(normalized_provider)
-
-            # Check if we need to use Bedrock routing
-            if langchain_provider == 'bedrock':
-                # Get AUTH_METHOD to determine routing
-                auth_method = os.getenv('AUTH_METHOD', 'api-key').lower()
-
-                if auth_method == 'sso':
-                    # Use Bedrock with SSO authentication
-                    if not hasattr(config_manager, 'boto3_session') or not config_manager.boto3_session:
-                        raise ValueError("Bedrock authentication requires AWS SSO session. Run: aws sso login")
-
-                    # Use model ID directly from LaunchDarkly AI Config (FR-006 compliance)
-                    bedrock_model_id = selected_model
-
-                    # 🚨 DEBUG: Log what we received from LaunchDarkly
-                    log_student("DEBUG SECURITY: LaunchDarkly AI Config details:")
-                    log_student(f"  - Provider: {agent_config.provider_name}")
-                    log_student(f"  - Model ID: {bedrock_model_id}")
-                    log_student(f"  - Region: {config_manager.aws_region}")
-
-                    # Create Bedrock model using our factory
-                    base_model = create_bedrock_chat_model(
-                        model_id=bedrock_model_id,
-                        session=config_manager.boto3_session,
-                        region=config_manager.aws_region
-                    )
-                    log_student(f"SECURITY ROUTING: Using Bedrock SSO with direct model ID: {bedrock_model_id}")
-                else:
-                    # Fall back to direct API access for backward compatibility
-                    # Route 'anthropic' through 'anthropic' provider directly when using api-key auth
-                    fallback_provider = 'anthropic' if selected_provider.lower() == 'anthropic' else langchain_provider
-                    base_model = init_chat_model(
-                        model=selected_model,
-                        model_provider=fallback_provider
-                    )
-                    log_student(f"SECURITY ROUTING: Using direct API for {selected_model} via {fallback_provider}")
-            else:
-                # Use standard LangChain initialization for non-Bedrock providers
-                base_model = init_chat_model(
-                    model=selected_model,
-                    model_provider=langchain_provider
-                )
-                log_student(f"SECURITY ROUTING: Using {langchain_provider} for {selected_model}")
+            provider, model = ci_safe_provider_and_model(agent_config.provider_name, agent_config.model_name)
+            base_model = create_chat_model(provider, model, config_manager)
+            log_student(f"SECURITY ROUTING: Using {provider} for {model}")
 
             # Use structured output for guaranteed PII format
             # include_raw=True keeps the usage metadata that token and cost tracking need
@@ -177,7 +108,6 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
             full_messages = [system_message] + messages
 
             # Apply rate limiting before LLM call
-            from agents.ld_agent_helpers import _rate_limit_llm_call
             _rate_limit_llm_call()
 
             async def call_model():
@@ -187,22 +117,17 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
             ld_context = config_manager.build_context(user_id, user_context)
             pii_result = await config_manager.track(agent_config, ld_context, call_model)
 
-            # Extract structured results
-            detected = pii_result.detected
-            types = pii_result.types
-            redacted_text = pii_result.redacted
-
             # Store structured results in state and create AI message for conversation flow
-            response_message = AIMessage(content=f"PII Analysis: detected={detected}, types={types}")
+            summary = f"PII Analysis: detected={pii_result.detected}, types={pii_result.types}"
 
             return {
-                "messages": [response_message],
-                "detected": detected,
-                "types": types,
-                "redacted": redacted_text,
-                "response": f"PII Analysis: detected={detected}, types={types}"
+                "messages": [AIMessage(content=summary)],
+                "detected": pii_result.detected,
+                "types": pii_result.types,
+                "redacted": pii_result.redacted,
+                "response": summary
             }
-            
+
         except Exception as e:
             log_student(f"SECURITY ERROR: {e}")
 
@@ -214,35 +139,29 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
                 "types": [],
                 "redacted": "[Message withheld: the security check failed]"
             }
-    
-    
+
+
     def format_final_response(state: AgentState):
         """Format the final security agent response"""
         messages = state["messages"]
-        
+
         # Get final response from last AI message
-        final_message = None
-        for message in reversed(messages):
-            if isinstance(message, AIMessage) and message.content:
-                final_message = message
-                break
-        
-        if final_message:
-            final_response = final_message.content
-        else:
-            final_response = "Security processing completed."
-        
+        final_response = next(
+            (m.content for m in reversed(messages) if isinstance(m, AIMessage) and m.content),
+            "Security processing completed."
+        )
+
         # Get PII results from state (set directly by call_model with structured output)
         pii_detected = state.get("detected", False)
         pii_types = state.get("types", [])
         redacted_text = state.get("redacted", state.get("user_input", ""))
-        
+
         if pii_detected:
             pii_summary = f"Found {', '.join(pii_types)}" if pii_types else "Sensitive data detected"
             log_student(f"SECURITY: {pii_summary} → Sanitized")
         else:
             log_student("SECURITY: Clean - No PII detected")
-        
+
         return {
             "user_input": state["user_input"],
             "response": final_response,
@@ -251,10 +170,10 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
             "messages": messages,
             # Return the exact PII schema fields for supervisor and UI
             "detected": pii_detected,
-            "types": pii_types, 
+            "types": pii_types,
             "redacted": redacted_text
         }
-    
+
     # =============================================
     # LANGGRAPH WORKFLOW CONSTRUCTION
     # =============================================
@@ -271,6 +190,4 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
     workflow.add_edge("call_model", "format")                # Always go to formatting
     workflow.set_finish_point("format")                      # End with formatted results
 
-    # Note: No conditional routing needed - security agent has simple linear flow
-    
     return workflow.compile()
