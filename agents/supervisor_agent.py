@@ -277,7 +277,9 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             return {
                 "messages": [AIMessage(content=f"Security agent error: {e}")],
                 "workflow_stage": "error",
-                "security_cleared": False
+                "security_cleared": False,
+                # The UI saves redacted_text as history, so never leave the raw input there
+                "redacted_text": WITHHELD_MESSAGE,
             }
 
     async def support_node(state: SupervisorState):

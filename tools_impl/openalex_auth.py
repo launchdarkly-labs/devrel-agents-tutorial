@@ -24,6 +24,8 @@ OPENALEX_MCP_URL = "https://mcp.openalex.org/mcp"
 TOKEN_ENDPOINT = "https://mcp.openalex.org/oauth/token"
 TOKEN_FILE = Path(__file__).resolve().parent.parent / ".openalex_tokens.json"
 CALLBACK_PORT = 3030
+# Concurrent requests must not refresh at once, or a reused refresh token can be rejected
+_refresh_lock = asyncio.Lock()
 
 
 class FileTokenStorage:
@@ -44,25 +46,26 @@ class FileTokenStorage:
             f.write(json.dumps(data))
 
     async def get_tokens(self):
-        data = self._read()
-        if "tokens" not in data:
-            return None
-        # The MCP client doesn't know when stored tokens expire, so refresh them here
-        if time.time() > data.get("expires_at", 0):
-            async with httpx.AsyncClient() as client:
-                response = await client.post(TOKEN_ENDPOINT, data={
-                    "grant_type": "refresh_token",
-                    "refresh_token": data["tokens"]["refresh_token"],
-                    "client_id": data["client_info"]["client_id"],
-                    "resource": OPENALEX_MCP_URL,
-                })
-            response.raise_for_status()
-            tokens = OAuthToken.model_validate(response.json())
-            # A refresh response may omit the refresh token, which means keep using the old one
-            tokens.refresh_token = tokens.refresh_token or data["tokens"]["refresh_token"]
-            await self.set_tokens(tokens)
-            return tokens
-        return OAuthToken.model_validate(data["tokens"])
+        async with _refresh_lock:
+            data = self._read()
+            if "tokens" not in data:
+                return None
+            # The MCP client doesn't know when stored tokens expire, so refresh them here
+            if time.time() > data.get("expires_at", 0):
+                async with httpx.AsyncClient() as client:
+                    response = await client.post(TOKEN_ENDPOINT, data={
+                        "grant_type": "refresh_token",
+                        "refresh_token": data["tokens"]["refresh_token"],
+                        "client_id": data["client_info"]["client_id"],
+                        "resource": OPENALEX_MCP_URL,
+                    })
+                response.raise_for_status()
+                tokens = OAuthToken.model_validate(response.json())
+                # A refresh response may omit the refresh token, which means keep using the old one
+                tokens.refresh_token = tokens.refresh_token or data["tokens"]["refresh_token"]
+                await self.set_tokens(tokens)
+                return tokens
+            return OAuthToken.model_validate(data["tokens"])
 
     async def set_tokens(self, tokens) -> None:
         self._write("tokens", tokens)
