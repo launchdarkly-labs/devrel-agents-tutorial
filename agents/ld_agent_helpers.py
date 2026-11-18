@@ -191,10 +191,6 @@ async def create_agent_with_fresh_config(
             user_context=user_context
         )
 
-        if not agent_config.enabled:
-            default_recursion_limit = 5 * 3 + 10  # Default: 5 tool calls * 3 + headroom
-            return None, None, True, default_recursion_limit
-
         # Map provider and create LangChain model
         from utils.bedrock_helpers import normalize_bedrock_provider
 

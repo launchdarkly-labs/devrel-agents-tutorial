@@ -41,10 +41,6 @@ class ServedConfig:
     from_fallback: bool = False
 
     @property
-    def enabled(self) -> bool:
-        return True
-
-    @property
     def instructions(self) -> str:
         return self.config.get("instructions") or ""
 

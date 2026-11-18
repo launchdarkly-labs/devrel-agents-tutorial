@@ -102,16 +102,6 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
                 user_context=user_context
             )
 
-            if not agent_config.enabled:
-                # Return safe default if config is disabled
-                return {
-                    "messages": [AIMessage(content="PII Analysis: detected=false, types=[]")],
-                    "detected": False,
-                    "types": [],
-                    "redacted": state["messages"][0].content if state["messages"] else "",
-                    "response": "Security check disabled"
-                }
-
             # Create model with structured output and up-to-date instructions
             from agents.ld_agent_helpers import map_provider_to_langchain, create_bedrock_chat_model
             from utils.bedrock_helpers import normalize_bedrock_provider
