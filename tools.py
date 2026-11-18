@@ -16,6 +16,10 @@ import os
 from typing import List, Dict, Any, Optional
 
 
+def _ci_safe_mode() -> bool:
+    return os.getenv("CI_SAFE_MODE", "").lower() in {"1", "true", "yes"}
+
+
 def search_v1(query: str) -> str:
     """
     Basic keyword-based search through enterprise documentation.
@@ -31,12 +35,8 @@ def search_v1(query: str) -> str:
     """
     try:
         from tools_impl.search_v1 import SearchToolV1
-        tool = SearchToolV1()
-        return tool._run(query)
+        return SearchToolV1()._run(query)
     except Exception as e:
-        import traceback
-        error_details = traceback.format_exc()
-        print(f"ERROR in search_v1: {type(e).__name__}: {str(e)}\n{error_details}")
         return f"Search error: {type(e).__name__}: {str(e)}. If this persists, ensure vector embeddings are initialized with 'uv run initialize_embeddings.py'"
 
 
@@ -56,14 +56,8 @@ def search_v2(query: str, top_k: int = 3) -> str:
     """
     try:
         from tools_impl.search_v2 import SearchToolV2
-        tool = SearchToolV2()
-        # Clamp top_k for safety
-        top_k = max(1, min(int(top_k), 20))
-        return tool._run(query, top_k)
+        return SearchToolV2()._run(query, top_k)
     except Exception as e:
-        import traceback
-        error_details = traceback.format_exc()
-        print(f"ERROR in search_v2: {type(e).__name__}: {str(e)}\n{error_details}")
         return f"Search error: {type(e).__name__}: {str(e)}. If this persists, ensure vector embeddings are initialized with 'uv run initialize_embeddings.py'"
 
 
@@ -83,8 +77,7 @@ def reranking(query: str, results: Optional[List[Dict[str, Any]]] = None) -> str
     """
     try:
         from tools_impl.reranking import RerankingTool
-        tool = RerankingTool()
-        return tool._run(query, results)
+        return RerankingTool()._run(query, results)
     except Exception as e:
         return f"Reranking error: {str(e)}"
 
@@ -103,13 +96,12 @@ def arxiv_search(query: str, max_results: int = 5) -> str:
     Returns:
         Formatted string with ArXiv paper results including titles, authors, and abstracts
     """
-    # Check if CI_SAFE_MODE is enabled (network-dependent tools disabled)
-    if os.getenv("CI_SAFE_MODE", "").lower() in {"1", "true", "yes"}:
+    if _ci_safe_mode():
         return "ArXiv search is disabled in CI safe mode (network-dependent MCP tool)"
 
     try:
         from tools_impl.dynamic_tool_factory import _create_dynamic_mcp_tool
-        tool = _create_dynamic_mcp_tool("arxiv_search", {})
+        tool = _create_dynamic_mcp_tool("arxiv_search")
         if tool is None:
             return "ArXiv MCP tool not available. Install with: uv tool install arxiv-mcp-server"
         return tool._run(query=query, max_results=max_results)
@@ -130,13 +122,12 @@ def openalex_search(query: str) -> str:
     Returns:
         Formatted string with OpenAlex results including citation counts
     """
-    # Check if CI_SAFE_MODE is enabled (network-dependent tools disabled)
-    if os.getenv("CI_SAFE_MODE", "").lower() in {"1", "true", "yes"}:
+    if _ci_safe_mode():
         return "OpenAlex search is disabled in CI safe mode (network-dependent MCP tool)"
 
     try:
         from tools_impl.dynamic_tool_factory import _create_dynamic_mcp_tool
-        tool = _create_dynamic_mcp_tool("openalex_search", {})
+        tool = _create_dynamic_mcp_tool("openalex_search")
         if tool is None:
             return "OpenAlex MCP tool not available. Sign in with: uv run python tools_impl/openalex_auth.py"
         return tool._run(query=query)

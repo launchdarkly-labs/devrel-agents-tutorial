@@ -1,14 +1,9 @@
 from langchain.tools import BaseTool, StructuredTool
-from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.tools import load_mcp_tools
 from tools_impl.openalex_auth import OPENALEX_MCP_URL, TOKEN_FILE, openalex_auth
 import asyncio
-from typing import List, Optional
-import logging
-import time
-import random
-
-logger = logging.getLogger(__name__)
+import os
+import traceback
 
 # Process-lifetime singleton to prevent repeated MCP server startup
 _MCP_SINGLETON = None
@@ -28,161 +23,64 @@ def _query_only(search_works: BaseTool) -> BaseTool:
 
 class MCPResearchTools:
     """MCP Research Tools integration using real MCP servers with process lifetime reuse"""
-    
+
     def __init__(self):
-        self.client = None
         self.tools = {}
-        self._initialized = False
-        
+
     async def initialize(self):
-        """Initialize MCP client with research servers using process lifetime reuse"""
+        """Load tools from the configured research servers, once per process"""
         global _MCP_SINGLETON
-        
+
         async with _MCP_LOCK:
             if _MCP_SINGLETON is not None:
-                # Reuse existing singleton
-                self.client = _MCP_SINGLETON.client
                 self.tools = _MCP_SINGLETON.tools
-                self._initialized = True
                 print(f"🔄 MCP: Reusing singleton with {len(self.tools)} tools")
                 return
-                
+
             print("  MCP: Initializing process-lifetime singleton...")
-        
-        try:
-            # Configure MCP servers for research using environment variables
-            import os
-            
-            server_configs = {}
-            
-            # ArXiv MCP Server - only add if path is configured
-            arxiv_path = os.getenv('ARXIV_MCP_SERVER_PATH')
-            if arxiv_path and os.path.exists(arxiv_path):
-                server_configs["arxiv"] = {
-                    "transport": "stdio",
-                    "command": arxiv_path,
-                    "args": ["--storage-path", "/tmp/arxiv-papers"]
-                }
-                print(f"  MCP: ArXiv server configured at {arxiv_path}")
-            
-            # OpenAlex MCP Server - only add after running tools_impl/openalex_auth.py
-            if TOKEN_FILE.exists():
-                server_configs["openalex"] = {
-                    "transport": "streamable_http",
-                    "url": OPENALEX_MCP_URL,
-                    "auth": openalex_auth()
-                }
-                print("  MCP: OpenAlex server configured")
-            
-            # Try to initialize with available servers
-            available_configs = {}
-            for name, config in server_configs.items():
-                try:
-                    # Test if server is available
-                    available_configs[name] = config
-                    logger.info(f"MCP server '{name}' configured")
-                except Exception as e:
-                    logger.warning(f"MCP server '{name}' not available: {e}")
-            
-            if available_configs:
-                # Initialize individual MCP connections and collect tools
-                langchain_tools = []
-                
-                # Load tools from each server individually
-                for server_name, config in available_configs.items():
-                    try:
-                        # Load tools from this server
-                        server_tools = await load_mcp_tools(None, connection=config)
-                        langchain_tools.extend(server_tools)
-                        # print(f"DEBUG: Loaded {len(server_tools)} tools from {server_name} MCP server")
-                        
-                    except Exception as e:
-                        print(f" ERROR: Failed to load tools from {server_name}: {e}")
-                        import traceback
-                        print(f" TRACEBACK: {traceback.format_exc()}")
-                        continue
-                
-                # Organize tools by type - map actual MCP tools to our expected names
-                for tool in langchain_tools:
-                    tool_name = tool.name.lower()
-                    # print(f"DEBUG: Found MCP tool: {tool.name} ({tool.description[:100]}...)")
-                    
-                    # Map ArXiv tools - use search_papers as the primary tool for arxiv_search
-                    if "search_papers" in tool_name or "arxiv" in tool_name:
-                        self.tools["arxiv_search"] = tool
-                        # Store all ArXiv tools under their original names too
-                        self.tools[tool.name] = tool
-                    # Map OpenAlex tools - use search_works as primary
-                    elif tool_name == "search_works":
-                        self.tools["openalex_search"] = _query_only(tool)
-                        
-                # print(f"DEBUG: Initialized MCP tools: {list(self.tools.keys())}")
-                
-                # Store singleton for process lifetime reuse
-                async with _MCP_LOCK:
-                    if _MCP_SINGLETON is None:
-                        _MCP_SINGLETON = self
-                        print(" MCP: Singleton initialized for process lifetime")
-                
-        except Exception as e:
-            # print(f"DEBUG: Failed to initialize MCP client: {e}")
-            self.client = None
-        
-        self._initialized = True
-        # print("DEBUG: MCPResearchTools.initialize() completed")
-    
-    def get_tool(self, tool_name: str) -> Optional[BaseTool]:
-        """Get a specific MCP tool"""
-        return self.tools.get(tool_name)
-    
-    def get_available_tools(self) -> List[str]:
-        """Get list of available MCP tool names"""
-        return list(self.tools.keys())
-    
-    async def close(self):
-        """Clean up MCP client"""
-        if self.client:
-            await self.client.close()
 
+        server_configs = {}
 
-# Simplified for demo - no singleton caching
-async def get_mcp_research_tools() -> MCPResearchTools:
-    """Create and initialize MCP research tools instance"""
-    # print("DEBUG: Creating new MCPResearchTools instance")
-    mcp_research_tools = MCPResearchTools()
-    # print("DEBUG: Initializing MCP tools...")
-    await mcp_research_tools.initialize()
-    # print("DEBUG: MCP initialization completed")
-    return mcp_research_tools
+        # ArXiv MCP Server - only add if path is configured
+        arxiv_path = os.getenv('ARXIV_MCP_SERVER_PATH')
+        if arxiv_path and os.path.exists(arxiv_path):
+            server_configs["arxiv"] = {
+                "transport": "stdio",
+                "command": arxiv_path,
+                "args": ["--storage-path", "/tmp/arxiv-papers"]
+            }
+            print(f"  MCP: ArXiv server configured at {arxiv_path}")
 
+        # OpenAlex MCP Server - only add after running tools_impl/openalex_auth.py
+        if TOKEN_FILE.exists():
+            server_configs["openalex"] = {
+                "transport": "streamable_http",
+                "url": OPENALEX_MCP_URL,
+                "auth": openalex_auth()
+            }
+            print("  MCP: OpenAlex server configured")
 
-# MCP-only implementation - no fallback tools
-async def get_research_tools() -> List[BaseTool]:
-    """Get MCP research tools - requires MCP servers to be installed"""
-    # print("DEBUG: get_research_tools called")
-    tools = []
-    
-    try:
-        # print("DEBUG: Getting MCP research tools instance")
-        mcp_tools = await get_mcp_research_tools()
-        available_tools = mcp_tools.get_available_tools()
-        # print(f"DEBUG: Available MCP tools: {available_tools}")
-        
-        # Only return real MCP tools - no fallbacks
-        if "arxiv_search" in available_tools:
-            tools.append(mcp_tools.get_tool("arxiv_search"))
-            print(" Added ArXiv MCP tool")
-            
-        if "openalex_search" in available_tools:
-            tools.append(mcp_tools.get_tool("openalex_search"))
-            print(" Added OpenAlex MCP tool")
-        
-        if not tools:
-            print("No MCP research tools available. Install MCP servers: npm install -g @michaellatman/mcp-server-arxiv")
-            
-    except Exception as e:
-        print(f" MCP tools initialization failed: {e}")
-        print("Install MCP servers to enable research tools: npm install -g @michaellatman/mcp-server-arxiv")
-    
-    # print(f"DEBUG: Returning {len(tools)} MCP tools")
-    return tools
+        if not server_configs:
+            return
+
+        # Load tools from each server individually, so one failing server doesn't block the other
+        for server_name, config in server_configs.items():
+            try:
+                server_tools = await load_mcp_tools(None, connection=config)
+            except Exception as e:
+                print(f" ERROR: Failed to load tools from {server_name}: {e}")
+                print(f" TRACEBACK: {traceback.format_exc()}")
+                continue
+
+            # Map the MCP tools we use to their LaunchDarkly tool names
+            for tool in server_tools:
+                if tool.name == "search_papers":
+                    self.tools["arxiv_search"] = tool
+                elif tool.name == "search_works":
+                    self.tools["openalex_search"] = _query_only(tool)
+
+        # Store singleton for process lifetime reuse
+        async with _MCP_LOCK:
+            if _MCP_SINGLETON is None:
+                _MCP_SINGLETON = self
+                print(" MCP: Singleton initialized for process lifetime")

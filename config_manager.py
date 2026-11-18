@@ -15,7 +15,6 @@ from launchdarkly_ai_server import (
     init_client,
     inspect_config,
     parse_ai_config,
-    shutdown,
     to_ld_context,
 )
 from launchdarkly_ai_server.tracking import parse_usage
@@ -60,10 +59,6 @@ class ServedConfig:
     def custom(self) -> dict[str, Any]:
         """Custom model params (e.g. max_tool_calls)."""
         return (self.config.get("model") or {}).get("custom") or {}
-
-    @property
-    def tools(self) -> dict[str, Any]:
-        return self.config.get("tools") or {}
 
     @property
     def variation_key(self) -> str:
@@ -123,24 +118,12 @@ class FixedConfigManager:
             log_debug("AUTH_METHOD not set to 'sso', Bedrock unavailable")
             return
 
+        aws_profile = os.getenv('AWS_PROFILE')
         try:
-            # Initialize AWS session with optional profile support
-            aws_region = os.getenv('AWS_REGION', 'us-east-1')
-            aws_profile = os.getenv('AWS_PROFILE')
-
-            # Create session with profile if specified, otherwise use default credentials
-            if aws_profile:
-                self.boto3_session = boto3.Session(
-                    region_name=aws_region,
-                    profile_name=aws_profile
-                )
-                log_debug(f"AWS: Using profile '{aws_profile}' in region {aws_region}")
-            else:
-                self.boto3_session = boto3.Session(region_name=aws_region)
-                log_debug(f"AWS: Using default credentials in region {aws_region}")
-
-            self.aws_region = aws_region
-            self.aws_profile = aws_profile
+            # Use the profile if specified, otherwise the default credentials
+            self.aws_region = os.getenv('AWS_REGION', 'us-east-1')
+            self.boto3_session = boto3.Session(region_name=self.aws_region, profile_name=aws_profile)
+            log_debug(f"AWS: Using profile '{aws_profile or 'default'}' in region {self.aws_region}")
 
             # Test current SSO session
             sts = self.boto3_session.client('sts')
@@ -153,7 +136,7 @@ class FixedConfigManager:
             log_student(f"AWS SSO session not available: {e}")
 
             # Provide helpful login command with profile if specified
-            profile_hint = f" --profile {os.getenv('AWS_PROFILE')}" if os.getenv('AWS_PROFILE') else ""
+            profile_hint = f" --profile {aws_profile}" if aws_profile else ""
             log_student(f"Run: aws sso login{profile_hint}")
             raise
 
@@ -262,17 +245,11 @@ class FixedConfigManager:
         This ensures the same context is used for both AI Config evaluation
         and custom metric tracking, which is required for experiment association.
         """
-        context: dict[str, Any] = {"kind": "user", "key": user_id}
-
-        if user_context:
-            # Set all attributes from user_context for consistency
-            for key, value in user_context.items():
-                context[key] = value
-                log_debug(f"CONFIG MANAGER: Set {key}={value}")
-
+        context = {"kind": "user", "key": user_id, **(user_context or {})}
+        log_debug(f"CONFIG MANAGER: Built LaunchDarkly context: {context}")
         return context
 
-    async def get_config(self, user_id: str, config_key: str = None, user_context: dict = None) -> ServedConfig:
+    async def get_config(self, user_id: str, config_key: str, user_context: dict = None) -> ServedConfig:
         """Get LaunchDarkly AI Config with fallback to .ai_config_defaults.json
 
         Fallback chain:
@@ -281,42 +258,33 @@ class FixedConfigManager:
         3. If config not in defaults file, raise helpful error
         """
         log_debug(f"CONFIG MANAGER: Getting config for user_id={user_id}, config_key={config_key}")
-        log_debug(f"CONFIG MANAGER: User context: {user_context}")
 
         client_ready = await self._ensure_client()
-
-        # Build context using centralized method
         ld_user_context = self.build_context(user_id, user_context)
-        log_debug(f"CONFIG MANAGER: Built LaunchDarkly context: {ld_user_context}")
-
-        ai_config_key = config_key or os.getenv('LAUNCHDARKLY_AI_CONFIG_KEY', 'support-agent')
-        log_debug(f"CONFIG MANAGER: Using AI config key: {ai_config_key}")
 
         inspected = (
-            await inspect_config(ai_config_key, ld_user_context)
+            await inspect_config(config_key, ld_user_context)
             if client_ready
             else {"enabled": False, "config": None, "meta": None}
         )
 
         if inspected["enabled"] and inspected["config"]:
             served = ServedConfig(
-                key=ai_config_key,
+                key=config_key,
                 config=inspected["config"],
                 meta=inspected["meta"] or {},
             )
-            log_debug("CONFIG MANAGER: ✅ Got config from LaunchDarkly")
-            log_debug(f"CONFIG MANAGER: Model: {served.model_name}")
-            log_debug(f"CONFIG MANAGER: Variation: {served.variation_key}")
+            log_debug(f"CONFIG MANAGER: ✅ Got config from LaunchDarkly: {served.model_name} ({served.variation_key})")
             return served
 
         # LaunchDarkly is unavailable, the key is unknown, or targeting is off.
         log_student(
-            f"CONFIG MANAGER: '{ai_config_key}' not served by LaunchDarkly; "
+            f"CONFIG MANAGER: '{config_key}' not served by LaunchDarkly; "
             "using .ai_config_defaults.json"
         )
         served = ServedConfig(
-            key=ai_config_key,
-            config=self._get_default_config(ai_config_key),
+            key=config_key,
+            config=self._get_default_config(config_key),
             from_fallback=True,
         )
         log_debug(f"CONFIG MANAGER: Fallback model: {served.model_name}")
@@ -362,25 +330,17 @@ class FixedConfigManager:
 
         return box["result"]
 
-    def _flush(self):
-        """Flush pending events if the client is up.
+    def flush_metrics(self):
+        """Flush pending LaunchDarkly events if the client is up.
 
         The client is initialized lazily on the first get_config, so this can be
-        called before it exists (ConfigManager does so at startup). get_client
-        raises in that state, and there is nothing buffered to flush anyway.
+        called before it exists. get_client raises in that state, and there is
+        nothing buffered to flush anyway.
         """
         try:
             get_client().flush()
         except Exception as e:
             log_debug(f"FLUSH SKIPPED (client not initialized yet): {e}")
-
-    def clear_cache(self):
-        """Flush pending LaunchDarkly events"""
-        self._flush()
-
-    def flush_metrics(self):
-        """Flush metrics to LaunchDarkly"""
-        self._flush()
 
     @staticmethod
     def _track(event: str, context: dict, data, value):
@@ -402,10 +362,3 @@ class FixedConfigManager:
         except Exception as e:
             log_debug(f"FEEDBACK TRACKING ERROR: {e}")
             return False
-
-    async def close(self):
-        """Flush pending LaunchDarkly events and spans, then close the client"""
-        try:
-            await shutdown()
-        except Exception as e:
-            log_debug(f"CLOSE ERROR: {e}")

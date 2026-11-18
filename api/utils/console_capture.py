@@ -1,61 +1,39 @@
 import sys
-import io
-from typing import List
 from contextlib import contextmanager
+
+
+class _CapturingWriter:
+    """Records each non-empty write and passes it through, so logs still show in the console"""
+    def __init__(self, stream, captured_logs, prefix=""):
+        self.stream = stream
+        self.captured_logs = captured_logs
+        self.prefix = prefix
+
+    def write(self, text):
+        if text.strip():  # Only capture non-empty lines
+            self.captured_logs.append(f"{self.prefix}{text.strip()}")
+        self.stream.write(text)
+        self.stream.flush()
+
+    def flush(self):
+        self.stream.flush()
+
+    def fileno(self):
+        # Delegate to the original stream for subprocess compatibility
+        return self.stream.fileno()
+
 
 @contextmanager
 def capture_console_output():
     """Context manager that captures both stdout and stderr during execution"""
     captured_logs = []
-    
-    # Create custom write function that captures output
-    def capture_write(text):
-        if text.strip():  # Only capture non-empty lines
-            captured_logs.append(text.strip())
-        # Also write to original stdout so we can still see logs in console
-        original_stdout.write(text)
-        original_stdout.flush()
-    
-    # Store original stdout/stderr
     original_stdout = sys.stdout
     original_stderr = sys.stderr
-    
+
     try:
-        # Create a custom stdout that captures and passes through
-        class CapturingWriter:
-            def write(self, text):
-                capture_write(text)
-            
-            def flush(self):
-                original_stdout.flush()
-            
-            def fileno(self):
-                # Delegate to original stdout for subprocess compatibility
-                return original_stdout.fileno()
-        
-        # Replace stdout with our capturing writer
-        sys.stdout = CapturingWriter()
-        
-        # Also capture stderr (for any error prints)
-        class CapturingStdErr:
-            def write(self, text):
-                if text.strip():
-                    captured_logs.append(f"[ERROR] {text.strip()}")
-                original_stderr.write(text)
-                original_stderr.flush()
-            
-            def flush(self):
-                original_stderr.flush()
-            
-            def fileno(self):
-                # Delegate to original stderr for subprocess compatibility
-                return original_stderr.fileno()
-        
-        sys.stderr = CapturingStdErr()
-        
+        sys.stdout = _CapturingWriter(original_stdout, captured_logs)
+        sys.stderr = _CapturingWriter(original_stderr, captured_logs, prefix="[ERROR] ")
         yield captured_logs
-        
     finally:
-        # Restore original stdout/stderr
         sys.stdout = original_stdout
         sys.stderr = original_stderr

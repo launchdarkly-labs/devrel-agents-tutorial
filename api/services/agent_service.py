@@ -1,16 +1,11 @@
 import uuid
-from typing import List
 from langchain_core.messages import HumanMessage, AIMessage
-from dotenv import load_dotenv
 from ..models import ChatResponse, AgentConfig as APIAgentConfig
-from agents.supervisor_agent import create_supervisor_agent
-from agents.support_agent import create_support_agent
-from agents.security_agent import create_security_agent
+from agents.supervisor_agent import create_supervisor_agent, trim_message_history
 from config_manager import FixedConfigManager as ConfigManager
-from utils.logger import log_student, log_debug, log_info
+from utils.logger import log_student, log_debug
 
-# Ensure .env is loaded before ConfigManager initialization
-load_dotenv()
+MAX_MESSAGE_LENGTH = 5000
 
 class AgentService:
     """
@@ -34,57 +29,6 @@ class AgentService:
     def __init__(self):
         # Initialize LaunchDarkly configuration manager
         self.config_manager = ConfigManager()
-        # Clear LaunchDarkly cache on startup to get latest configs
-        self.config_manager.clear_cache()
-    
-    def flush_metrics(self):
-        """Flush LaunchDarkly metrics immediately"""
-        try:
-            self.config_manager.flush_metrics()
-            print(" METRICS: Successfully flushed to LaunchDarkly")
-        except Exception as e:
-            print(f" METRICS FLUSH ERROR: {e}")
-            raise
-        
-    def _validate_inputs(self, message: str, user_id: str, user_context: dict, sanitized_conversation_history: list) -> tuple[str, dict, list]:
-        """Validate and sanitize all inputs"""
-        # Validate message content
-        if not message or not message.strip():
-            raise ValueError("Please provide a message to process.")
-
-        # Validate message length (prevent extremely long inputs)
-        max_message_length = 5000
-        if len(message) > max_message_length:
-            raise ValueError(f"Message too long ({len(message)} characters). Please limit to {max_message_length} characters.")
-
-        # Validate and sanitize user_id
-        clean_user_id = user_id.strip() if user_id and user_id.strip() else "anonymous_user"
-        if clean_user_id != user_id:
-            log_debug("VALIDATION: Empty user_id provided, using 'anonymous_user'")
-
-        # Validate user_context structure
-        clean_user_context = user_context if isinstance(user_context, dict) else {}
-        if user_context is not None and not isinstance(user_context, dict):
-            log_debug("VALIDATION: Invalid user_context type, using empty dict")
-
-        # Validate sanitized_conversation_history
-        clean_history = sanitized_conversation_history if isinstance(sanitized_conversation_history, list) else None
-        if sanitized_conversation_history is not None and not isinstance(sanitized_conversation_history, list):
-            log_debug("VALIDATION: Invalid conversation history type, ignoring")
-
-        log_debug("✅ INPUT VALIDATION: All inputs validated successfully")
-        return clean_user_id, clean_user_context, clean_history
-
-    def _create_error_response(self, error_message: str, error_type: str = "validation_error") -> ChatResponse:
-        """Create standardized error response"""
-        return ChatResponse(
-            id=str(uuid.uuid4()),
-            response=error_message,
-            tool_calls=[],
-            variation_key=error_type,
-            model=error_type,
-            agent_configurations=[]
-        )
 
     async def process_message(self, user_id: str, message: str, user_context: dict = None, sanitized_conversation_history: list = None) -> ChatResponse:
         """
@@ -111,30 +55,34 @@ class AgentService:
             log_debug(f"AGENT SERVICE: Processing message for {user_id}")
 
             # Validate inputs
-            try:
-                user_id, user_context, sanitized_conversation_history = self._validate_inputs(
-                    message, user_id, user_context, sanitized_conversation_history
+            if len(message) > MAX_MESSAGE_LENGTH:
+                return ChatResponse(
+                    id=str(uuid.uuid4()),
+                    response=f"Message too long ({len(message)} characters). Please limit to {MAX_MESSAGE_LENGTH} characters.",
+                    tool_calls=[],
+                    variation_key="validation_error",
+                    model="validation_error",
+                    agent_configurations=[]
                 )
-            except ValueError as e:
-                return self._create_error_response(str(e))
+            user_id = user_id.strip() or "anonymous_user"
+            user_context = user_context or {}
 
             # Get LaunchDarkly LDAI configurations for all agents
-            log_debug(" AGENT SERVICE: Loading agent configurations...")
-            supervisor_config = await self.config_manager.get_config(user_id, "supervisor-agent", user_context) 
+            supervisor_config = await self.config_manager.get_config(user_id, "supervisor-agent", user_context)
             support_config = await self.config_manager.get_config(user_id, "support-agent", user_context)
             security_config = await self.config_manager.get_config(user_id, "security-agent", user_context)
-        
-            log_student(f"LDAI: 3 agents configured")
+
+            log_student("LDAI: 3 agents configured")
             log_debug(f"LDAI: Supervisor({supervisor_config.model_name}), Support({support_config.model_name}), Security({security_config.model_name})")
-            
+
             # Create supervisor agent with all child agents using LDAI SDK pattern
             supervisor_agent = create_supervisor_agent(
-                supervisor_config, 
-                support_config, 
+                supervisor_config,
+                support_config,
                 security_config,
                 self.config_manager
             )
-            
+
             # =============================================
             # PII SECURITY BOUNDARY SETUP
             # =============================================
@@ -142,38 +90,21 @@ class AgentService:
             # Convert sanitized conversation history to LangChain messages
             # CRITICAL: Support agent will ONLY see these sanitized messages
             sanitized_langchain_messages = []
-            if sanitized_conversation_history:
-                for msg in sanitized_conversation_history:
-                    # Validate message structure
-                    if not isinstance(msg, dict):
-                        log_debug("VALIDATION: Skipping invalid message in conversation history")
-                        continue
+            for msg in sanitized_conversation_history or []:
+                role = msg.get("role")
+                content = (msg.get("content") or "").strip()
+                if not content:
+                    continue
+                if role == "user":
+                    sanitized_langchain_messages.append(HumanMessage(content=content))
+                elif role == "assistant":
+                    sanitized_langchain_messages.append(AIMessage(content=content))
 
-                    role = msg.get("role")
-                    content = msg.get("content")
+            # === MESSAGE MEMORY MANAGEMENT ===
+            # Trim conversation history to prevent context overflow
+            # This is especially important for long-running conversations
+            sanitized_langchain_messages = trim_message_history(sanitized_langchain_messages, max_messages=8)
 
-                    # Validate content exists and is not empty
-                    if not content or not content.strip():
-                        log_debug(f"VALIDATION: Skipping empty message with role {role}")
-                        continue
-
-                    # Convert to LangChain messages
-                    if role == "user":
-                        sanitized_langchain_messages.append(HumanMessage(content=content.strip()))
-                    elif role == "assistant":
-                        sanitized_langchain_messages.append(AIMessage(content=content.strip()))
-                    else:
-                        log_debug(f"VALIDATION: Skipping message with unknown role: {role}")
-
-                # === MESSAGE MEMORY MANAGEMENT ===
-                # Trim conversation history to prevent context overflow
-                # This is especially important for long-running conversations
-                from agents.supervisor_agent import trim_message_history
-                sanitized_langchain_messages = trim_message_history(sanitized_langchain_messages, max_messages=8)
-
-            # Add current raw message for security agent processing
-            current_raw_message = HumanMessage(content=message)
-            
             # =============================================
             # LANGGRAPH INITIAL STATE CONSTRUCTION
             # =============================================
@@ -183,12 +114,12 @@ class AgentService:
             initial_state = {
                 # === CORE MESSAGE FLOW ===
                 "user_input": message.strip(),                  # Raw message (security agent only) - trimmed
-                "messages": [current_raw_message],              # Security agent gets raw message
+                "messages": [HumanMessage(content=message)],    # Security agent gets raw message
                 "final_response": "",
 
                 # === LAUNCHDARKLY TARGETING ===
-                "user_id": user_id,                             # Validated user ID
-                "user_context": user_context or {},             # Validated user context
+                "user_id": user_id,
+                "user_context": user_context,
 
                 # === WORKFLOW ORCHESTRATION ===
                 "current_agent": "",                            # Supervisor will determine first agent
@@ -201,106 +132,74 @@ class AgentService:
                 "support_tool_details": [],
 
                 # === PII SECURITY BOUNDARY ===
-                "sanitized_messages": sanitized_langchain_messages,  # SUPPORT AGENT ONLY gets these (validated)
+                "sanitized_messages": sanitized_langchain_messages,  # SUPPORT AGENT ONLY gets these
                 "processed_user_input": "",                     # Will be set by security agent
                 "pii_detected": False,                          # Will be set by security agent
                 "pii_types": [],                                # Will be set by security agent
                 "redacted_text": message.strip(),               # Will be updated by security agent
             }
-            
+
             # =============================================
             # LANGGRAPH WORKFLOW EXECUTION
             # =============================================
 
-            log_student(f"INTELLIGENT ROUTING: Starting PII pre-screening analysis")
-            log_debug(f"🔒 PII PROTECTION: Enhanced supervisor will decide routing path")
+            log_student("INTELLIGENT ROUTING: Starting PII pre-screening analysis")
 
             # Execute the LangGraph workflow
             # The supervisor will orchestrate security and support agents automatically
             result = await supervisor_agent.ainvoke(initial_state)
-            
+
             actual_tool_calls = result.get("support_tool_calls", [])
-            tool_details = result.get("support_tool_details", [])
-            
-            # Get security agent PII detection results and tool details
             security_detected = result.get("pii_detected", False)
-            security_types = result.get("pii_types", [])
-            security_redacted = result.get("redacted_text", message)
-            security_tool_details = result.get("security_tool_details", [])
-            
+
             log_student(f"WORKFLOW COMPLETE: PII detected: {security_detected}")
-            
-            # Create agent configuration metadata showing actual usage
-            # Extract actual variation key from LaunchDarkly AI config
-            def get_variation_key(ai_config, agent_name):
-                try:
-                    variation_key = ai_config.variation_key
-                    log_debug(f"VARIATION EXTRACTED for {agent_name}: {variation_key}")
-                    return variation_key
-                except Exception as e:
-                    log_debug(f"VARIATION EXTRACTION ERROR for {agent_name}: {e}")
-                    return 'default'
-            
+
             def get_tools_list(ai_config):
-                try:
-                    tools = ai_config.parameters.get('tools', [])
-                    tool_names = [tool.get('name', 'unknown') for tool in tools]
-                    log_debug(f"EXTRACTED TOOLS: {tool_names}")
-                    return tool_names
-                except Exception as e:
-                    log_debug(f"TOOLS EXTRACTION ERROR: {e}")
-                    return []
-            
-            # Extract tools list from configs
-            security_tools = get_tools_list(security_config)
-            support_tools = get_tools_list(support_config)
-            
-            # Determine which tools were actually used by each agent
-            security_tools_used = []
-            support_tools_used = actual_tool_calls  # Support agent is the primary tool user
-            
+                return [tool.get('name', 'unknown') for tool in ai_config.parameters.get('tools', [])]
+
+            # Create agent configuration metadata showing actual usage
             agent_configurations = [
                 APIAgentConfig(
                     agent_name="supervisor-agent",
-                    variation_key=get_variation_key(supervisor_config, "supervisor-agent"),
+                    variation_key=supervisor_config.variation_key,
                     model=supervisor_config.model_name,
                     tools=[],  # Supervisor doesn't have tools available
                     tools_used=[]  # Supervisor doesn't use tools directly
                 ),
                 APIAgentConfig(
-                    agent_name="security-agent", 
-                    variation_key=get_variation_key(security_config, "security-agent"),
+                    agent_name="security-agent",
+                    variation_key=security_config.variation_key,
                     model=security_config.model_name,
-                    tools=security_tools,  # Show configured tools
-                    tools_used=security_tools_used,  # Show actual tools used
-                    tool_details=security_tool_details,  # Show security tool details with PII results
+                    tools=get_tools_list(security_config),
+                    tools_used=[],
+                    tool_details=[],
                     # Pass PII detection results to UI
                     detected=security_detected,
-                    types=security_types,
-                    redacted=security_redacted
+                    types=result.get("pii_types", []),
+                    redacted=result.get("redacted_text", message)
                 ),
                 APIAgentConfig(
                     agent_name="support-agent",
-                    variation_key=get_variation_key(support_config, "support-agent"),
-                    model=support_config.model_name, 
-                    tools=support_tools,  # Show configured tools from LaunchDarkly
-                    tools_used=support_tools_used,  # Show actual tools executed
-                    tool_details=tool_details  # Show detailed tool info with search queries
+                    variation_key=support_config.variation_key,
+                    model=support_config.model_name,
+                    tools=get_tools_list(support_config),  # Show configured tools from LaunchDarkly
+                    tools_used=actual_tool_calls,  # Show actual tools executed
+                    tool_details=result.get("support_tool_details", [])  # Show detailed tool info with search queries
                 )
             ]
-            
+
             return ChatResponse(
                 id=str(uuid.uuid4()),
                 response=result["final_response"],
                 tool_calls=actual_tool_calls,  # Show actual tools used
-                variation_key=get_variation_key(supervisor_config, "supervisor-agent"),  # Use actual LaunchDarkly variation
+                variation_key=supervisor_config.variation_key,  # Use actual LaunchDarkly variation
                 model=supervisor_config.model_name,  # Primary model
                 agent_configurations=agent_configurations
             )
-            
+
         except Exception as e:
             log_student(f"LDAI WORKFLOW ERROR: {e}")
-            
+
             # Return error response
             return ChatResponse(
                 id=str(uuid.uuid4()),
