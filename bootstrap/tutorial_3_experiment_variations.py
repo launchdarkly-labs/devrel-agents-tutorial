@@ -3,7 +3,7 @@
 Bootstrap script for Tutorial 3 Experiment Variations
 
 Creates the experiment variation needed for tutorial-3 A/B testing:
-- Premium Model Value Analysis: Does Claude Opus 4 deliver superior user satisfaction compared to GPT-4o for premium users?
+- Premium Model Value Analysis: Does Claude Opus 5.5 deliver superior user satisfaction compared to GPT-6.2 Sol for premium users?
 
 This script is separate from the tutorial-2 bootstrap and only handles
 experiment variations, not the base AI Configs (which should already exist).
