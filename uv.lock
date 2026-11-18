@@ -29,7 +29,6 @@ dependencies = [
     { name = "pyyaml" },
     { name = "rank-bm25" },
     { name = "requests" },
-    { name = "semanticscholar" },
     { name = "streamlit" },
     { name = "tiktoken" },
     { name = "uvicorn", extra = ["standard"] },
@@ -55,8 +54,8 @@ requires-dist = [
     { name = "langchain-mistralai", specifier = ">=0.2.12" },
     { name = "langchain-openai", specifier = ">=0.3.31" },
     { name = "langgraph", specifier = ">=0.0.40" },
-    { name = "launchdarkly-ai-server", specifier = "==0.2.4" },
-    { name = "launchdarkly-server-sdk", specifier = ">=9.0.0" },
+    { name = "launchdarkly-ai-server", specifier = ">=1.1.0" },
+    { name = "launchdarkly-server-sdk", specifier = ">=9.18.4" },
     { name = "mcp", specifier = ">=1.13.1" },
     { name = "numpy", specifier = ">=1.24.0" },
     { name = "openai", specifier = ">=1.0.0" },
@@ -66,7 +65,6 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "rank-bm25", specifier = ">=0.2.2" },
     { name = "requests", specifier = ">=2.31.0" },
-    { name = "semanticscholar", specifier = ">=0.10.0" },
     { name = "streamlit", specifier = ">=1.28.0" },
     { name = "tiktoken", specifier = ">=0.5.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.24.0" },
@@ -206,11 +204,11 @@ wheels = [
 
 [[package]]
 name = "certifi"
-version = "2025.8.3"
+version = "2026.10.23"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/dc/67/960ebe6bf230a96cda2e0abcf73af550ec4f090005363542f0765df162e0/certifi-2025.8.3.tar.gz", hash = "sha256:e564105f78ded564e3ae7c923924435e1daa7463faeab5bb932bc53ffae63407", size = 162386, upload-time = "2025-08-03T03:07:47.08Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/fd/11/b524cbd9bbdaca58608e4cf4053fd463417549e1959fa8d3aa18319f9555/certifi-2026.10.23.tar.gz", hash = "sha256:a9895e6e2758b371e0545e321a3a8fd1fcfd9829ada8824a936dfb16aaaf36cd", size = 136225, upload-time = "2026-10-23T11:36:16.478Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e5/48/1549795ba7742c948d2ad169c1c8cdbae65bc450d6cd753d124b17c8cd32/certifi-2025.8.3-py3-none-any.whl", hash = "sha256:f6c12493cfb1b06ba2ff328595af9350c65d6644968e5d3a2ffd78699af217a5", size = 161216, upload-time = "2025-08-03T03:07:45.777Z" },
+    { url = "https://files.pythonhosted.org/packages/32/d1/a3652fe2c19134d0d15922177821d863cbd7e842d53a21bbe7e8e3a1b5ac/certifi-2026.10.23-py3-none-any.whl", hash = "sha256:e9b54de76e530bb6cf0ccd036787103acb58fd42ba930ea8bf948ddbaa2f61d1", size = 135082, upload-time = "2026-10-23T11:36:14.763Z" },
 ]
 
 [[package]]
@@ -283,15 +281,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/fc/f8/98eea607f65de6527f8a2e8885fc8015d3e6f5775df186e443e0964a11c3/distro-1.9.0.tar.gz", hash = "sha256:2fa77c6fd8940f116ee1d6b94a2f90b13b5ea8d019b98bc8bafdcabcdd9bdbed", size = 60722, upload-time = "2023-12-24T09:54:32.31Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/12/b3/231ffd4ab1fc9d679809f356cebee130ac7daa00d6d6f3206dd4fd137e9e/distro-1.9.0-py3-none-any.whl", hash = "sha256:7bffd925d65168f85027d8da9af6bddab658135b840670a223589bc0c8ef02b2", size = 20277, upload-time = "2023-12-24T09:54:30.421Z" },
-]
-
-[[package]]
-name = "expiringdict"
-version = "1.2.2"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/fc/62/c2af4ebce24c379b949de69d49e3ba97c7e9c9775dc74d18307afa8618b7/expiringdict-1.2.2.tar.gz", hash = "sha256:300fb92a7e98f15b05cf9a856c1415b3bc4f2e132be07daa326da6414c23ee09", size = 8137, upload-time = "2022-06-21T09:12:30.415Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/cb/84/a04c59324445f4bcc98dc05b39a1cd07c242dde643c1a3c21e4f7beaf2f2/expiringdict-1.2.2-py3-none-any.whl", hash = "sha256:09a5d20bc361163e6432a874edd3179676e935eb81b925eccef48d409a8a45e8", size = 8456, upload-time = "2022-06-21T09:12:28.652Z" },
 ]
 
 [[package]]
@@ -867,43 +856,42 @@ wheels = [
 
 [[package]]
 name = "launchdarkly-ai-server"
-version = "0.2.4"
+version = "1.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "opentelemetry-api" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/77/ba/ae8af286682bb054e6e35af6ea0459832246e61e7ceb1578748518260b0d/launchdarkly_ai_server-0.2.4.tar.gz", hash = "sha256:8f20ff80811c530a98f54e2e1fa8e3f24d3b599ceae45b023bae72c8b517f80e", size = 161860, upload-time = "2026-09-30T23:30:42.274Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bc/de/5ac3b740979de7b65d9f1f66eb5ac36a705617da50e45e9bc40e4fa2cee5/launchdarkly_ai_server-1.1.0.tar.gz", hash = "sha256:579c5fefba26c4469fce5085d956bfd95f9665c89fe011b1062cd4439652c1dd", size = 527963, upload-time = "2026-11-12T20:32:30.265Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f3/0a/dbe2090ab16bb2aeba7c27d86c9ae11d922ba852d6a91392db2cb556931c/launchdarkly_ai_server-0.2.4-py3-none-any.whl", hash = "sha256:d504671564c28eaca3e72ed3b74c00f1f461b730265af56e2d6b9d321177398c", size = 98988, upload-time = "2026-09-30T23:30:41.094Z" },
+    { url = "https://files.pythonhosted.org/packages/5f/59/5a633e57fcb379a853d8d827acf9023699ff0d6501ef587df994879db456/launchdarkly_ai_server-1.1.0-py3-none-any.whl", hash = "sha256:c905b992dca4d1b28be594ae19f166a87c13b9d5fb68381227d47110dacc713f", size = 232643, upload-time = "2026-11-12T20:32:29.111Z" },
 ]
 
 [[package]]
 name = "launchdarkly-eventsource"
-version = "1.3.0"
+version = "1.7.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8f/23/e5f6afff983e2c03767617291fda895af2849f3176ea78aa106baade70dc/launchdarkly_eventsource-1.3.0.tar.gz", hash = "sha256:5029199b2c344aee2806bbe8784965e9c0197d052d0bab7e1396a94c159f6bc8", size = 22343, upload-time = "2025-06-26T17:21:29.154Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ac/6c/60862f8143c8185e953410b30125ff37ce4720fac2042771ca00f115f840/launchdarkly_eventsource-1.7.4.tar.gz", hash = "sha256:0a608da152a53bd05f5b4a2486828f21d48cd25a56986e36a8e47a8e9975e309", size = 46060, upload-time = "2026-10-19T15:27:17.989Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/4e/95/c20ba9cd28951f360b222da09138daf9169ad951be2a0d500eb0f0c84614/launchdarkly_eventsource-1.3.0-py3-none-any.whl", hash = "sha256:7afecee7a0f306630e4364994e0816abbbdbaf143fe43b3428ed122fa4e0d487", size = 29471, upload-time = "2025-06-26T17:21:28.025Z" },
+    { url = "https://files.pythonhosted.org/packages/8c/e3/6dae165ff56bba3ad4fc76b2aa8c4606c577d2e33a9053dc147b03b045b6/launchdarkly_eventsource-1.7.4-py3-none-any.whl", hash = "sha256:42bbaee1741675199be193d99229ecb710a94089e74fc68b8c4edb90cddbdc5e", size = 29560, upload-time = "2026-10-19T15:27:16.988Z" },
 ]
 
 [[package]]
 name = "launchdarkly-server-sdk"
-version = "9.12.0"
+version = "9.21.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
-    { name = "expiringdict" },
     { name = "launchdarkly-eventsource" },
     { name = "pyrfc3339" },
     { name = "semver" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/19/27/ae186fca5498dbcd80e93940716997a83c09b401b3ee0889dcbb5e3dcd2e/launchdarkly_server_sdk-9.12.0.tar.gz", hash = "sha256:219b100d7569e4f528b6028cbd2a5d61f13539f2b44ed43fc173bb4f456ee580", size = 165130, upload-time = "2025-07-14T16:04:29.253Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d6/63/d71b230ed98354523c3bba9950b1498a74c1824c39f425400a0cd27b8841/launchdarkly_server_sdk-9.21.0.tar.gz", hash = "sha256:c1db1ebcc5045b3785bd169e780f521a625f5201382dca7cbe85fd871a4103c8", size = 518639, upload-time = "2026-11-12T21:45:44.315Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/72/45/ff696e71a724e4ed686bbf5e57537c08baabde900e229d2a167040aa5e40/launchdarkly_server_sdk-9.12.0-py3-none-any.whl", hash = "sha256:c7351e26e6b695b968d49888e967691aae60ded82d73a41a74d59d11252a1413", size = 219654, upload-time = "2025-07-14T16:04:27.866Z" },
+    { url = "https://files.pythonhosted.org/packages/57/df/9c22e54b59b1c64bd5b4a5880d4f00aa92448fc0da16493e86090470739e/launchdarkly_server_sdk-9.21.0-py3-none-any.whl", hash = "sha256:ce87d00caa655c5ebb9a2656e65432c64c47529f5df588513043fe9d4fd46afe", size = 324888, upload-time = "2026-11-12T21:45:43.152Z" },
 ]
 
 [[package]]
@@ -973,15 +961,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/01/8f/6b3d8c19540eaaa50778a8bbbe54e025d3f93aca6cdd5a4de3044c36f83c/narwhals-2.2.0.tar.gz", hash = "sha256:f6a34f2699acabe2c17339c104f0bec28b9f7a55fbc7f8d485d49bea72d12b8a", size = 547070, upload-time = "2025-08-25T07:51:58.904Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/dd/54/1ecca75e51d7da8ca53d1ffa8636ef9077a6eaa31f43ade71360b3e6449a/narwhals-2.2.0-py3-none-any.whl", hash = "sha256:2b5e3d61a486fa4328c286b0c8018b3e781a964947ff725d66ba12f6d5ca3d2a", size = 401021, upload-time = "2025-08-25T07:51:56.97Z" },
-]
-
-[[package]]
-name = "nest-asyncio"
-version = "1.6.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/83/f8/51569ac65d696c8ecbee95938f89d4abf00f47d58d48f6fbabfe8f0baefe/nest_asyncio-1.6.0.tar.gz", hash = "sha256:6f172d5449aca15afd6c646851f4e31e02c598d553a667e38cafa997cfec55fe", size = 7418, upload-time = "2024-01-21T14:25:19.227Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a0/c4/c2971a3ba4c6103a3d10c4b0f24f461ddc027f0f09763220cf35ca1401b3/nest_asyncio-1.6.0-py3-none-any.whl", hash = "sha256:87af6efd6b5e897c81050477ef65c62e2b2f35d51703cae01aff2905b1852e1c", size = 5195, upload-time = "2024-01-21T14:25:17.223Z" },
 ]
 
 [[package]]
@@ -1758,20 +1737,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/62/74/8d69dcb7a9efe8baa2046891735e5dfe433ad558ae23d9e3c14c633d1d58/s3transfer-0.14.0.tar.gz", hash = "sha256:eff12264e7c8b4985074ccce27a3b38a485bb7f7422cc8046fee9be4983e4125", size = 151547, upload-time = "2025-09-09T19:23:31.089Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/48/f0/ae7ca09223a81a1d890b2557186ea015f6e0502e9b8cb8e1813f1d8cfa4e/s3transfer-0.14.0-py3-none-any.whl", hash = "sha256:ea3b790c7077558ed1f02a3072fb3cb992bbbd253392f4b6e9e8976941c7d456", size = 85712, upload-time = "2025-09-09T19:23:30.041Z" },
-]
-
-[[package]]
-name = "semanticscholar"
-version = "0.10.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "httpx" },
-    { name = "nest-asyncio" },
-    { name = "tenacity" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/69/90/3034058446c39b7069baaa2476c3d7649af3729d99137e85f57ae95de460/semanticscholar-0.10.0.tar.gz", hash = "sha256:82f907265aebcb1d9432b1cdd880d706230444515a4b94017358b938d007dbec", size = 24318, upload-time = "2025-02-17T02:38:25.25Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/21/3e/f59d7b485230763f278ece2abece586cd0725512786a4db04b05729d566a/semanticscholar-0.10.0-py3-none-any.whl", hash = "sha256:28a572eb8504d493ab5671bc3ce76f84ae70534a5828ec0cd38a26f27e66bd02", size = 22416, upload-time = "2025-02-17T02:38:24.149Z" },
 ]
 
 [[package]]

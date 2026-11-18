@@ -40,9 +40,6 @@ class AgentService:
     def flush_metrics(self):
         """Flush LaunchDarkly metrics immediately"""
         try:
-            # close() is a coroutine now (shutdown is async), and calling it
-            # here would only build one without flushing anything. flush_metrics
-            # is the synchronous flush, which is all this needs.
             self.config_manager.flush_metrics()
             print(" METRICS: Successfully flushed to LaunchDarkly")
         except Exception as e:
@@ -237,9 +234,6 @@ class AgentService:
             # Extract actual variation key from LaunchDarkly AI config
             def get_variation_key(ai_config, agent_name):
                 try:
-                    # The variation key is public metadata on the served config
-                    # now, so this no longer reaches into a private tracker
-                    # attribute that could be renamed without warning.
                     variation_key = ai_config.variation_key
                     log_debug(f"VARIATION EXTRACTED for {agent_name}: {variation_key}")
                     return variation_key

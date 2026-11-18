@@ -112,9 +112,6 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
                     "response": "Security check disabled"
                 }
 
-            # There is no tracker to create any more. Token, duration, and
-            # success/error events are emitted by the tracked invocation below.
-
             # Create model with structured output and up-to-date instructions
             from agents.ld_agent_helpers import map_provider_to_langchain, create_bedrock_chat_model
             from utils.bedrock_helpers import normalize_bedrock_provider
@@ -126,7 +123,7 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
                 anthropic_key = os.getenv("ANTHROPIC_API_KEY")
                 openai_key = os.getenv("OPENAI_API_KEY")
                 if ci and (not anthropic_key) and openai_key:
-                    return ("openai", "gpt-4o-mini")
+                    return ("openai", "gpt-6-luna")
                 return (default_provider, default_model)
 
             selected_provider, selected_model = _select_provider_and_model(
@@ -161,8 +158,7 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
                     base_model = create_bedrock_chat_model(
                         model_id=bedrock_model_id,
                         session=config_manager.boto3_session,
-                        region=config_manager.aws_region,
-                        temperature=0.0
+                        region=config_manager.aws_region
                     )
                     log_student(f"SECURITY ROUTING: Using Bedrock SSO with direct model ID: {bedrock_model_id}")
                 else:
@@ -171,21 +167,19 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
                     fallback_provider = 'anthropic' if selected_provider.lower() == 'anthropic' else langchain_provider
                     base_model = init_chat_model(
                         model=selected_model,
-                        model_provider=fallback_provider,
-                        temperature=0.0
+                        model_provider=fallback_provider
                     )
                     log_student(f"SECURITY ROUTING: Using direct API for {selected_model} via {fallback_provider}")
             else:
                 # Use standard LangChain initialization for non-Bedrock providers
                 base_model = init_chat_model(
                     model=selected_model,
-                    model_provider=langchain_provider,
-                    temperature=0.0
+                    model_provider=langchain_provider
                 )
                 log_student(f"SECURITY ROUTING: Using {langchain_provider} for {selected_model}")
 
             # Use structured output for guaranteed PII format
-            # include_raw=True preserves usage metadata for cost tracking
+            # include_raw=True keeps the usage metadata that token and cost tracking need
             structured_model = base_model.with_structured_output(PIIDetectionResponse, include_raw=True)
 
             # Create system message with current instructions from LaunchDarkly
@@ -194,63 +188,14 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
 
             # Apply rate limiting before LLM call
             from agents.ld_agent_helpers import _rate_limit_llm_call
-            from launchdarkly_ai_server import create_handler
             _rate_limit_llm_call()
 
+            async def call_model():
+                response = await structured_model.ainvoke(full_messages)
+                return response["parsed"], response["raw"].usage_metadata
+
             ld_context = config_manager.build_context(user_id, user_context)
-
-            # The model call happens inside a handler so the SDK can time it and
-            # emit duration, token, and success/error events. response_box
-            # carries the structured response back out, since the handler
-            # contract only returns output text and usage.
-            response_box: dict = {}
-
-            async def call_model(cfg, handler_input, tool_handlers, variables, history):
-                if hasattr(structured_model, "ainvoke"):
-                    raw_response = await structured_model.ainvoke(full_messages)
-                else:
-                    raw_response = structured_model.invoke(full_messages)
-
-                response_box["response"] = raw_response
-
-                usage = {}
-                if (
-                    isinstance(raw_response, dict)
-                    and "raw" in raw_response
-                    and hasattr(raw_response["raw"], "usage_metadata")
-                ):
-                    # parse_usage reads these LangChain key names directly, and
-                    # derives the total itself rather than trusting total_tokens.
-                    usage = raw_response["raw"].usage_metadata or {}
-
-                return {"output": "", "usage": usage}
-
-            tracked = await config_manager.invoke(
-                agent_config,
-                ld_context,
-                create_handler((agent_config.provider_name, "agent"), call_model),
-                None,
-            )
-
-            response = response_box["response"]
-
-            # Extract parsed result from response
-            pii_result = response["parsed"] if isinstance(response, dict) else response
-
-            usage = tracked["usage"]
-            if usage["total"] > 0:
-                log_student(f"SECURITY PII DETECTION TOKENS: {usage['total']} tokens ({usage['input']} in, {usage['output']} out)")
-
-                # Track cost metric with AI Config metadata for experiment attribution
-                from utils.cost_calculator import calculate_cost
-                cost = calculate_cost(agent_config.model_name, usage['input'], usage['output'])
-                if cost > 0:
-                    # track_data ties this cost event to the generation it came
-                    # from via runId.
-                    config_manager.track_cost_metric(
-                        agent_config, ld_context, cost, "security-agent", tracked["track_data"]
-                    )
-                    log_student(f"COST TRACKING: ${cost:.6f} for {agent_config.model_name}")
+            pii_result = await config_manager.track(agent_config, ld_context, call_model)
 
             # Extract structured results
             detected = pii_result.detected
@@ -268,19 +213,16 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
                 "response": f"PII Analysis: detected={detected}, types={types}"
             }
             
-        except Exception:
+        except Exception as e:
+            log_student(f"SECURITY ERROR: {e}")
 
-            # A failure inside the model call already emitted
-            # $ld:ai:generation:error from the tracked invocation above, so
-            # there is nothing to record here. Failures before that point (config
-            # fetch, model construction) never started a generation.
-            
+            # Fail closed: an unchecked message may contain PII, so it never reaches the support agent.
             error_response = AIMessage(content="Security processing encountered an error.")
             return {
                 "messages": [error_response],
                 "detected": False,
                 "types": [],
-                "redacted": state.get("user_input", "")
+                "redacted": "[Message withheld: the security check failed]"
             }
     
     

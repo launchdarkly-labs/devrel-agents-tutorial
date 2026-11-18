@@ -49,6 +49,7 @@ docs/
 
 # Environment files
 .env
+.openalex_tokens.json
 
 # Logs
 logs/

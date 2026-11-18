@@ -117,35 +117,31 @@ def arxiv_search(query: str, max_results: int = 5) -> str:
         return f"ArXiv search error: {str(e)}"
 
 
-def semantic_scholar(query: str, num_results: int = 3) -> str:
+def openalex_search(query: str) -> str:
     """
-    Access Semantic Scholar citation database for academic research.
+    Search OpenAlex for scholarly works and citation counts.
 
-    MCP tool that searches the Semantic Scholar database for papers and citations.
-    Requires semanticscholar-MCP-Server to be installed. Disabled in CI safe mode.
-    Always request fewer than 5 results to avoid rate limiting.
+    MCP tool that searches the OpenAlex catalog of papers, books, and datasets.
+    Requires a one-time sign-in with tools_impl/openalex_auth.py. Disabled in CI safe mode.
 
     Args:
         query: Academic research query
-        num_results: Number of papers to return (default: 3, recommended: <5)
 
     Returns:
-        Formatted string with Semantic Scholar paper results including citations
+        Formatted string with OpenAlex results including citation counts
     """
     # Check if CI_SAFE_MODE is enabled (network-dependent tools disabled)
     if os.getenv("CI_SAFE_MODE", "").lower() in {"1", "true", "yes"}:
-        return "Semantic Scholar search is disabled in CI safe mode (network-dependent MCP tool)"
+        return "OpenAlex search is disabled in CI safe mode (network-dependent MCP tool)"
 
     try:
         from tools_impl.dynamic_tool_factory import _create_dynamic_mcp_tool
-        # Clamp num_results to recommended max
-        num_results = max(1, min(int(num_results), 5))
-        tool = _create_dynamic_mcp_tool("semantic_scholar", {})
+        tool = _create_dynamic_mcp_tool("openalex_search", {})
         if tool is None:
-            return "Semantic Scholar MCP tool not available. Install from: https://github.com/JackKuo666/semanticscholar-MCP-Server"
-        return tool._run(query=query, num_results=num_results)
+            return "OpenAlex MCP tool not available. Sign in with: uv run python tools_impl/openalex_auth.py"
+        return tool._run(query=query)
     except Exception as e:
-        return f"Semantic Scholar search error: {str(e)}"
+        return f"OpenAlex search error: {str(e)}"
 
 
 # Tool metadata for LaunchDarkly AI Config registration
@@ -155,5 +151,5 @@ __all__ = [
     "search_v2",
     "reranking",
     "arxiv_search",
-    "semantic_scholar"
+    "openalex_search"
 ]

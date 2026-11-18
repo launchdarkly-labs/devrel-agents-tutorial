@@ -1,7 +1,7 @@
-from langchain.tools import BaseTool
+from langchain.tools import BaseTool, StructuredTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.tools import load_mcp_tools
-from langchain_mcp_adapters.sessions import StdioConnection
+from tools_impl.openalex_auth import OPENALEX_MCP_URL, TOKEN_FILE, openalex_auth
 import asyncio
 from typing import List, Optional
 import logging
@@ -13,6 +13,18 @@ logger = logging.getLogger(__name__)
 # Process-lifetime singleton to prevent repeated MCP server startup
 _MCP_SINGLETON = None
 _MCP_LOCK = asyncio.Lock()
+
+
+def _query_only(search_works: BaseTool) -> BaseTool:
+    """OpenAlex search_works takes dozens of optional filters, and models fill in
+    every one, which the server rejects. Expose only the query."""
+    async def search(query: str) -> str:
+        return await search_works.ainvoke({"query": query, "limit": 5})
+    return StructuredTool.from_function(
+        coroutine=search,
+        name=search_works.name,
+        description="Search OpenAlex for scholarly works. Returns titles, authors, years, and citation counts.",
+    )
 
 class MCPResearchTools:
     """MCP Research Tools integration using real MCP servers with process lifetime reuse"""
@@ -47,19 +59,20 @@ class MCPResearchTools:
             arxiv_path = os.getenv('ARXIV_MCP_SERVER_PATH')
             if arxiv_path and os.path.exists(arxiv_path):
                 server_configs["arxiv"] = {
+                    "transport": "stdio",
                     "command": arxiv_path,
                     "args": ["--storage-path", "/tmp/arxiv-papers"]
                 }
                 print(f"  MCP: ArXiv server configured at {arxiv_path}")
             
-            # Semantic Scholar MCP Server - only add if path is configured
-            semantic_path = os.getenv('SEMANTIC_SCHOLAR_SERVER_PATH')
-            if semantic_path and os.path.exists(semantic_path):
-                server_configs["semanticscholar"] = {
-                    "command": "python",
-                    "args": [semantic_path]
+            # OpenAlex MCP Server - only add after running tools_impl/openalex_auth.py
+            if TOKEN_FILE.exists():
+                server_configs["openalex"] = {
+                    "transport": "streamable_http",
+                    "url": OPENALEX_MCP_URL,
+                    "auth": openalex_auth()
                 }
-                print(f"  MCP: Semantic Scholar server configured at {semantic_path}")
+                print("  MCP: OpenAlex server configured")
             
             # Try to initialize with available servers
             available_configs = {}
@@ -78,15 +91,8 @@ class MCPResearchTools:
                 # Load tools from each server individually
                 for server_name, config in available_configs.items():
                     try:
-                        # Create connection for this server - add transport to config
-                        connection_config = {
-                            **config,
-                            "transport": "stdio"
-                        }
-                        connection = StdioConnection(connection_config)
-                        
                         # Load tools from this server
-                        server_tools = await load_mcp_tools(None, connection=connection)
+                        server_tools = await load_mcp_tools(None, connection=config)
                         langchain_tools.extend(server_tools)
                         # print(f"DEBUG: Loaded {len(server_tools)} tools from {server_name} MCP server")
                         
@@ -106,12 +112,9 @@ class MCPResearchTools:
                         self.tools["arxiv_search"] = tool
                         # Store all ArXiv tools under their original names too
                         self.tools[tool.name] = tool
-                    # Map Semantic Scholar tools - use search_semantic_scholar as primary
-                    elif "semantic_scholar" in tool_name:
-                        if "search_semantic_scholar" in tool_name:
-                            self.tools["semantic_scholar"] = tool
-                        # Store all Semantic Scholar tools under their original names
-                        self.tools[tool.name] = tool
+                    # Map OpenAlex tools - use search_works as primary
+                    elif tool_name == "search_works":
+                        self.tools["openalex_search"] = _query_only(tool)
                         
                 # print(f"DEBUG: Initialized MCP tools: {list(self.tools.keys())}")
                 
@@ -170,9 +173,9 @@ async def get_research_tools() -> List[BaseTool]:
             tools.append(mcp_tools.get_tool("arxiv_search"))
             print(" Added ArXiv MCP tool")
             
-        if "semantic_scholar" in available_tools:
-            tools.append(mcp_tools.get_tool("semantic_scholar"))
-            print(" Added Semantic Scholar MCP tool")
+        if "openalex_search" in available_tools:
+            tools.append(mcp_tools.get_tool("openalex_search"))
+            print(" Added OpenAlex MCP tool")
         
         if not tools:
             print("No MCP research tools available. Install MCP servers: npm install -g @michaellatman/mcp-server-arxiv")

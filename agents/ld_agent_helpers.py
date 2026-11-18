@@ -10,7 +10,6 @@ import os
 from typing import List, Any, Tuple
 from langchain.chat_models import init_chat_model
 from langgraph.prebuilt import create_react_agent
-from launchdarkly_ai_server import create_handler
 from utils.logger import log_student
 from langchain_aws import ChatBedrockConverse
 import boto3
@@ -180,11 +179,6 @@ async def create_agent_with_fresh_config(
 
     Routes to Bedrock (AUTH_METHOD=sso) or direct API based on config.
     Returns: (agent, served_config, disabled, max_tool_calls)
-
-    The second element used to be a tracker. The current AI SDK has no tracker
-    object — telemetry is emitted by the call that runs the model — so this
-    returns the ServedConfig instead, which the caller passes to
-    config_manager.invoke().
     """
     if tools is None:
         tools = []
@@ -245,9 +239,12 @@ async def create_agent_with_fresh_config(
                 log_student(f"ROUTING: Using direct API for {agent_config.model_name} via {fallback_provider}")
         else:
             # Use standard LangChain initialization for non-Bedrock providers
+            # GPT-6 models accept function tools only on the Responses API
+            responses_api = {"use_responses_api": True} if langchain_provider == "openai" else {}
             llm = init_chat_model(
                 model=agent_config.model_name,
                 model_provider=langchain_provider,
+                **responses_api,
             )
             log_student(f"ROUTING: Using {langchain_provider} for {agent_config.model_name}")
 
@@ -338,88 +335,38 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                 initial_state = {"messages": agent_messages}
                 prev_message_count = len(agent_messages)
 
-                # The config fetched to build the agent is reused here. The old
-                # code called get_config a second time for tracking, which cost
-                # an extra evaluation per request and could attribute metrics to
-                # a different variation than the one that actually ran.
                 ld_context = config_manager.build_context(user_id, user_context)
 
                 # Apply rate limiting before LLM call
                 _rate_limit_llm_call()
 
-                # The agent runs inside a handler so the SDK can time the call
-                # and emit duration, token, and success/error events itself.
-                # There is no tracker to call manually any more. response_box
-                # carries the full LangGraph result back out, because the
-                # handler contract only returns output text and usage.
-                response_box: dict = {}
-
-                async def run_agent(cfg, handler_input, tool_handlers, variables, history):
+                async def run_agent():
                     log_student(f"EXECUTING AGENT with recursion_limit={effective_recursion_limit}")
                     try:
-                        result = await agent.ainvoke(
-                            initial_state, {"recursion_limit": effective_recursion_limit}
-                        )
+                        result = await agent.ainvoke(initial_state, {"recursion_limit": effective_recursion_limit})
                     except MaxToolCallsExceeded as exc:
-                        # Swallowed inside the handler on purpose. Letting it
-                        # escape would make the SDK emit a generation:error,
-                        # but hitting the configured tool ceiling is expected
-                        # behaviour, not a failure.
-                        response_box["limit_exceeded"] = exc
-                        return {"output": "", "usage": {}}
+                        # Returned, not raised: reaching the tool limit is expected and isn't a generation error.
+                        return exc, {}
 
-                    response_box["result"] = result
-
-                    # parse_usage accepts these LangChain key names directly.
-                    total_input = 0
-                    total_output = 0
+                    usage = {"input_tokens": 0, "output_tokens": 0}
                     for msg in result['messages'][prev_message_count:]:
-                        if hasattr(msg, 'usage_metadata') and msg.usage_metadata:
-                            total_input += msg.usage_metadata.get('input_tokens', 0)
-                            total_output += msg.usage_metadata.get('output_tokens', 0)
+                        if getattr(msg, 'usage_metadata', None):
+                            usage["input_tokens"] += msg.usage_metadata.get('input_tokens', 0)
+                            usage["output_tokens"] += msg.usage_metadata.get('output_tokens', 0)
+                    return result, usage
 
-                    return {
-                        "output": "",
-                        "usage": {
-                            "input_tokens": total_input,
-                            "output_tokens": total_output,
-                        },
-                    }
+                response = await config_manager.track(served, ld_context, run_agent, user_input)
 
-                tracked = await config_manager.invoke(
-                    served,
-                    ld_context,
-                    create_handler((served.provider_name, "agent"), run_agent),
-                    user_input,
-                )
-
-                if "limit_exceeded" in response_box:
-                    log_student(f"TOOL LIMIT REACHED: {response_box['limit_exceeded']}")
+                if isinstance(response, MaxToolCallsExceeded):
+                    log_student(f"TOOL LIMIT REACHED: {response}")
                     # Return friendly message explaining the limit
                     return {
                         "user_input": user_input,
-                        "response": f"I've reached the tool call limit for this request. {response_box['limit_exceeded']}",
+                        "response": f"I've reached the tool call limit for this request. {response}",
                         "tool_calls": [],
                         "tool_details": [],
                         "messages": []
                     }
-
-                response = response_box["result"]
-                usage = tracked["usage"]
-
-                if usage["total"] > 0:
-                    log_student(f"AGENT TOKENS: {usage['total']} tokens ({usage['input']} in, {usage['output']} out)")
-
-                    # Track cost metric with AI Config metadata for experiment attribution
-                    from utils.cost_calculator import calculate_cost
-                    cost = calculate_cost(served.model_name, usage['input'], usage['output'])
-                    if cost > 0:
-                        # track_data ties this cost event to the generation it
-                        # came from via runId.
-                        config_manager.track_cost_metric(
-                            served, ld_context, cost, config_key, tracked["track_data"]
-                        )
-                        log_student(f"COST TRACKING: ${cost:.6f} for {served.model_name}")
 
                 # Extract new messages
                 new_messages = response['messages'][prev_message_count:]
@@ -431,34 +378,28 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
 
                 for msg in new_messages:
                     # Get AI message content
-                    if hasattr(msg, 'content') and msg.content:
+                    if getattr(msg, 'type', None) == 'ai' and msg.content:
                         if isinstance(msg.content, list):
                             for content_item in msg.content:
-                                if hasattr(content_item, 'text'):
-                                    ai_response += content_item.text + " "
+                                if isinstance(content_item, dict) and content_item.get('type') == 'text':
+                                    ai_response += content_item.get('text', '') + " "
                         else:
                             ai_response += str(msg.content) + " "
 
                     # Track tool calls
                     if hasattr(msg, 'tool_calls') and msg.tool_calls:
                         for tool_call in msg.tool_calls:
-                            if hasattr(tool_call, 'name'):
-                                tool_name = tool_call.name
+                            tool_name = tool_call.get('name')
+                            if tool_name:
                                 tool_calls_summary.append(tool_name)
 
-                                # Try to extract details with search query
-                                if hasattr(tool_call, 'args'):
-                                    detail = {
-                                        "name": tool_name,
-                                        "args": tool_call.args
-                                    }
-                                    # Extract search query from args if present
-                                    if isinstance(tool_call.args, dict):
-                                        if 'query' in tool_call.args:
-                                            detail["search_query"] = tool_call.args['query']
-                                        elif 'search_query' in tool_call.args:
-                                            detail["search_query"] = tool_call.args['search_query']
-                                    tool_details.append(detail)
+                                args = tool_call.get('args') or {}
+                                detail = {"name": tool_name, "args": args}
+                                if 'query' in args:
+                                    detail["search_query"] = args['query']
+                                elif 'search_query' in args:
+                                    detail["search_query"] = args['search_query']
+                                tool_details.append(detail)
 
                 return {
                     "user_input": user_input,

@@ -53,7 +53,7 @@ def test_user_scenario(user_context: Dict[str, Any], expected_config: Dict[str, 
         
         # Check for MCP tools specifically
         support_tools = actual_config.get("support-agent", {}).get("tools", [])
-        has_mcp_tools = any(tool in support_tools for tool in ["arxiv_search", "semantic_scholar"])
+        has_mcp_tools = any(tool in support_tools for tool in ["arxiv_search", "openalex_search"])
 
         # Check security agent redaction behavior
         response_text = result.get("response", "")
@@ -216,9 +216,9 @@ def main():
             "user_context": {"country": "DE", "plan": "paid", "user_id": "user_eu_paid_001", "region": "europe"},
             "expected_config": {
                 "support_agent": {
-                    "model": "claude-sonnet-4-6",
+                    "model": "claude-sonnet-5-5",
                     "variation_key": "eu-paid",
-                    "tools": ["search_v1", "search_v2", "reranking", "arxiv_search", "semantic_scholar"]
+                    "tools": ["search_v1", "search_v2", "reranking", "arxiv_search", "openalex_search"]
                 }
             },
             "description": "EU Paid → Claude Sonnet + Full MCP Tools"
@@ -227,7 +227,7 @@ def main():
             "user_context": {"country": "DE", "plan": "free", "user_id": "user_eu_free_001", "region": "europe"},
             "expected_config": {
                 "support_agent": {
-                    "model": "claude-haiku-4-5-20251001",
+                    "model": "claude-haiku-5-5",
                     "variation_key": "eu-free", 
                     "tools": ["search_v1"]
                 }
@@ -238,23 +238,23 @@ def main():
             "user_context": {"country": "US", "plan": "paid", "user_id": "user_other_paid_001", "region": "other"},
             "expected_config": {
                 "support_agent": {
-                    "model": "chatgpt-4o-latest",
+                    "model": "gpt-6.2-sol",
                     "variation_key": "other-paid",
-                    "tools": ["search_v1", "search_v2", "reranking", "arxiv_search", "semantic_scholar"]
+                    "tools": ["search_v1", "search_v2", "reranking", "arxiv_search", "openalex_search"]
                 }
             },
-            "description": "US Paid → GPT-4 + Full MCP Tools"
+            "description": "US Paid → GPT-6.2 Sol + Full MCP Tools"
         },
         {
             "user_context": {"country": "US", "plan": "free", "user_id": "user_other_free_001", "region": "other"},
             "expected_config": {
                 "support_agent": {
-                    "model": "gpt-4o-mini-2024-07-18",
+                    "model": "gpt-6-luna",
                     "variation_key": "other-free",
                     "tools": ["search_v1"]
                 }
             },
-            "description": "US Free → GPT-4o Mini + Basic Tools"
+            "description": "US Free → GPT-6 Luna + Basic Tools"
         }
     ]
     

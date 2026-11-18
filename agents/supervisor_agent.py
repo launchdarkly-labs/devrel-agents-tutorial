@@ -124,9 +124,6 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
     support_agent = create_support_agent(support_config, config_manager)
     security_agent = create_security_agent(security_config, config_manager)
 
-    # There is no tracker to create any more. The supervisor's own LLM call
-    # emits its metrics through the tracked invocation in pii_prescreen_node.
-
     log_debug(f"SUPERVISOR INSTRUCTIONS: {supervisor_config.instructions}")
 
     def _select_provider_and_model(default_provider: str, default_model: str) -> tuple[str, str]:
@@ -141,7 +138,7 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
         openai_key = os.getenv("OPENAI_API_KEY")
 
         if ci and (not anthropic_key) and openai_key:
-            return ("openai", "gpt-4o-mini")
+            return ("openai", "gpt-6-luna")
         return (default_provider, default_model)
 
     async def pii_prescreen_node(state: SupervisorState):
@@ -176,25 +173,22 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
                     base_model = create_bedrock_chat_model(
                         model_id=selected_model,
                         session=config_manager.boto3_session,
-                        region=config_manager.aws_region,
-                        temperature=0.1
+                        region=config_manager.aws_region
                     )
                 else:
                     # Fall back to direct anthropic API
                     fallback_provider = 'anthropic' if selected_provider.lower() == 'anthropic' else langchain_provider
                     base_model = init_chat_model(
                         model=selected_model,
-                        model_provider=fallback_provider,
-                        temperature=0.1
+                        model_provider=fallback_provider
                     )
             else:
                 base_model = init_chat_model(
                     model=selected_model,
-                    model_provider=langchain_provider,
-                    temperature=0.1
+                    model_provider=langchain_provider
                 )
 
-            # Use include_raw=True to preserve usage metadata for cost tracking
+            # include_raw=True keeps the usage metadata that token and cost tracking need
             prescreen_model = base_model.with_structured_output(PIIPreScreening, include_raw=True)
 
             # Get pre-screening prompt from LaunchDarkly config
@@ -204,57 +198,14 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
 
             # Apply rate limiting before LLM call
             from agents.ld_agent_helpers import _rate_limit_llm_call
-            from launchdarkly_ai_server import create_handler
             _rate_limit_llm_call()
 
+            async def call_prescreen():
+                response = await prescreen_model.ainvoke([screening_message])
+                return response["parsed"], response["raw"].usage_metadata
+
             ld_context = config_manager.build_context(user_id, user_context)
-
-            # The model call happens inside a handler so the SDK can time it and
-            # emit duration, token, and success/error events. response_box
-            # carries the structured response back out, since the handler
-            # contract only returns output text and usage.
-            response_box: dict = {}
-
-            async def call_prescreen(cfg, handler_input, tool_handlers, variables, history):
-                raw_response = prescreen_model.invoke([screening_message])
-                response_box["response"] = raw_response
-
-                usage = {}
-                if (
-                    isinstance(raw_response, dict)
-                    and "raw" in raw_response
-                    and hasattr(raw_response["raw"], "usage_metadata")
-                ):
-                    # parse_usage reads these LangChain key names directly, and
-                    # derives the total itself rather than trusting total_tokens.
-                    usage = raw_response["raw"].usage_metadata or {}
-
-                return {"output": "", "usage": usage}
-
-            tracked = await config_manager.invoke(
-                supervisor_config,
-                ld_context,
-                create_handler((supervisor_config.provider_name, "agent"), call_prescreen),
-                None,
-            )
-
-            response = response_box["response"]
-            screening_result = response["parsed"] if isinstance(response, dict) else response
-
-            usage = tracked["usage"]
-            if usage["total"] > 0:
-                log_student(f"PII PRESCREEN TOKENS: {usage['total']} tokens ({usage['input']} in, {usage['output']} out)")
-
-                # Track cost metric with AI Config metadata for experiment attribution
-                from utils.cost_calculator import calculate_cost
-                cost = calculate_cost(supervisor_config.model_name, usage['input'], usage['output'])
-                if cost > 0:
-                    # track_data ties this cost event to the generation it came
-                    # from via runId.
-                    config_manager.track_cost_metric(
-                        supervisor_config, ld_context, cost, "supervisor-agent", tracked["track_data"]
-                    )
-                    log_student(f"COST TRACKING: ${cost:.6f} for {supervisor_config.model_name}")
+            screening_result = await config_manager.track(supervisor_config, ld_context, call_prescreen)
 
             # Log the intelligent decision
             log_student(f"ROUTING: {screening_result.recommended_route} ({screening_result.confidence:.1f}) - {screening_result.reasoning}")
@@ -268,7 +219,8 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             return {
                 "current_agent": screening_result.recommended_route,
                 "workflow_stage": next_stage,
-                "messages": [AIMessage(content=f"Routing decision: {screening_result.reasoning}")]
+                # The reasoning can quote the PII, so only the route goes into the conversation
+                "messages": [AIMessage(content=f"Routing decision: {screening_result.recommended_route}")]
             }
 
         except Exception as e:
@@ -409,9 +361,7 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             }
             
         except Exception as e:
-            # No tracker to call. The child agent that failed emits its own
-            # $ld:ai:generation:error against its own config, so recording a
-            # second error against the supervisor would double-count it.
+            # The failed agent already recorded its own generation error.
 
             return {
                 "messages": [AIMessage(content=f"Security agent error: {e}")],
@@ -520,9 +470,7 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
             }
             
         except Exception as e:
-            # No tracker to call. The child agent that failed emits its own
-            # $ld:ai:generation:error against its own config, so recording a
-            # second error against the supervisor would double-count it.
+            # The failed agent already recorded its own generation error.
 
             return {
                 "messages": [AIMessage(content=f"Support agent error: {e}")],

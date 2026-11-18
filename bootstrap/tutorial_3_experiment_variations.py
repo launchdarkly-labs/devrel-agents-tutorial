@@ -23,7 +23,7 @@ load_dotenv()
 class Tutorial3VariationBootstrap:
     def __init__(self):
         self.api_key = os.getenv('LD_API_KEY')
-        self.project_key = "multi-agent-chatbot"
+        self.project_key = os.getenv("LD_PROJECT_KEY") or "multi-agent-chatbot"
         self.base_url = "https://app.launchdarkly.com/api/v2"
 
         if not self.api_key:
@@ -72,13 +72,13 @@ class Tutorial3VariationBootstrap:
         variations = [
             {
                 "key": "claude-opus-treatment",
-                "name": "Claude Opus 4 Treatment",
+                "name": "Claude Opus 5.5 Treatment",
                 "instructions": "You are a helpful assistant that can search documentation and research papers. When search results are available, prioritize information from those results over your general knowledge to provide the most accurate and up-to-date responses. Use available tools to search the knowledge base and external research databases to answer questions accurately and comprehensively.",
                 "model": {
-                    "name": "claude-opus-4-7",
+                    "name": "claude-opus-5-5",
                     "provider": "anthropic"
                 },
-                "tools": ["search_v1", "search_v2", "reranking", "arxiv_search", "semantic_scholar"],
+                "tools": ["search_v1", "search_v2", "reranking", "arxiv_search", "openalex_search"],
                 "customParameters": {"max_tool_calls": 10}
             }
         ]
@@ -96,7 +96,7 @@ class Tutorial3VariationBootstrap:
             # Map model name to LaunchDarkly modelConfigKey
             model_name = variation["model"]["name"]
             model_config_key_map = {
-                "claude-opus-4-7": "Anthropic.claude-opus-4-7",
+                "claude-opus-5-5": "Anthropic.claude-opus-5-5",
             }
             
             model_config_key = model_config_key_map.get(model_name)
@@ -172,8 +172,8 @@ class Tutorial3VariationBootstrap:
         print("  ✅ support-agent AI Config exists")
 
         # Check if required tools exist
-        required_tools = ["search_v1", "search_v2", "reranking", "arxiv_search", "semantic_scholar"]
-        tools_url = f"{self.base_url}/projects/{self.project_key}/ai-configs/tools"
+        required_tools = ["search_v1", "search_v2", "reranking", "arxiv_search", "openalex_search"]
+        tools_url = f"{self.base_url}/projects/{self.project_key}/ai-tools"
         tools_response = requests.get(tools_url, headers=self.headers)
 
         if tools_response.status_code == 200:

@@ -6,11 +6,11 @@
 
 This tutorial was published in September 2025, before LaunchDarkly shipped several features that complement or supersede the targeting patterns shown below. The walkthrough still works, but for new builds you'll likely want to use:
 
-- [**Agent graphs**](https://launchdarkly.com/docs/home/ai-configs/agent-graphs) — externalize the multi-agent topology into a visual graph and combine it with the targeting rules in this tutorial
-- [**Online evaluations**](https://launchdarkly.com/docs/home/ai-configs/online-evaluations) and [**custom judges**](https://launchdarkly.com/docs/home/ai-configs/custom-judges) — score live traffic per variation, including per-segment quality scores
-- [**Prompt snippets**](https://launchdarkly.com/docs/home/ai-configs/snippets) — reusable prompt fragments so you can compose region-specific or tier-specific instructions without duplicating
+- [**Agent graphs**](https://launchdarkly.com/docs/home/agentcontrol/agent-graphs) — externalize the multi-agent topology into a visual graph and combine it with the targeting rules in this tutorial
+- [**Online evaluations**](https://launchdarkly.com/docs/home/agentcontrol/online-evaluations) and [**custom judges**](https://launchdarkly.com/docs/home/agentcontrol/judges) — score live traffic per variation, including per-segment quality scores
+- [**Prompt snippets**](https://launchdarkly.com/docs/home/agentcontrol/snippets) — reusable prompt fragments so you can compose region-specific or tier-specific instructions without duplicating
 
-LaunchDarkly is also rebranding **AI Configs** as **AgentControl**. Slugs, SDK names, and APIs are unchanged. For the current reference, see [AgentControl documentation](https://launchdarkly.com/docs/home/ai-configs).
+AI Configs is now **AgentControl**. Config keys, SDK names, and APIs are unchanged. For the current reference, see [AgentControl documentation](https://launchdarkly.com/docs/home/agentcontrol).
 
 </Callout>
 
@@ -20,13 +20,13 @@ Here's what nobody tells you about multi-agentic systems: the hard part isn't bu
 
 *Part 2 of 3 of the series: **Chaos to Clarity: Defensible AI Systems That Deliver on Your Goals***
 
-The solution? **LangGraph multi-agent workflows** controlled by **LaunchDarkly AI Config** targeting rules that intelligently route users: paid customers get premium tools and models, free users get cost-efficient alternatives, and EU users get Mistral for enhanced privacy. Use the **LaunchDarkly REST API** to set up a custom variant-targeting matrix in 2 minutes instead of spending hours setting it up manually.
+The solution? **LangGraph multi-agent workflows** controlled by **LaunchDarkly AgentControl** targeting rules that intelligently route users: paid customers get premium tools and models, free users get cost-efficient alternatives, and EU users get Mistral for enhanced privacy. Use the **LaunchDarkly REST API** to set up a custom variant-targeting matrix in 2 minutes instead of spending hours setting it up manually.
 
 ## What You'll Build Today
 
 In the next 18 minutes, you'll transform your basic multi-agent system with:
 
-- **Business Tiers & MCP Integration**: Free users get internal keyword search, Paid users get premium models with RAG, external research tools and expanded tool call limits, all controlled by [LaunchDarkly AI Configs](https://launchdarkly.com/docs/home/ai-configs)
+- **Business Tiers & MCP Integration**: Free users get internal keyword search, Paid users get premium models with RAG, external research tools and expanded tool call limits, all controlled by [LaunchDarkly AgentControl](https://launchdarkly.com/docs/home/agentcontrol)
 - **Geographic Targeting**: EU users automatically get Mistral and Claude models (enhanced privacy), other users get cost-optimized alternatives
 - **Smart Configuration**: Set up complex targeting matrices with [LaunchDarkly segments](https://launchdarkly.com/docs/home/flags/segments) and [targeting rules](https://launchdarkly.com/docs/home/flags/target)
 
@@ -34,7 +34,7 @@ In the next 18 minutes, you'll transform your basic multi-agent system with:
 
 ✅ **[Part 1 completed](README.md)** with exact naming:
 - Project: `multi-agent-chatbot`
-- AI Configs: `supervisor-agent`, `security-agent`, `support-agent`
+- AgentControl configs: `supervisor-agent`, `security-agent`, `support-agent`
 - Tools: `search_v2`, `reranking`
 - Variations: `supervisor-basic`, `pii-detector`, `rag-search-enhanced`
 
@@ -96,7 +96,7 @@ Finally, add the token to your environment:
 
 Your agents need more than just your internal documents. **Model Context Protocol (MCP)** connects AI assistants to live external data and they agents become orchestrators of your digital infrastructure, tapping into databases, communication tools, development platforms, and any system that matters to your business. MCP tools run as separate servers that your agents call when needed.
 
-> The [MCP Registry](https://registry.modelcontextprotocol.io) serves as a community-driven directory for discovering available MCP servers - like an app store for MCP tools. For this tutorial, we'll use manual installation since our specific academic research servers (ArXiv and Semantic Scholar) aren't yet available in the registry.
+> The [MCP Registry](https://registry.modelcontextprotocol.io) serves as a community-driven directory for discovering available MCP servers - like an app store for MCP tools. For this tutorial, we'll install ArXiv locally and connect to the hosted [OpenAlex MCP server](https://mcp.openalex.org).
 
 Install external research capabilities:
 
@@ -104,19 +104,21 @@ Install external research capabilities:
 # Install ArXiv MCP server for academic paper search
 uv tool install arxiv-mcp-server
 
-# Install Semantic Scholar MCP server for citation data
-git clone https://github.com/JackKuo666/semanticscholar-MCP-Server.git
+# Sign in to the OpenAlex MCP server for scholarly works and citations
+uv run python tools_impl/openalex_auth.py
 ```
+
+The OpenAlex sign-in opens your browser. Sign in with a free [OpenAlex](https://openalex.org) account, which includes about 500 searches a day. Your tokens are saved to `.openalex_tokens.json`, which is gitignored, and refresh automatically.
 
 **MCP Tools Added:**
 - **arxiv_search**: Live academic paper search (Paid users)
-- **semantic_scholar**: Citation and research database (Paid users)
+- **openalex_search**: Scholarly works with citation counts (Paid users)
 
 These tools integrate with your agents via LangGraph while LaunchDarkly controls which users get access to which tools.
 
 ## Step 2: Configure with API Automation (2 minutes)
 
-Now we'll use programmatic API automation to configure the complete setup. The [LaunchDarkly REST API](https://launchdarkly.com/docs/guides/api/rest-api) lets you manage tools, segments, and [AI Configs](https://launchdarkly.com/docs/home/ai-configs) programmatically. Instead of manually creating dozens of variations in the UI, this **configuration automation** makes REST API calls to provision user segments, AI Config variations, targeting rules, and tools. These are the same resources you could create manually through the LaunchDarkly dashboard. Your actual chat application continues running unchanged.
+Now we'll use programmatic API automation to configure the complete setup. The [LaunchDarkly REST API](https://launchdarkly.com/docs/guides/api/rest-api) lets you manage tools, segments, and [AgentControl configs](https://launchdarkly.com/docs/home/agentcontrol) programmatically. Instead of manually creating dozens of variations in the UI, this **configuration automation** makes REST API calls to provision user segments, config variations, targeting rules, and tools. These are the same resources you could create manually through the LaunchDarkly dashboard. Your actual chat application continues running unchanged.
 
 Configure your complete targeting matrix with one command:
 
@@ -126,9 +128,9 @@ uv run python create_configs.py
 ```
 
 **What the script creates**:
-- **3 new tools**: `search_v1` (basic search), `arxiv_search` and `semantic_scholar` (MCP research tools)
+- **3 new tools**: `search_v1` (basic search), `arxiv_search` and `openalex_search` (MCP research tools)
 - **4 combined user segments** with [geographic and tier targeting rules](https://launchdarkly.com/docs/home/flags/segments)
-- **Updated AI Configs**: `security-agent` with 2 new geographic variations
+- **Updated configs**: `security-agent` with 2 new geographic variations
 - **Complete [targeting rules](https://launchdarkly.com/docs/home/flags/target)** that route users to appropriate variations
 - **Intelligently reuses** existing resources: `supervisor-agent`, `search_v2`, and `reranking` tools from Part 1
 
@@ -161,10 +163,10 @@ def create_segment(self, project_key, segment_data):
 ```python
 # The script maps your YAML model IDs to LaunchDarkly's internal keys
 model_config_key_map = {
-    "claude-sonnet-4-6": "Anthropic.claude-sonnet-4-6",
-    "claude-haiku-4-5-20251001": "Anthropic.claude-haiku-4-5-20251001", 
-    "gpt-4o": "OpenAI.gpt-4o",
-    "gpt-4o-mini": "OpenAI.gpt-4o-mini-2024-07-18",
+    "claude-sonnet-5-5": "Anthropic.claude-sonnet-5-5",
+    "claude-haiku-5-5": "Anthropic.claude-haiku-5-5",
+    "gpt-6.2-sol": "OpenAI.gpt-6.2-sol",
+    "gpt-6-luna": "OpenAI.gpt-6-luna",
     "mistral-small-latest": "Mistral.mistral-small-latest"
 }
 ```
@@ -213,7 +215,7 @@ The script handles the complexity of LaunchDarkly's API while letting you define
 🔧 Creating tools...
   ✅ Tool 'search_v1' created
   ✅ Tool 'arxiv_search' created
-  ✅ Tool 'semantic_scholar' created
+  ✅ Tool 'openalex_search' created
 
 🤖 Ensuring AI configs exist...
 ✅ AI Config 'supervisor-agent' exists
@@ -246,9 +248,9 @@ The script handles the complexity of LaunchDarkly's API while letting you define
 
 **In your LaunchDarkly dashboard**, navigate to your `multi-agent-chatbot` project. You should see:
 
-1. **AI Configs tab**: Three configs (`supervisor-agent`, `security-agent`, `support-agent`) with new variations
-2. **Segments tab**: Four new segments (`eu-free`, `eu-paid`, `other-free`, `other-paid`) 
-3. **Tools tab**: Five tools total (including `search_v1`, `arxiv_search`, `semantic_scholar`)
+1. **Agents > Configs**: Three configs (`supervisor-agent`, `security-agent`, `support-agent`) with new variations
+2. **Segments**: Four new segments (`eu-free`, `eu-paid`, `other-free`, `other-paid`)
+3. **Agents > Library > Tools**: Five tools total (including `search_v1`, `arxiv_search`, `openalex_search`)
 
 **Troubleshooting Common Issues**:
 
@@ -281,7 +283,7 @@ Here's how the smart segmentation works:
 
 **By Business Tier:**
 - **Free users**: Basic search tools (`search_v1`)
-- **Paid users**: Full research capabilities (`search_v1`, `search_v2`, `reranking`, `arxiv_search`, `semantic_scholar`)
+- **Paid users**: Full research capabilities (`search_v1`, `search_v2`, `reranking`, `arxiv_search`, `openalex_search`)
 
 > **Note — AWS Bedrock inference region:** This geo-segmentation is fully correct for the **non-Bedrock** path (direct OpenAI / Anthropic / Mistral APIs) — EU vs non-EU routing of model, provider, and PII-redaction strictness works exactly as described. On the **AWS Bedrock** path it likewise segments the model and redaction correctly, but it **cannot segment the AWS inference region**: the region prefix is process-global (set once via `BEDROCK_INFERENCE_REGION`), so every Bedrock call in a deployment uses the same region regardless of the user's EU/non-EU segment. Making the inference region a per-variation property is a planned LaunchDarkly enhancement; until then, run separate deployments per region if EU-region inference is a hard requirement.
 
@@ -311,10 +313,10 @@ Testing Geographic + Business Tier Targeting Matrix
 🧪 TESTING: DE paid user (ID: user_eu_paid_001)
 ============================================================
 📊 SUPPORT AGENT:
-   Model: claude-sonnet-4-6 (expected: claude-sonnet-4-6) ✅
+   Model: claude-sonnet-5-5 (expected: claude-sonnet-5-5) ✅
    Variation: eu-paid (expected: eu-paid) ✅
-   Tools: ['search_v1', 'search_v2', 'reranking', 'arxiv_search', 'semantic_scholar'] ✅
-   Expected: ['search_v1', 'search_v2', 'reranking', 'arxiv_search', 'semantic_scholar']
+   Tools: ['search_v1', 'search_v2', 'reranking', 'arxiv_search', 'openalex_search'] ✅
+   Expected: ['search_v1', 'search_v2', 'reranking', 'arxiv_search', 'openalex_search']
    MCP Tools: Yes (should be: Yes) ✅
 
 📝 RESPONSE:
@@ -327,10 +329,10 @@ Testing Geographic + Business Tier Targeting Matrix
 🔄 Running: EU Free → Claude Haiku + Basic Tools
 [Similar detailed output for EU Free user...]
 
-🔄 Running: US Paid → GPT-4 + Full MCP Tools  
+🔄 Running: US Paid → GPT-6.2 Sol + Full MCP Tools
 [Similar detailed output for US Paid user...]
 
-🔄 Running: US Free → GPT-4o Mini + Basic Tools
+🔄 Running: US Free → GPT-6 Luna + Basic Tools
 [Similar detailed output for US Free user...]
 
 ======================================================================

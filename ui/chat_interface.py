@@ -236,7 +236,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Pink buttons
                 button.style.background = 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)';
                 button.style.color = 'white';
-            } else if (text === 'RAG + Reranking' || text === 'Semantic Scholar') {
+            } else if (text === 'RAG + Reranking' || text === 'OpenAlex Research') {
                 // Purple buttons
                 button.style.background = 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)';
                 button.style.color = 'white';
@@ -289,7 +289,7 @@ def process_tool_display(tools, tool_details):
     # Define mapping from actual tool names to display names
     mcp_name_mapping = {
         "search_papers": "arxiv_search",
-        "search_semantic_scholar": "semantic_scholar"
+        "search_works": "openalex_search"
     }
     
     for i, tool in enumerate(tools):
@@ -343,8 +343,8 @@ with col5:
         st.session_state.example_query = "Find recent ArXiv papers on machine learning from the last 6 months"
 
 with col6:
-    if st.button("Semantic Scholar", use_container_width=True):
-        st.session_state.example_query = "Search Semantic Scholar for research papers on artificial intelligence with citations"
+    if st.button("OpenAlex Research", use_container_width=True):
+        st.session_state.example_query = "Search OpenAlex for highly cited research papers on artificial intelligence"
 
 # Row 3: Advanced research
 col7 = st.columns(1)[0]
@@ -366,6 +366,33 @@ if "sanitized_messages" not in st.session_state:
 if "user_id" not in st.session_state:
     st.session_state.user_id = "user_other_paid_001"
 
+
+def send_feedback(message_id, feedback):
+    """Button callback, so a click on the newest response isn't lost on rerun."""
+    message = next(m for m in st.session_state.messages if m.get("message_id") == message_id)
+    try:
+        feedback_response = requests.post(
+            f"{API_BASE_URL}/feedback",
+            json={
+                "user_id": st.session_state.user_id,
+                "message_id": message_id,
+                "user_query": message.get("user_query", ""),
+                "ai_response": message["content"],
+                "feedback": feedback,
+                "variation_key": message["metadata"].get("primary_variation", "unknown"),
+                "model": message["metadata"].get("primary_model", "unknown"),
+                "tool_calls": message["metadata"].get("tools_used", []),
+                "source": "real_user",
+                "user_context": get_user_context(st.session_state.user_id, sample_users),
+            },
+        )
+        if feedback_response.status_code == 200:
+            message["feedback"] = feedback
+        else:
+            st.error("Failed to submit feedback")
+    except Exception as e:
+        st.error(f"Failed to submit feedback: {e}")
+
 # Display chat history
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
@@ -378,61 +405,13 @@ for message in st.session_state.messages:
                 
                 col1, col2, col3 = st.columns([1, 1, 8])
                 with col1:
-                    feedback_key = f"hist_thumbs_up_{message_id}"
-                    disabled = current_feedback == "positive"
-                    if st.button("👍", key=feedback_key, disabled=disabled, help="Helpful response"):
-                        # Send feedback for historical message
-                        try:
-                            feedback_response = requests.post(
-                                f"{API_BASE_URL}/feedback",
-                                json={
-                                    "user_id": st.session_state.user_id,
-                                    "message_id": message_id,
-                                    "user_query": message.get("user_query", ""),
-                                    "ai_response": message["content"],
-                                    "feedback": "positive",
-                                    "variation_key": message["metadata"].get("primary_variation", "unknown"),
-                                    "model": message["metadata"].get("primary_model", "unknown"),
-                                    "tool_calls": message["metadata"].get("tools_used", []),
-                                    "source": "real_user"
-                                }
-                            )
-                            if feedback_response.status_code == 200:
-                                message["feedback"] = "positive"
-                                st.rerun()
-                            else:
-                                st.error("Failed to submit feedback")
-                        except Exception as e:
-                            st.error(f"Failed to submit feedback: {e}")
-                
+                    st.button("👍", key=f"hist_thumbs_up_{message_id}", disabled=current_feedback == "positive",
+                              help="Helpful response", on_click=send_feedback, args=(message_id, "positive"))
+
                 with col2:
-                    feedback_key = f"hist_thumbs_down_{message_id}"
-                    disabled = current_feedback == "negative"
-                    if st.button("👎", key=feedback_key, disabled=disabled, help="Not helpful"):
-                        # Send feedback for historical message
-                        try:
-                            feedback_response = requests.post(
-                                f"{API_BASE_URL}/feedback",
-                                json={
-                                    "user_id": st.session_state.user_id,
-                                    "message_id": message_id,
-                                    "user_query": message.get("user_query", ""),
-                                    "ai_response": message["content"],
-                                    "feedback": "negative",
-                                    "variation_key": message["metadata"].get("primary_variation", "unknown"),
-                                    "model": message["metadata"].get("primary_model", "unknown"),
-                                    "tool_calls": message["metadata"].get("tools_used", []),
-                                    "source": "real_user"
-                                }
-                            )
-                            if feedback_response.status_code == 200:
-                                message["feedback"] = "negative"
-                                st.rerun()
-                            else:
-                                st.error("Failed to submit feedback")
-                        except Exception as e:
-                            st.error(f"Failed to submit feedback: {e}")
-                            
+                    st.button("👎", key=f"hist_thumbs_down_{message_id}", disabled=current_feedback == "negative",
+                              help="Not helpful", on_click=send_feedback, args=(message_id, "negative"))
+
                 # Show current feedback status
                 if current_feedback:
                     feedback_emoji = "👍" if current_feedback == "positive" else "👎"
@@ -624,69 +603,15 @@ if prompt:
                         # Show feedback options
                         st.markdown("**Was this response helpful?**")
                         col1, col2, col3 = st.columns([1, 1, 8])
-                        
+
                         with col1:
-                            if st.button("👍 Helpful", key=f"new_thumbs_up_{message_id}", help="This response was helpful"):
-                                # Send positive feedback to backend
-                                try:
-                                    feedback_response = requests.post(
-                                        f"{API_BASE_URL}/feedback",
-                                        json={
-                                            "user_id": st.session_state.user_id,
-                                            "message_id": message_id,
-                                            "user_query": prompt,
-                                            "ai_response": data["response"],
-                                            "feedback": "positive",
-                                            "variation_key": data["variation_key"],
-                                            "model": data["model"],
-                                            "tool_calls": data["tool_calls"],
-                                            "source": "real_user"
-                                        }
-                                    )
-                                    if feedback_response.status_code == 200:
-                                        # Update message in session state immediately
-                                        for msg in st.session_state.messages:
-                                            if msg.get("message_id") == message_id:
-                                                msg["feedback"] = "positive"
-                                                break
-                                        # Force a rerun to update UI immediately
-                                        st.rerun()
-                                    else:
-                                        st.error("Failed to submit feedback")
-                                except Exception as e:
-                                    st.error(f"Failed to submit feedback: {e}")
-                        
+                            st.button("👍 Helpful", key=f"new_thumbs_up_{message_id}", help="This response was helpful",
+                                      on_click=send_feedback, args=(message_id, "positive"))
+
                         with col2:
-                            if st.button("👎 Not helpful", key=f"new_thumbs_down_{message_id}", help="This response was not helpful"):
-                                # Send negative feedback to backend
-                                try:
-                                    feedback_response = requests.post(
-                                        f"{API_BASE_URL}/feedback",
-                                        json={
-                                            "user_id": st.session_state.user_id,
-                                            "message_id": message_id,
-                                            "user_query": prompt,
-                                            "ai_response": data["response"],
-                                            "feedback": "negative",
-                                            "variation_key": data["variation_key"],
-                                            "model": data["model"],
-                                            "tool_calls": data["tool_calls"],
-                                            "source": "real_user"
-                                        }
-                                    )
-                                    if feedback_response.status_code == 200:
-                                        # Update message in session state immediately
-                                        for msg in st.session_state.messages:
-                                            if msg.get("message_id") == message_id:
-                                                msg["feedback"] = "negative"
-                                                break
-                                        # Force a rerun to update UI immediately
-                                        st.rerun()
-                                    else:
-                                        st.error("Failed to submit feedback")
-                                except Exception as e:
-                                    st.error(f"Failed to submit feedback: {e}")
-                    
+                            st.button("👎 Not helpful", key=f"new_thumbs_down_{message_id}", help="This response was not helpful",
+                                      on_click=send_feedback, args=(message_id, "negative"))
+
                 with st.expander("Workflow Details"):
                     if "agent_configurations" in data and data["agent_configurations"]:
                         # Display each agent's configuration

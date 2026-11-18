@@ -9,7 +9,7 @@
     "security-agent": {
       "enabled": true,
       "model": {
-        "name": "claude-haiku-4-5-20251001",
+        "name": "claude-haiku-5-5",
         "parameters": {}
       },
       "provider": {
@@ -20,7 +20,7 @@
     "supervisor-agent": {
       "enabled": true,
       "model": {
-        "name": "claude-sonnet-4-6",
+        "name": "claude-haiku-5-5",
         "parameters": {}
       },
       "provider": {
@@ -31,7 +31,7 @@
     "support-agent": {
       "enabled": true,
       "model": {
-        "name": "claude-haiku-4-5-20251001",
+        "name": "claude-haiku-5-5",
         "parameters": {
           "tools": [
             {

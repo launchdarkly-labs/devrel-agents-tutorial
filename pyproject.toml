@@ -13,9 +13,8 @@ dependencies = [
     "uvicorn[standard]>=0.24.0",
     "pydantic>=2.0.0",
     # LaunchDarkly
-    "launchdarkly-server-sdk>=9.0.0",
-    # The AI SDK is in open beta, so these are pinned exactly.
-    "launchdarkly-ai-server==0.2.4",
+    "launchdarkly-server-sdk>=9.18.4",
+    "launchdarkly-ai-server>=1.1.0",
     # AWS Bedrock Integration
     "langchain-aws>=0.2.0",
     "boto3>=1.35.0",
@@ -37,7 +36,6 @@ dependencies = [
     "langchain-mcp-adapters>=0.1.9",
     "beautifulsoup4>=4.13.5",
     "mcp>=1.13.1",
-    "semanticscholar>=0.10.0",
     "rank-bm25>=0.2.2",
     "langchain-mistralai>=0.2.12",
 ]

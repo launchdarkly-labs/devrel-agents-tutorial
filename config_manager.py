@@ -9,36 +9,31 @@ from pathlib import Path
 from typing import Any, Optional
 
 from launchdarkly_ai_server import (
+    create_handler,
     execute_and_track,
     get_client,
     init_client,
     inspect_config,
     parse_ai_config,
     shutdown,
+    to_ld_context,
 )
 from launchdarkly_ai_server.tracking import parse_usage
 from dotenv import load_dotenv
+from utils.cost_calculator import calculate_cost
 from utils.logger import log_student, log_debug
 import boto3
 
 load_dotenv()
 
-# The legacy SDK emitted these; launchdarkly-ai-server has no feedback API, so
-# this module emits them directly. Keep the keys byte-identical or the existing
-# feedback metrics in LaunchDarkly stop receiving data.
+# The AI SDK has no feedback API, so these are sent as custom events. LaunchDarkly's
+# built-in feedback metrics listen for these exact keys.
 FEEDBACK_POSITIVE_EVENT = "$ld:ai:feedback:user:positive"
 FEEDBACK_NEGATIVE_EVENT = "$ld:ai:feedback:user:negative"
 
-
 @dataclass
 class ServedConfig:
-    """One resolved AgentControl config, from LaunchDarkly or from local defaults.
-
-    The current SDK returns plain dicts rather than config objects, and it has no
-    `default=` parameter, so the fallback that the SDK used to apply now lives in
-    `ConfigManager.get_config`. This wrapper gives the agents one stable surface
-    over both sources.
-    """
+    """One resolved AgentControl config, from LaunchDarkly or from local defaults."""
 
     key: str
     config: dict[str, Any]
@@ -67,11 +62,7 @@ class ServedConfig:
 
     @property
     def custom(self) -> dict[str, Any]:
-        """Custom model params (e.g. max_tool_calls).
-
-        parse_ai_config passes model.custom through untouched, so this keeps
-        working the same way the legacy to_dict()['model']['custom'] did.
-        """
+        """Custom model params (e.g. max_tool_calls)."""
         return (self.config.get("model") or {}).get("custom") or {}
 
     @property
@@ -80,12 +71,7 @@ class ServedConfig:
 
     @property
     def variation_key(self) -> str:
-        """The served variation, read from public metadata.
-
-        The legacy code reached into `tracker._variation_key`. The SDK now
-        returns this in the variation metadata, so no private access is needed.
-        Local fallbacks have no variation, hence 'fallback'.
-        """
+        """The served variation. Local fallbacks have no variation, hence 'fallback'."""
         if self.from_fallback:
             return "fallback"
         return self.meta.get("variationKey") or "unknown"
@@ -118,13 +104,19 @@ class FixedConfigManager:
         # Initialize AWS Bedrock session for SSO authentication
         self._initialize_bedrock_session()
 
-    async def _ensure_client(self):
-        """Initialize the shared LaunchDarkly client once.
+    async def _ensure_client(self) -> bool:
+        """Initialize the shared LaunchDarkly client. init_client is idempotent, so
+        this is safe to await on every request.
 
-        init_client is idempotent, so this is safe to await on every request. The
-        key is passed explicitly so this app keeps using LD_SDK_KEY.
+        Returns False if the client can't connect, so get_config serves the
+        local defaults.
         """
-        await init_client({"sdkKey": self.sdk_key})
+        try:
+            await init_client({"sdkKey": self.sdk_key})
+            return True
+        except RuntimeError as e:
+            log_student(f"CONFIG MANAGER: LaunchDarkly client unavailable: {e}")
+            return False
 
     def _initialize_bedrock_session(self):
         """Initialize AWS Bedrock session if AUTH_METHOD=sso"""
@@ -207,23 +199,11 @@ class FixedConfigManager:
 
     @staticmethod
     def _normalize_tools(config_data: dict[str, Any], config_key: str) -> dict[str, Any]:
-        """Move a top-level `tools` array to where the live payload keeps it.
+        """Move a top-level `tools` array to `model.parameters.tools`.
 
-        LaunchDarkly serves tools inside `model.parameters.tools` as an array,
-        with no top-level `tools` key. ld-aic reads them from there but writes
-        them to the top level of `.ai_config_defaults.json`, so the fallback file
-        does not match the shape the app actually receives.
-
-        That divergence matters twice. This app reads its tools from
-        `model.parameters` (see dynamic_tool_factory and agent_service), so a
-        top-level array would leave the agents with no tools whenever the
-        fallback is used. And the SDK validates a top-level `tools` key as an
-        object, so leaving the array there fails parsing for a key the live
-        payload never even sends.
-
-        Moving it makes the fallback behave exactly like a served config.
-
-        Drop this once ld-aic writes tools under model.parameters.
+        ld-aic writes tools at the top level of `.ai_config_defaults.json`, but
+        LaunchDarkly serves them in `model.parameters.tools`, which is where the
+        agents read them. The SDK also rejects a top-level `tools` array.
         """
         tools = config_data.pop("tools", None)
         if not isinstance(tools, list):
@@ -303,15 +283,11 @@ class FixedConfigManager:
         1. Try LaunchDarkly (live config with targeting)
         2. If that fails, use .ai_config_defaults.json (validated production defaults)
         3. If config not in defaults file, raise helpful error
-
-        The current SDK has no `default=` parameter, so step 2 is applied here
-        rather than inside the SDK. inspect_config never raises and returns
-        enabled=False on any failure, which is what makes that check possible.
         """
         log_debug(f"CONFIG MANAGER: Getting config for user_id={user_id}, config_key={config_key}")
         log_debug(f"CONFIG MANAGER: User context: {user_context}")
 
-        await self._ensure_client()
+        client_ready = await self._ensure_client()
 
         # Build context using centralized method
         ld_user_context = self.build_context(user_id, user_context)
@@ -320,7 +296,11 @@ class FixedConfigManager:
         ai_config_key = config_key or os.getenv('LAUNCHDARKLY_AI_CONFIG_KEY', 'support-agent')
         log_debug(f"CONFIG MANAGER: Using AI config key: {ai_config_key}")
 
-        inspected = await inspect_config(ai_config_key, ld_user_context)
+        inspected = (
+            await inspect_config(ai_config_key, ld_user_context)
+            if client_ready
+            else {"enabled": False, "config": None, "meta": None}
+        )
 
         if inspected["enabled"] and inspected["config"]:
             served = ServedConfig(
@@ -346,37 +326,45 @@ class FixedConfigManager:
         log_debug(f"CONFIG MANAGER: Fallback model: {served.model_name}")
         return served
 
-    async def invoke(self, served: ServedConfig, context: dict, handler, user_input: str, **kwargs):
-        """Run a model call through the SDK so AI metrics are recorded.
+    async def track(self, served: ServedConfig, context: dict, call, user_input: str = None):
+        """Run a model call and record it in LaunchDarkly.
 
-        Metrics are attributed to a served variation, so a local fallback has
-        nothing to attribute to. In that case the handler is called directly and
-        no $ld:ai:* events are emitted.
+        `call` is an async function that returns (result, usage), with usage in
+        LangChain's usage_metadata shape. The SDK records duration, tokens, and
+        success or error. The cost goes out as the ai_cost_per_request event
+        that Tutorial 3's experiments measure. A local fallback has no variation
+        for the SDK metrics, so only the cost is sent.
         """
-        if served.from_fallback:
-            raw = await handler(
-                served.config,
-                user_input,
-                kwargs.get("tool_handlers"),
-                kwargs.get("variables"),
-                kwargs.get("history"),
-            )
-            # Normalized to execute_and_track's shape so callers don't branch.
-            return {
-                "usage": parse_usage(raw.get("usage") or {}),
-                "response": raw.get("output") or "",
-                "track_data": served.track_data(),
-            }
+        box = {}
 
-        return await execute_and_track(
-            config_key=served.key,
-            config=served.config,
-            meta=served.meta,
-            user_context=context,
-            handler=handler,
-            user_input=user_input,
-            **kwargs,
-        )
+        async def handler(*_):
+            box["result"], usage = await call()
+            return {"output": "", "usage": usage or {}}
+
+        if served.from_fallback:
+            usage = parse_usage((await handler())["usage"])
+            track_data = served.track_data()
+        else:
+            tracked = await execute_and_track(
+                config_key=served.key,
+                config=served.config,
+                meta=served.meta,
+                user_context=context,
+                handler=create_handler((served.provider_name, "agent"), handler),
+                user_input=user_input,
+            )
+            usage, track_data = tracked["usage"], tracked["track_data"]
+
+        if usage["total"] > 0:
+            log_student(f"{served.key.upper()} TOKENS: {usage['total']} ({usage['input']} in, {usage['output']} out)")
+            cost = calculate_cost(served.model_name, usage["input"], usage["output"])
+            if cost > 0:
+                try:
+                    self._track("ai_cost_per_request", context, track_data, cost)
+                except Exception as e:
+                    log_debug(f"COST TRACKING ERROR: {e}")
+
+        return box["result"]
 
     def _flush(self):
         """Flush pending events if the client is up.
@@ -398,51 +386,22 @@ class FixedConfigManager:
         """Flush metrics to LaunchDarkly"""
         self._flush()
 
-    def track_cost_metric(self, served: ServedConfig, context, cost, config_key=None, track_data=None):
-        """Track cost metric with AI Config metadata for experiment attribution.
-
-        This ensures cost events include trackJsonData so they're properly
-        associated with AI Config variations in experiments, matching the
-        pattern used by token and feedback tracking.
-
-        Args:
-            served: The ServedConfig this cost came from
-            context: LaunchDarkly context
-            cost: Cost value in dollars
-            config_key: Unused; retained so existing call sites keep working.
-                        The key now comes from `served`.
-            track_data: The track_data returned by a tracked invocation. Preferred
-                        when available, because it carries the runId that ties this
-                        cost event to the specific generation it came from.
-        """
-        try:
-            client = get_client()
-            client.track("ai_cost_per_request", context, track_data or served.track_data(), cost)
-            client.flush()
-
-        except Exception as e:
-            log_debug(f"COST TRACKING ERROR: {e}")
-            # Fallback to basic tracking if metadata extraction fails
-            client = get_client()
-            client.track("ai_cost_per_request", context, None, cost)
-            client.flush()
+    @staticmethod
+    def _track(event: str, context: dict, data, value):
+        """Send a custom event. LDClient.track needs a Context, not a dict."""
+        client = get_client()
+        client.track(event, to_ld_context(client, context), data, value)
+        client.flush()
 
     def track_feedback(self, served: Optional[ServedConfig], context, thumbs_up: bool) -> bool:
-        """Track user feedback with LaunchDarkly.
-
-        launchdarkly-ai-server has no feedback API, so this emits the same events
-        the legacy tracker did. The metric data carries the served variation so
-        feedback stays attributable to it.
-        """
+        """Track user feedback with LaunchDarkly, attributed to the served variation."""
         if not served:
             return False
 
         try:
             event = FEEDBACK_POSITIVE_EVENT if thumbs_up else FEEDBACK_NEGATIVE_EVENT
-            client = get_client()
-            client.track(event, context, served.track_data(), 1)
+            self._track(event, context, served.track_data(), 1)
             log_student(f"FEEDBACK TRACKED: {'👍 Positive' if thumbs_up else '👎 Negative'}")
-            client.flush()
             return True
         except Exception as e:
             log_debug(f"FEEDBACK TRACKING ERROR: {e}")

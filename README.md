@@ -1,10 +1,10 @@
 ---
 slug: /tutorials/agents-langgraph
-title: "Build a LangGraph Multi-Agent system in 20 Minutes with LaunchDarkly AI Configs"
-og:title: "Build a LangGraph Multi-Agent system in 20 Minutes with LaunchDarkly AI Configs"
-description: Build a multi-agent system with dynamic configuration in 20 minutes using LangGraph multi-agent workflows, RAG search, and LaunchDarkly AI Configs.
-og:description: Build a multi-agent system with dynamic configuration in 20 minutes using LangGraph multi-agent workflows, RAG search, and LaunchDarkly AI Configs.
-keywords: tutorial, langgraph, multi-agent, AI configs, RAG, agents, python
+title: "Build a LangGraph Multi-Agent system in 20 Minutes with LaunchDarkly AgentControl"
+og:title: "Build a LangGraph Multi-Agent system in 20 Minutes with LaunchDarkly AgentControl"
+description: Build a multi-agent system with dynamic configuration in 20 minutes using LangGraph multi-agent workflows, RAG search, and LaunchDarkly AgentControl.
+og:description: Build a multi-agent system with dynamic configuration in 20 minutes using LangGraph multi-agent workflows, RAG search, and LaunchDarkly AgentControl.
+keywords: tutorial, langgraph, multi-agent, AgentControl, RAG, agents, python
 publishedDate: 2025-09-08
 categories:
   - AI
@@ -25,18 +25,18 @@ src="../../../assets/images/authors/scarlettattensil.png"
 
 This tutorial was published in September 2025, before LaunchDarkly shipped several features that supersede or complement the patterns shown below. The walkthrough still works, but for new builds you'll likely want to use:
 
-- [**Agent graphs**](/home/ai-configs/agent-graphs) — externalize the multi-agent topology into a visual graph with per-node monitoring (the newer take on this tutorial's pattern)
-- [**Online evaluations**](/home/ai-configs/online-evaluations) and [**custom judges**](/home/ai-configs/custom-judges) — built-in and user-defined LLM-as-a-judge scoring on live traffic
-- [**LLM Playground**](/home/ai-configs/playground) — compare variations side-by-side before promoting
-- [**Offline evaluations + datasets**](/home/ai-configs/offline-evaluations) — regression-test variations against a saved reference set
+- [**Agent graphs**](/home/agentcontrol/agent-graphs) — externalize the multi-agent topology into a visual graph with per-node monitoring (the newer take on this tutorial's pattern)
+- [**Online evaluations**](/home/agentcontrol/online-evaluations) and [**custom judges**](/home/agentcontrol/judges) — built-in and user-defined LLM-as-a-judge scoring on live traffic
+- [**LLM Playground**](/home/agentcontrol/playground) — compare variations side-by-side before promoting
+- [**Offline evaluations + datasets**](/home/agentcontrol/offline-evaluations) — regression-test variations against a saved reference set
 
-LaunchDarkly is also rebranding **AI Configs** as **AgentControl**. Slugs, SDK names, and APIs are unchanged. For the current reference, see [AgentControl documentation](/home/ai-configs).
+AI Configs is now **AgentControl**. Config keys, SDK names, and APIs are unchanged. For the current reference, see [AgentControl documentation](/home/agentcontrol).
 
 </Callout>
 
 ## Overview
 
-Build a working multi-agent system with dynamic configuration in 20 minutes using LangGraph multi-agent workflows, RAG search, and LaunchDarkly AI Configs.
+Build a working multi-agent system with dynamic configuration in 20 minutes using LangGraph multi-agent workflows, RAG search, and LaunchDarkly AgentControl.
 
 *Part 1 of 3 of the series: **Chaos to Clarity: Defensible AI Systems That Deliver on Your Goals***
 
@@ -44,7 +44,7 @@ You've been there: your AI chatbot works great in testing, then production hits 
 
 The teams shipping faster? They control AI behavior dynamically instead of hardcoding everything.
 
-This series shows you how to build **LangGraph multi-agent workflows** that get their intelligence from **RAG** search through your business documents. These workflows are enhanced with **MCP tools** for live external data and controlled through **LaunchDarkly AI Configs**—all without needing to deploy code changes.
+This series shows you how to build **LangGraph multi-agent workflows** that get their intelligence from **RAG** search through your business documents. These workflows are enhanced with **MCP tools** for live external data and controlled through **LaunchDarkly AgentControl**—all without needing to deploy code changes.
 
 ## What This Series Covers
 
@@ -118,7 +118,7 @@ First, you need to get your LaunchDarkly SDK key by creating a project:
 
 🎯 **Use exact names for Part 2 compatibility**:
 - Project: `multi-agent-chatbot`
-- AI Configs: `supervisor-agent`, `security-agent`, `support-agent`
+- AgentControl configs: `supervisor-agent`, `security-agent`, `support-agent`
 - Tools: `search_v2`, `reranking`
 - Variations: `supervisor-basic`, `pii-detector`, `rag-search-enhanced`
 
@@ -285,13 +285,13 @@ This builds your **RAG** (Retrieval-Augmented Generation) foundation using **Ope
 
 Define the search tools your agents will use.
 
-In the LaunchDarkly app sidebar, click **Library** in the AI section. On the following screen, click the **Tools** tab, then **Create tool**.
+In the LaunchDarkly app sidebar, click **Agents**, then **Library**. On the following screen, click the **Tools** tab, then **Create tool**.
 
 <br />
 
 <div align="center">
 
-<Frame caption="AI Library section in the LaunchDarkly dashboard sidebar.">
+<Frame caption="Library in the AgentControl menu.">
 ![Library](screenshots/library_small.png)
 </Frame>
 
@@ -375,27 +375,27 @@ The `reranking` tool takes search results from `search_v2` and reorders them usi
 
 ## Step 5: Create Your AI Agents in LaunchDarkly (5 minutes)
 
-Now that you've created the tools your agents will use, it's time to configure the agents themselves. Each agent will have its own AI Config that defines its behavior, model selection, and specific instructions.
+Now that you've created the tools your agents will use, it's time to configure the agents themselves. Each agent will have its own AgentControl config that defines its behavior, model selection, and specific instructions.
 
-Create LaunchDarkly AI Configs to control your **LangGraph** multi-agent system dynamically. **LangGraph** is LangChain's framework for building stateful, multi-**agent** applications that maintain conversation state across **agent** interactions. Your **LangGraph** architecture enables sophisticated workflows where **agents** collaborate and pass context between each other.
+Create LaunchDarkly AgentControl configs to control your **LangGraph** multi-agent system dynamically. **LangGraph** is LangChain's framework for building stateful, multi-**agent** applications that maintain conversation state across **agent** interactions. Your **LangGraph** architecture enables sophisticated workflows where **agents** collaborate and pass context between each other.
 
 ### Create the Supervisor Agent
 
-1. In the LaunchDarkly dashboard sidebar, navigate to **AI Configs** and click **Create AI Config**
-2. Select `🤖 Agent-based`
+1. In the LaunchDarkly sidebar, click **Agents**, then **Configs**, then **Create config**
+2. Select **Agent**
 
 <br />
 
 <div align="center">
 
-<Frame caption="Selecting the Agent-based configuration type.">
+<Frame caption="Selecting Agent mode.">
 ![Agent Based](screenshots/agent-based_small.png)
 </Frame>
 
 </div>
 
-3. Name your AI Config `supervisor-agent`. This will be the key you reference in your code.
-4. Configure the following fields in the AI Config form:
+3. Name your config `supervisor-agent`. This will be the key you reference in your code.
+4. Configure the following fields in the config form:
 
 > 
 > **variation:** 
@@ -408,7 +408,7 @@ Create LaunchDarkly AI Configs to control your **LangGraph** multi-agent system 
 > Anthropic
 > ``` 
 > ```
-> claude-sonnet-4-6
+> claude-haiku-5-5
 > ```
 >
 > **Goal or task:** 
@@ -437,7 +437,7 @@ Create LaunchDarkly AI Configs to control your **LangGraph** multi-agent system 
 >   Analyze this user input and recommend the optimal route:
 >    ```
 
-Click **Review and save**. Now enable your AI Config by switching to the **Targeting** tab and editing the default rule to serve the variation you just created:
+Click **Review and save**. Now enable your config by switching to the **Targeting** tab and editing the default rule to serve the variation you just created:
 
 <br />
 
@@ -450,12 +450,12 @@ Click **Review and save**. Now enable your AI Config by switching to the **Targe
 </div>
 
 Click **Edit** on the Default rule, change it to serve your `supervisor-basic` variation, and save with a note like "Enabling new agent config". Then type "Production" to confirm.
-The supervisor **agent** demonstrates **LangGraph** orchestration by routing requests based on content analysis rather than rigid rules. **LangGraph** enables this **agent** to maintain conversation context and make intelligent routing decisions that adapt to user needs and LaunchDarkly AI Config parameters.
+The supervisor **agent** demonstrates **LangGraph** orchestration by routing requests based on content analysis rather than rigid rules. **LangGraph** enables this **agent** to maintain conversation context and make intelligent routing decisions that adapt to user needs and AgentControl config parameters.
 
 
 ### Create the Security Agent
 
-Similarly, create another AI Config called `security-agent`
+Similarly, create another config called `security-agent`
 
 > 
 > **variation:** 
@@ -468,7 +468,7 @@ Similarly, create another AI Config called `security-agent`
 > Anthropic
 > ``` 
 > ```
-> claude-sonnet-4-6
+> claude-haiku-5-5
 > ```
 >
 > **Goal or task:** 
@@ -495,7 +495,7 @@ Finally, create `support-agent`
 > Anthropic
 > ``` 
 > ```
-> claude-sonnet-4-6
+> claude-haiku-5-5
 > ```
 >
 > → **Add parameters**
@@ -517,7 +517,7 @@ This **agent** combines **LangGraph** workflow management with your **RAG** tool
 
 **Remember to switch to the Targeting tab and enable this agent the same way - edit the default rule to serve your `rag-search-enhanced` variation and save it.**
 
-When you are done, you should have three enabled AI Config Agents as shown below.
+When you are done, you should have three enabled agent configs as shown below.
 
 <br />
 
@@ -581,14 +581,14 @@ Experience the power of dynamic configuration by making real-time changes to you
 
 ### Feature 1: Switch Models Instantly
 
-1. Navigate to **AI Configs** in the LaunchDarkly sidebar
+1. In the LaunchDarkly sidebar, click **Agents**, then **Configs**
 2. Click on `support-agent`
 3. In the **Model configuration** section, change from:
-   - **Current:** Anthropic → claude-sonnet-4-6
-   - **New:** OpenAI → gpt-4-turbo
+   - **Current:** Anthropic → claude-haiku-5-5
+   - **New:** OpenAI → gpt-6.1-terra
 4. Click **Save changes**
 5. Return to your chat interface at http://localhost:8501
-6. Ask the same question again - you'll see the response now comes from GPT-4
+6. Ask the same question again - you'll see the response now comes from GPT-6.1 Terra
 7. **What you'll notice:** Different response style, potentially different tool usage patterns, and the model name displayed in the workflow details
 
 ### Feature 2: Adjust Tool Usage
@@ -670,7 +670,7 @@ Every change is instant, measurable, and reversible.
 
 - Multi-agent systems work best when each agent has a specific role
 - Dynamic configuration handles changing requirements better than hardcoding
-- LaunchDarkly AI Configs control and change AI behavior without requiring deployments
+- LaunchDarkly AgentControl configs control and change AI behavior without requiring deployments
 - Start simple and add complexity as you learn what works
 
 Ready for more? [Continue to Part 2: Smart AI Agent Targeting with MCP Tools →](/tutorials/multi-agent-mcp-targeting)
@@ -683,7 +683,7 @@ Explore the **[LaunchDarkly MCP Server](/home/getting-started/mcp)** - enable AI
 
 - [Beyond n8n for Workflow Automation: Agent Graphs](/tutorials/agent-graphs) - The newer take on this pattern: externalize the topology itself into a visual graph with per-node monitoring
 - [Building Framework-Agnostic AI Swarms](/tutorials/ai-orchestrators) - Compare LangGraph against Strands and OpenAI Swarm running the same agent definitions
-- [Build AI Configs with Agent Skills](/tutorials/agent-skills-quickstart) - Generate the AI Configs in this tutorial from natural-language prompts
+- [Build AI Configs with Agent Skills](/tutorials/agent-skills-quickstart) - Generate the configs in this tutorial from natural-language prompts
 - [Offline Evaluation of RAG-Grounded Answers](/tutorials/offline-evals) - Add regression tests on the RAG outputs from this system
 - [Proving ROI with data-driven AI agent experiments](/guides/experimentation/ai-experiments-roi) - Part 3: A/B test the variations you built here
 

@@ -62,7 +62,7 @@ def create_dynamic_tool_instance(tool_name: str, tool_config: Dict[str, Any]) ->
         return _create_dynamic_search_v2(tool_config)
     elif tool_name == "reranking":
         return _create_dynamic_reranking_tool(tool_config)
-    elif tool_name in ["arxiv_search", "semantic_scholar"]:
+    elif tool_name in ["arxiv_search", "openalex_search"]:
         return _create_dynamic_mcp_tool(tool_name, tool_config)
     else:
         log_debug(f"❓ UNKNOWN TOOL: {tool_name}")
@@ -332,7 +332,7 @@ def _create_dynamic_mcp_tool(tool_name: str, tool_config: Dict[str, Any]) -> Opt
                 # Map LaunchDarkly tool names to actual MCP tool names
                 ld_to_mcp_mapping = {
                     "arxiv_search": "search_papers",
-                    "semantic_scholar": "search_semantic_scholar"
+                    "openalex_search": "search_works"
                 }
 
                 mcp_tool_name = ld_to_mcp_mapping.get(tool_name)
@@ -364,7 +364,7 @@ def create_dynamic_tools_from_launchdarkly(config) -> List[BaseTool]:
     # In CI safe mode, skip network-dependent MCP tools while keeping local tools
     if os.getenv("CI_SAFE_MODE", "").lower() in {"1", "true", "yes"}:
         original = list(tools_list)
-        tools_list = [t for t in tools_list if t not in ["arxiv_search", "semantic_scholar"]]
+        tools_list = [t for t in tools_list if t not in ["arxiv_search", "openalex_search"]]
         if original != tools_list:
             log_debug(f"CI_SAFE_MODE: filtered tools {set(original) - set(tools_list)}")
 
