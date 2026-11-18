@@ -21,14 +21,14 @@ src="../../../assets/images/authors/scarlettattensil.png"
   <p class="authorName">by Scarlett Attensil</p>
 </div>
 
-<Callout intent="info" title="Published September 2025 — newer AgentControl features available">
+<Callout intent="info" title="Published September 2025: newer AgentControl features available">
 
 This tutorial was published in September 2025, before LaunchDarkly shipped several features that supersede or complement the patterns shown below. The walkthrough still works, but for new builds you'll likely want to use:
 
-- [**Agent graphs**](/home/agentcontrol/agent-graphs) — externalize the multi-agent topology into a visual graph with per-node monitoring (the newer take on this tutorial's pattern)
-- [**Online evaluations**](/home/agentcontrol/online-evaluations) and [**custom judges**](/home/agentcontrol/judges) — built-in and user-defined LLM-as-a-judge scoring on live traffic
-- [**LLM Playground**](/home/agentcontrol/playground) — compare variations side-by-side before promoting
-- [**Offline evaluations + datasets**](/home/agentcontrol/offline-evaluations) — regression-test variations against a saved reference set
+- [**Agent graphs**](/home/agentcontrol/agent-graphs): externalize the multi-agent topology into a visual graph with per-node monitoring (the newer take on this tutorial's pattern)
+- [**Online evaluations**](/home/agentcontrol/online-evaluations) and [**custom judges**](/home/agentcontrol/judges): built-in and user-defined LLM-as-a-judge scoring on live traffic
+- [**LLM Playground**](/home/agentcontrol/playground): compare variations side-by-side before promoting
+- [**Offline evaluations + datasets**](/home/agentcontrol/offline-evaluations): regression-test variations against a saved reference set
 
 AI Configs is now **AgentControl**. Config keys, SDK names, and APIs are unchanged. For the current reference, see [AgentControl documentation](/home/agentcontrol).
 
@@ -44,7 +44,7 @@ You've been there: your AI chatbot works great in testing, then production hits 
 
 The teams shipping faster? They control AI behavior dynamically instead of hardcoding everything.
 
-This series shows you how to build **LangGraph multi-agent workflows** that get their intelligence from **RAG** search through your business documents. These workflows are enhanced with **MCP tools** for live external data and controlled through **LaunchDarkly AgentControl**—all without needing to deploy code changes.
+This series shows you how to build **LangGraph multi-agent workflows** that get their intelligence from **RAG** search through your business documents. These workflows are enhanced with **MCP tools** for live external data and controlled through **LaunchDarkly AgentControl**, all without needing to deploy code changes.
 
 ## What This Series Covers
 
@@ -89,7 +89,6 @@ First, let's get everything running locally. We'll explain what each piece does 
 # Get the code
 git clone https://github.com/launchdarkly-labs/devrel-agents-tutorial
 cd devrel-agents-tutorial
-# Note: For the latest Agent Graphs implementation, use: git checkout tutorial/agent-graphs
 
 # Install dependencies (LangGraph, LaunchDarkly SDK, etc.)
 uv sync
@@ -689,4 +688,4 @@ Explore the **[LaunchDarkly MCP Server](/home/getting-started/mcp)** - enable AI
 
 ---
 
-*Questions? Issues? Reach out at `aiproduct@launchdarkly.com` or open an issue in the [GitHub repo](https://github.com/launchdarkly-labs/devrel-agents-tutorial/tree/tutorial/agent-graphs).*
+*Questions? Issues? Reach out at `aiproduct@launchdarkly.com` or open an issue in the [GitHub repo](https://github.com/launchdarkly-labs/devrel-agents-tutorial).*
