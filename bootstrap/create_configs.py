@@ -173,6 +173,10 @@ class MultiAgentBootstrap:
             "tools": [{"key": tool, "version": 1} for tool in variation_data.get("tools", [])]
         }
 
+        # Custom parameters such as max_tool_calls live in the variation's model.custom
+        if variation_data.get("customParameters"):
+            payload["model"] = {"custom": variation_data["customParameters"]}
+
         # Use modelConfigKey if we have it, otherwise fallback to modelName/provider
         if model_config_key:
             payload["modelConfigKey"] = model_config_key

@@ -89,10 +89,10 @@ class Tutorial3VariationBootstrap:
                 payload["provider"] = {"name": variation["model"]["provider"]}
                 print(f"  Using modelName/provider: {model_name}")
 
-            # Custom parameters should be in the payload root for AI Config variations
-            payload.update(variation["customParameters"])
+            # Custom parameters such as max_tool_calls live in the variation's model.custom
+            payload["model"] = {"custom": variation["customParameters"]}
 
-            response = requests.post(url, json=payload, headers=self.headers)
+            response = requests.post(url, json=payload, headers=self.headers, timeout=30)
 
             if response.status_code == 201:
                 print(f"  ✅ Created variation: {variation['key']}")
@@ -100,7 +100,7 @@ class Tutorial3VariationBootstrap:
                 print(f"  ⚠️  Variation already exists: {variation['key']}, attempting to update...")
                 # Remove 'messages' field for PATCH (not supported in agent mode)
                 update_payload = {k: v for k, v in payload.items() if k != 'messages'}
-                update_response = requests.patch(f"{url}/{variation['key']}", json=update_payload, headers=self.headers)
+                update_response = requests.patch(f"{url}/{variation['key']}", json=update_payload, headers=self.headers, timeout=30)
                 if update_response.status_code == 200:
                     print(f"  ✅ Updated variation: {variation['key']}")
                 else:
@@ -123,7 +123,7 @@ class Tutorial3VariationBootstrap:
 
         # Check if support-agent AI Config exists
         url = f"{self.base_url}/projects/{self.project_key}/ai-configs/support-agent"
-        response = requests.get(url, headers=self.headers)
+        response = requests.get(url, headers=self.headers, timeout=30)
 
         if response.status_code != 200:
             print(f"❌ Error: support-agent AI Config not found (status: {response.status_code})")
@@ -136,7 +136,7 @@ class Tutorial3VariationBootstrap:
         # Check if required tools exist
         required_tools = ["search_v1", "search_v2", "reranking", "arxiv_search", "openalex_search"]
         tools_url = f"{self.base_url}/projects/{self.project_key}/ai-tools"
-        tools_response = requests.get(tools_url, headers=self.headers)
+        tools_response = requests.get(tools_url, headers=self.headers, timeout=30)
 
         if tools_response.status_code == 200:
             existing_tools = [tool["key"] for tool in tools_response.json().get("items", [])]
