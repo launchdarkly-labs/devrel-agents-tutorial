@@ -80,30 +80,30 @@ html, body, [class*="css"], .stApp {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 1.5rem;
+    gap: 2rem;
     background: #212124;
-    padding: 1.25rem 1.5rem;
+    padding: 1.5rem 2rem;
     margin-bottom: 1.25rem;
-    border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .header-left {
     display: flex;
     flex-direction: column;
-    gap: 0.4rem;
+    gap: 0.55rem;
 }
 
 .ld-wordmark {
-    height: 20px;
+    height: 32px;
     width: auto;
     align-self: flex-start;
-    margin-bottom: 0.2rem;
+    margin-bottom: 0.25rem;
 }
 
 .header-title {
     font-family: 'Sora', sans-serif;
-    font-size: 1.45rem;
+    font-size: 1.85rem;
     font-weight: 700;
     margin: 0;
     color: #FFFFFF;
@@ -111,8 +111,8 @@ html, body, [class*="css"], .stApp {
 }
 
 .header-subtitle {
-    font-size: 0.88rem;
-    color: rgba(244, 245, 247, 0.72);
+    font-size: 0.95rem;
+    color: rgba(244, 245, 247, 0.78);
     margin: 0;
     line-height: 1.45;
 }
@@ -120,29 +120,28 @@ html, body, [class*="css"], .stApp {
 .kb-pill {
     display: inline-flex;
     align-items: center;
-    gap: 0.45rem;
+    gap: 0.5rem;
     margin-top: 0.35rem;
-    padding: 0.3rem 0.7rem;
-    background: rgba(64, 91, 255, 0.14);
-    border: 1px solid rgba(64, 91, 255, 0.38);
+    padding: 0.38rem 0.85rem;
+    background: rgba(64, 91, 255, 0.16);
+    border: 1px solid rgba(64, 91, 255, 0.45);
     border-radius: 999px;
-    font-size: 0.76rem;
-    color: #D8DEFF;
+    font-size: 0.82rem;
+    color: #E0E5FF;
     width: fit-content;
 }
 
 .kb-dot {
-    width: 7px;
-    height: 7px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
     background: #DDFF46;
     display: inline-block;
 }
 
 .header-mascot {
-    height: 76px;
+    height: 155px;
     width: auto;
-    border-radius: 10px;
     flex-shrink: 0;
 }
 
@@ -153,7 +152,7 @@ html, body, [class*="css"], .stApp {
 
 .example-queries-title {
     font-family: 'Sora', sans-serif;
-    font-size: 0.82rem;
+    font-size: 0.88rem;
     font-weight: 600;
     color: #DDFF46;
     margin-bottom: 0.2rem;
@@ -162,29 +161,32 @@ html, body, [class*="css"], .stApp {
 }
 
 .example-queries-subtitle {
-    color: rgba(244, 245, 247, 0.65);
+    color: rgba(244, 245, 247, 0.7);
     margin-bottom: 0.75rem;
-    font-size: 0.8rem;
+    font-size: 0.85rem;
     line-height: 1.4;
 }
 
 .stButton > button {
-    background: #282A30;
-    color: #F4F5F7;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 8px;
-    padding: 0.55rem 1rem;
+    background: linear-gradient(180deg, #252B42 0%, #1D2235 100%);
+    color: #FFFFFF;
+    border: 1px solid rgba(96, 122, 255, 0.55);
+    border-radius: 10px;
+    padding: 0.65rem 1.1rem;
     font-family: 'Inter', sans-serif;
-    font-weight: 500;
-    font-size: 0.82rem;
-    transition: all 0.18s ease;
+    font-weight: 600;
+    font-size: 0.88rem;
+    cursor: pointer;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
+    transition: all 0.16s ease;
 }
 
 .stButton > button:hover {
     background: #405BFF;
-    border-color: #405BFF;
+    border-color: #DDFF46;
     color: #FFFFFF;
     transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(64, 91, 255, 0.4);
 }
 
 .stButton > button:active {
@@ -319,31 +321,31 @@ st.markdown("""
 # Row 1: Basic search tools
 col1, col2 = st.columns(2)
 with col1:
-    if st.button("Basic Search", use_container_width=True):
+    if st.button("▶ Basic Search", use_container_width=True):
         st.session_state.example_query = "How does Q-learning differ from SARSA in your knowledge base?"
 
 with col2:
-    if st.button("RAG + Reranking", use_container_width=True):
+    if st.button("▶ RAG + Reranking", use_container_width=True):
         st.session_state.example_query = "Search for multi-armed bandits and exploration vs exploitation, then rerank the most relevant passages"
 
 # Row 2: Security and research tools
 col4, col5, col6 = st.columns(3)
 with col4:
-    if st.button("Security Check", use_container_width=True):
+    if st.button("▶ Security Check", use_container_width=True):
         st.session_state.example_query = "My name is Jane Doe, email: jane.doe@example.com. Can you explain temporal-difference learning?"
 
 with col5:
-    if st.button("ArXiv Research", use_container_width=True):
+    if st.button("▶ ArXiv Research", use_container_width=True):
         st.session_state.example_query = "Find recent ArXiv papers on offline reinforcement learning"
 
 with col6:
-    if st.button("OpenAlex Research", use_container_width=True):
+    if st.button("▶ OpenAlex Research", use_container_width=True):
         st.session_state.example_query = "Search OpenAlex for highly cited papers on reinforcement learning from human feedback"
 
 # Row 3: Advanced research
 col7 = st.columns(1)[0]
 with col7:
-    if st.button("Full Research Stack", use_container_width=True):
+    if st.button("▶ Full Research Stack", use_container_width=True):
         st.session_state.example_query = "Compare how our textbook defines policy gradient methods with recent academic research papers"
 
 st.markdown("---")
@@ -438,68 +440,66 @@ if prompt:
     with st.chat_message("user"):
         st.write(prompt)
 
-    # Get agent response
-    try:
-        # Get user context for LaunchDarkly targeting
-        user_context = get_user_context(st.session_state.user_id, sample_users)
+    # Get agent response inside the assistant bubble so a live spinner shows immediately
+    with st.chat_message("assistant", avatar=str(ALBERT_AVATAR)):
+        try:
+            user_context = get_user_context(st.session_state.user_id, sample_users)
 
-        # SECURITY BOUNDARY: Send only sanitized conversation history to API
-        # Raw messages (with PII) are never sent to backend - support agent isolation maintained
-        response = requests.post(
-            f"{API_BASE_URL}/chat",
-            json={
-                "user_id": st.session_state.user_id,
-                "message": prompt,  # Raw current message (security agent will process)
-                "user_context": user_context,
-                "sanitized_conversation_history": st.session_state.sanitized_messages  # PII-free history only
-            }
-        )
+            with st.spinner("Running multi-agent workflow (Supervisor → Security → Support + RAG/MCP tools)..."):
+                # SECURITY BOUNDARY: Send only sanitized conversation history to API
+                response = requests.post(
+                    f"{API_BASE_URL}/chat",
+                    json={
+                        "user_id": st.session_state.user_id,
+                        "message": prompt,  # Raw current message (security agent will process)
+                        "user_context": user_context,
+                        "sanitized_conversation_history": st.session_state.sanitized_messages  # PII-free history only
+                    }
+                )
 
-        if response.status_code == 200:
-            data = response.json()
+            if response.status_code == 200:
+                data = response.json()
 
-            # SECURITY BOUNDARY: Extract sanitized messages from security agent
-            # Support agent only ever sees these PII-free versions
-            sanitized_user_message = prompt  # Default fallback
+                # SECURITY BOUNDARY: Extract sanitized messages from security agent
+                # Support agent only ever sees these PII-free versions
+                sanitized_user_message = prompt  # Default fallback
 
-            # Extract redacted user message from security agent output
-            for agent_config in data.get("agent_configurations") or []:
-                if agent_config.get("agent_name") == "security-agent" and agent_config.get("redacted"):
-                    sanitized_user_message = agent_config["redacted"]
-                    break
+                # Extract redacted user message from security agent output
+                for agent_config in data.get("agent_configurations") or []:
+                    if agent_config.get("agent_name") == "security-agent" and agent_config.get("redacted"):
+                        sanitized_user_message = agent_config["redacted"]
+                        break
 
-            # Update sanitized conversation history (PII-free, for API calls)
-            st.session_state.sanitized_messages.append({
-                "role": "user",
-                "content": sanitized_user_message  # Redacted version only
-            })
-            st.session_state.sanitized_messages.append({
-                "role": "assistant",
-                "content": data["response"]
-            })
+                # Update sanitized conversation history (PII-free, for API calls)
+                st.session_state.sanitized_messages.append({
+                    "role": "user",
+                    "content": sanitized_user_message  # Redacted version only
+                })
+                st.session_state.sanitized_messages.append({
+                    "role": "assistant",
+                    "content": data["response"]
+                })
 
-            # Add assistant message with all agent configurations
-            metadata = {
-                "primary_variation": data["variation_key"],
-                "primary_model": data["model"],
-                "tools_used": data["tool_calls"],
-                "console_logs": data.get("console_logs", []),
-                "agent_configurations": data.get("agent_configurations") or []
-            }
+                # Add assistant message with all agent configurations
+                metadata = {
+                    "primary_variation": data["variation_key"],
+                    "primary_model": data["model"],
+                    "tools_used": data["tool_calls"],
+                    "console_logs": data.get("console_logs", []),
+                    "agent_configurations": data.get("agent_configurations") or []
+                }
 
-            # Add message with unique ID for feedback tracking
-            message_id = f"msg_{len(st.session_state.messages)}"
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": data["response"],
-                "metadata": metadata,
-                "message_id": message_id,
-                "user_query": prompt,
-                "feedback": None
-            })
+                # Add message with unique ID for feedback tracking
+                message_id = f"msg_{len(st.session_state.messages)}"
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": data["response"],
+                    "metadata": metadata,
+                    "message_id": message_id,
+                    "user_query": prompt,
+                    "feedback": None
+                })
 
-            # Display assistant message
-            with st.chat_message("assistant", avatar=str(ALBERT_AVATAR)):
                 st.write(data["response"])
 
                 # Show feedback options
@@ -516,14 +516,14 @@ if prompt:
 
                 show_workflow_details(metadata)
 
-            # Clear example query only after successful processing to avoid losing it on reruns
-            if st.session_state.get("example_query") == prompt:
-                del st.session_state.example_query
-        else:
-            st.error(f"Error: {response.status_code}")
+                # Clear example query only after successful processing to avoid losing it on reruns
+                if st.session_state.get("example_query") == prompt:
+                    del st.session_state.example_query
+            else:
+                st.error(f"Error: {response.status_code}")
 
-    except Exception as e:
-        st.error(f"Connection error: {e}")
+        except Exception as e:
+            st.error(f"Connection error: {e}")
 
 # Sidebar for user settings
 with st.sidebar:
