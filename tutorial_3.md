@@ -4,14 +4,14 @@
 
 ## Overview
 
-<Callout intent="info" title="Published October 2025 — newer AgentControl features available">
+<Callout intent="info" title="Published October 2025: newer AgentControl features available">
 
 This guide was published in October 2025, before LaunchDarkly shipped several features that supersede or extend the experiment patterns shown below. The methodology still works, but for new experiments you'll likely also want to use:
 
-- [**Online evaluations**](https://launchdarkly.com/docs/home/agentcontrol/online-evaluations) and [**custom judges**](https://launchdarkly.com/docs/home/agentcontrol/judges) — LLM-as-a-judge scores feed directly into experiment metrics, so judge accuracy or toxicity can be the primary metric
-- [**Agent graphs**](https://launchdarkly.com/docs/home/agentcontrol/agent-graphs) — A/B test routing topology and per-node model choices, not just whole-config swaps
-- [**Offline evaluations + datasets**](https://launchdarkly.com/docs/home/agentcontrol/offline-evaluations) — lock in a regression baseline before running a live experiment
-- [**LLM Playground**](https://launchdarkly.com/docs/home/agentcontrol/playground) — pilot variations on test prompts before sending them to real traffic
+- [**Online evaluations**](https://launchdarkly.com/docs/home/agentcontrol/online-evaluations) and [**custom judges**](https://launchdarkly.com/docs/home/agentcontrol/judges): LLM-as-a-judge scores feed directly into experiment metrics, so judge accuracy or toxicity can be the primary metric
+- [**Agent graphs**](https://launchdarkly.com/docs/home/agentcontrol/agent-graphs): A/B test routing topology and per-node model choices, not just whole-config swaps
+- [**Offline evaluations + datasets**](https://launchdarkly.com/docs/home/agentcontrol/offline-evaluations): lock in a regression baseline before running a live experiment
+- [**LLM Playground**](https://launchdarkly.com/docs/home/agentcontrol/playground): pilot variations on test prompts before sending them to real traffic
 
 AI Configs is now **AgentControl**. Config keys, SDK names, and APIs are unchanged. For the current reference, see [AgentControl documentation](https://launchdarkly.com/docs/home/agentcontrol).
 
@@ -39,8 +39,12 @@ If you choose to complete the full tutorial, you need the following prerequisite
 - An active LaunchDarkly project, set up according to the following tutorials:
     - [Build a LangGraph Multi-Agent system in 20 Minutes with LaunchDarkly AgentControl](https://launchdarkly.com/docs/tutorials/agents-langgraph)
     - [Smart AI Agent Targeting with MCP Tools](https://launchdarkly.com/docs/tutorials/multi-agent-mcp-targeting)
-- API keys for Anthropic, OpenAI, and LaunchDarkly:
-    - [Sign up for a free LaunchDarkly account](http://app.launchdarkly.com/signup) and then [follow these instructions to get your API access token](https://launchdarkly.com/docs/home/account/api-create).
+- Accounts and API keys configured in `.env` from Parts 1 and 2:
+    - **LaunchDarkly**: [sign up for a free LaunchDarkly account](https://app.launchdarkly.com/signup) and [create a Writer API access token](https://launchdarkly.com/docs/home/account/api-create) (`LD_SDK_KEY` and `LD_API_KEY`)
+    - **OpenAI**: [create an API key at platform.openai.com/api-keys](https://platform.openai.com/api-keys) (`OPENAI_API_KEY`)
+    - **Anthropic**: [create an API key at console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) (`ANTHROPIC_API_KEY`)
+    - **Mistral**: [create a free API key at console.mistral.ai](https://console.mistral.ai/) (`MISTRAL_API_KEY`, used by the `Strict Security` treatment)
+    - **OpenAlex MCP**: signed in via `uv run python tools_impl/openalex_auth.py` ([free account at openalex.org/signup](https://openalex.org/signup))
 
 ### Agent costs
 

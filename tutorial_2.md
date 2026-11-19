@@ -2,13 +2,13 @@
 
 > Read the published version on [LaunchDarkly Docs](https://launchdarkly.com/docs/tutorials/multi-agent-mcp-targeting). _Published September 22nd, 2025 by Scarlett Attensil._
 
-<Callout intent="info" title="Published September 2025 — newer AgentControl features available">
+<Callout intent="info" title="Published September 2025: newer AgentControl features available">
 
 This tutorial was published in September 2025, before LaunchDarkly shipped several features that complement or supersede the targeting patterns shown below. The walkthrough still works, but for new builds you'll likely want to use:
 
-- [**Agent graphs**](https://launchdarkly.com/docs/home/agentcontrol/agent-graphs) — externalize the multi-agent topology into a visual graph and combine it with the targeting rules in this tutorial
-- [**Online evaluations**](https://launchdarkly.com/docs/home/agentcontrol/online-evaluations) and [**custom judges**](https://launchdarkly.com/docs/home/agentcontrol/judges) — score live traffic per variation, including per-segment quality scores
-- [**Prompt snippets**](https://launchdarkly.com/docs/home/agentcontrol/snippets) — reusable prompt fragments so you can compose region-specific or tier-specific instructions without duplicating
+- [**Agent graphs**](https://launchdarkly.com/docs/home/agentcontrol/agent-graphs): externalize the multi-agent topology into a visual graph and combine it with the targeting rules in this tutorial
+- [**Online evaluations**](https://launchdarkly.com/docs/home/agentcontrol/online-evaluations) and [**custom judges**](https://launchdarkly.com/docs/home/agentcontrol/judges): score live traffic per variation, including per-segment quality scores
+- [**Prompt snippets**](https://launchdarkly.com/docs/home/agentcontrol/snippets): reusable prompt fragments so you can compose region-specific or tier-specific instructions without duplicating
 
 AI Configs is now **AgentControl**. Config keys, SDK names, and APIs are unchanged. For the current reference, see [AgentControl documentation](https://launchdarkly.com/docs/home/agentcontrol).
 
@@ -38,10 +38,15 @@ In the next 18 minutes, you'll transform your basic multi-agent system with:
 - Tools: `search_v2`, `reranking`
 - Variations: `supervisor-basic`, `pii-detector`, `rag-search-enhanced`
 
+👤 **Accounts & API keys for external providers and MCP**:
+- **LaunchDarkly Writer API token** (`LD_API_KEY`, created below)
+- **Mistral account & API key** (`MISTRAL_API_KEY` for EU privacy routing): [sign up for free at console.mistral.ai](https://console.mistral.ai/), verify your email and phone for the free Experiment tier, then open **API Keys** and create a key
+- **OpenAlex account** (free, no API key to copy): [sign up at openalex.org/signup](https://openalex.org/signup) so you can authorize the OpenAlex MCP server in Step 1 (includes about 500 searches per day)
+
 🔑 **Add to your `.env` file**:
 ```bash
-LD_API_KEY=your-api-key        # Get from LaunchDarkly settings
-MISTRAL_API_KEY=your-key       # Get from console.mistral.ai (free, requires phone + email validation)
+LD_API_KEY=your-api-key        # Get from LaunchDarkly settings below
+MISTRAL_API_KEY=your-key       # Get from https://console.mistral.ai/
 ```
 
 ### Getting Your LaunchDarkly API Key
@@ -108,7 +113,9 @@ uv tool install arxiv-mcp-server
 uv run python tools_impl/openalex_auth.py
 ```
 
-The OpenAlex sign-in opens your browser. Sign in with a free [OpenAlex](https://openalex.org) account, which includes about 500 searches a day. Your tokens are saved to `.openalex_tokens.json`, which is gitignored, and refresh automatically.
+The OpenAlex sign-in opens your browser:
+1. If you do not already have an OpenAlex account, click **Sign up** at [openalex.org/signup](https://openalex.org/signup) (free, includes about 500 MCP searches a day) and verify your email.
+2. Sign in and click **Authorize** when prompted. Your OAuth tokens are saved locally to `.openalex_tokens.json` (gitignored, owner-only) and refresh automatically.
 
 **MCP Tools Added:**
 - **arxiv_search**: Live academic paper search (Paid users)
@@ -453,9 +460,9 @@ uv run streamlit run ui/chat_interface.py --server.port 8501
 
 Open http://localhost:8501 and test different user types:
 
-1. **User Dropdown**: Find the user dropdown by using the **>> icon** to open the  **left nav menu**.. Select different regions (eu, other) and plans (Free, Paid).
-2. **Ask Questions**: Try "Search for machine learning papers."
-3. **Watch Workflow**: In the server logs, watch which model and tools get used for each user type.
+1. **User Dropdown**: In the **Context** left sidebar, switch **User ID** between regions (`eu`, `other`) and plans (`free`, `paid`).
+2. **Ask Questions**: Click **▶ OpenAlex Research** or ask "Search for machine learning papers."
+3. **Inspect Traces**: Click **`↗ View Trace Waterfall`** below any response (or watch the server logs) to inspect which variation, model, and tools ran for that user.
 4. **Verify Routing**: EU users get Mistral for security. Other users get Claude Haiku for security and GPT for support. Paid users get MCP tools.
 
 <Frame caption="Select different user types to test segmentation in the chat interface">
@@ -493,4 +500,4 @@ This approach scales beyond tutorials. Whether you're serving 100 users or 100,0
 - [Offline Evaluation of RAG-Grounded Answers](https://launchdarkly.com/docs/tutorials/offline-evals) - Validate each targeted variation against a reference dataset before rollout
 
 ---
-*Questions? Issues? Reach out at `aiproduct@launchdarkly.com` or open an issue in the [GitHub repo](https://github.com/launchdarkly-labs/devrel-agents-tutorial/tree/tutorial/agent-graphs).*
+*Questions? Issues? Reach out at `aiproduct@launchdarkly.com` or open an issue in the [GitHub repo](https://github.com/launchdarkly-labs/devrel-agents-tutorial).*

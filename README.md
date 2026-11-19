@@ -78,8 +78,8 @@ You'll need:
 - **Cost-effective** - enterprise-grade with cross-region failover
 
 **Option B: Direct API Keys (Traditional)**
-- **OpenAI API key** (required for RAG architecture embeddings)
-- **Anthropic API key** (for Claude models) or **OpenAI API key** (for GPT models)
+- **OpenAI account & API key** ([sign up / create key at platform.openai.com/api-keys](https://platform.openai.com/api-keys)): required for RAG vector embeddings and Step 8's GPT model switch
+- **Anthropic account & API key** ([sign up / create key at console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys)): required for the Claude agents in Step 5
 
 ## Step 1: Clone and Configure (2 minutes)
 
@@ -154,6 +154,7 @@ Now configure your authentication method in `.env`:
 ```bash
 # LaunchDarkly Configuration
 LD_SDK_KEY=your-launchdarkly-sdk-key  # From step above
+LD_PROJECT_KEY=multi-agent-chatbot    # Used for LaunchDarkly Trace & Monitoring deep links
 
 # AWS Bedrock Configuration
 AUTH_METHOD=sso                       # Use AWS SSO authentication
@@ -182,6 +183,7 @@ aws bedrock list-foundation-models --region us-east-1 --profile your-sso-profile
 ```bash
 # LaunchDarkly Configuration
 LD_SDK_KEY=your-launchdarkly-sdk-key  # From step above
+LD_PROJECT_KEY=multi-agent-chatbot    # Used for LaunchDarkly Trace & Monitoring deep links
 
 # Direct API Configuration
 AUTH_METHOD=api-key                   # Use direct API keys (default)
@@ -557,10 +559,11 @@ Or ask about your specific domain: "What's our refund policy?"
 **PII Detection Test:**
 "My email is john.doe@example.com and I need help"
 
-**Workflow Details** show:
-- Which agents are activated
-- What models and tools are being used
-- Text after redaction
+Below every response, the observability bar shows:
+- Which variation, model, and tools served your request
+- An inline **PII redacted** banner whenever the security agent sanitized sensitive text
+- **`↗ View Trace Waterfall`**: opens the exact OpenTelemetry trace in LaunchDarkly (`launchdarkly-ai-server[otel]` exports agent and tool spans automatically using your `LD_SDK_KEY`, with no extra keys or collector)
+- **`↗ Monitoring & Metrics`**: opens `support-agent`'s Monitoring tab for token usage, latency, and error rates
 
 <br />
 
@@ -587,8 +590,8 @@ Experience the power of dynamic configuration by making real-time changes to you
    - **New:** OpenAI → gpt-6.1-terra
 4. Click **Save changes**
 5. Return to your chat interface at http://localhost:8501
-6. Ask the same question again - you'll see the response now comes from GPT-6.1 Terra
-7. **What you'll notice:** Different response style, potentially different tool usage patterns, and the model name displayed in the workflow details
+6. Ask the same question again. You'll see the response now comes from GPT-6.1 Terra
+7. **What you'll notice:** Different response style, potentially different tool usage patterns, and `gpt-6.1-terra` shown in the served bar and in the LaunchDarkly trace waterfall
 
 ### Feature 2: Adjust Tool Usage
 

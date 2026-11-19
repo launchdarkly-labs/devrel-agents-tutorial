@@ -2,6 +2,7 @@ from langchain.tools import BaseTool, StructuredTool
 from langchain_mcp_adapters.tools import load_mcp_tools
 from tools_impl.openalex_auth import OPENALEX_MCP_URL, TOKEN_FILE, openalex_auth
 import os
+import shutil
 import threading
 import traceback
 
@@ -45,8 +46,8 @@ class MCPResearchTools:
 
         server_configs = {}
 
-        # ArXiv MCP Server - only add if path is configured
-        arxiv_path = os.getenv('ARXIV_MCP_SERVER_PATH')
+        # ArXiv MCP Server - auto-discover from PATH (uv tool install arxiv-mcp-server) or ARXIV_MCP_SERVER_PATH
+        arxiv_path = os.getenv('ARXIV_MCP_SERVER_PATH') or shutil.which('arxiv-mcp-server')
         if arxiv_path and os.path.exists(arxiv_path):
             server_configs["arxiv"] = {
                 "transport": "stdio",
