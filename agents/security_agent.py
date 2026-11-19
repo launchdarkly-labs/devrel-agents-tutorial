@@ -86,40 +86,37 @@ def create_security_agent(agent_config, config_manager: ConfigManager):
         try:
             messages = state["messages"]
 
-            # Fetch config dynamically for each call
             user_context = state.get("user_context", {})
             user_id = state.get("user_id", "security_user")
 
-            agent_config = await config_manager.get_config(
+            served = agent_config or await config_manager.get_config(
                 user_id=user_id,
                 config_key="security-agent",
                 user_context=user_context
             )
 
             # Create model with structured output and up-to-date instructions
-            provider, model = ci_safe_provider_and_model(agent_config.provider_name, agent_config.model_name)
-            base_model = create_chat_model(provider, model, config_manager)
+            provider, model = ci_safe_provider_and_model(served.provider_name, served.model_name)
+            base_model = create_chat_model(provider, model, config_manager, served.parameters)
             log_student(f"SECURITY ROUTING: Using {provider} for {model}")
 
             # Use structured output for guaranteed PII format
             # include_raw=True keeps the usage metadata that token and cost tracking need
             structured_model = base_model.with_structured_output(PIIDetectionResponse, include_raw=True)
 
-            # Create system message with current instructions from LaunchDarkly
-            system_message = SystemMessage(content=agent_config.instructions)
-            full_messages = [system_message] + messages
-
             # Apply rate limiting before LLM call
             _rate_limit_llm_call()
 
-            async def call_model():
-                response = await structured_model.ainvoke(full_messages)
+            async def run_security(_tools=None, variables=None):
+                system_message = SystemMessage(content=served.render_instructions(variables))
+                response = await structured_model.ainvoke([system_message] + messages)
                 if response["parsed"] is None:
                     raise ValueError(f"{model} returned no structured PII result; use a model that supports structured output")
-                return response["parsed"], response["raw"].usage_metadata
+                parsed = response["parsed"]
+                return parsed, parsed.model_dump_json(), response["raw"].usage_metadata
 
             ld_context = config_manager.build_context(user_id, user_context)
-            pii_result = await config_manager.track(agent_config, ld_context, call_model)
+            pii_result = await config_manager.track(served, ld_context, run_security, state.get("user_input"))
 
             # Store structured results in state and create AI message for conversation flow
             summary = f"PII Analysis: detected={pii_result.detected}, types={pii_result.types}"

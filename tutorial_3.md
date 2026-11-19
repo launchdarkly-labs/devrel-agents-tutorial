@@ -250,7 +250,7 @@ This creates the `claude-opus-treatment` variation for the "Premium model value 
 
 ## Step 3: Configure the security agent experiment
 
-In the left navigation, expand **AI**, then select **Configs**, then open **security-agent**. In the right navigation, click the plus **+** sign next to **Experiments** to create a new experiment.
+In the left navigation, expand **Agents**, then select **Configs**, then open **security-agent**. In the right navigation, click the plus **+** sign next to **Experiments** to create a new experiment.
 
 Here is how to set up your experiment:
 
@@ -286,7 +286,7 @@ You may see a "Health warning" indicator after starting the experiment. This is 
 
 ## Step 4: Configure the premium model experiment
 
-In the left navigation, expand **AI**, then select **Configs**, then open **support-agent**. In the right navigation, click the plus **+** sign next to **Experiments** to create a new experiment.
+In the left navigation, expand **Agents**, then select **Configs**, then open **support-agent**. In the right navigation, click the plus **+** sign next to **Experiments** to create a new experiment.
 
 Here is how to set up your experiment:
 

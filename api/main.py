@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from dotenv import load_dotenv
 
@@ -8,9 +9,16 @@ from utils.logger import log_student, log_debug
 
 load_dotenv()
 
-app = FastAPI()
-
 agent_service = AgentService()
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    yield
+    await agent_service.config_manager.aclose()
+
+
+app = FastAPI(lifespan=lifespan)
 
 @app.get("/health")
 async def health():

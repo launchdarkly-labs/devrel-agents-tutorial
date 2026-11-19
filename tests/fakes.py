@@ -1,4 +1,5 @@
 """Small stand-ins for the model, the agents, and the config manager, so tests never call an API."""
+import inspect
 from langchain_core.messages import AIMessage
 
 from config_manager import ServedConfig
@@ -6,14 +7,24 @@ from config_manager import ServedConfig
 
 def served(key, model="claude-haiku-5-5", custom=None, tools=None, variation_key=None):
     """A config as LaunchDarkly would serve it, or a local fallback when variation_key is None."""
+    tool_list = tools or []
     config = {
-        "model": {"name": model, "custom": custom or {}, "parameters": {"tools": tools or []}},
+        "model": {"name": model, "custom": custom or {}, "parameters": {"tools": tool_list}},
         "provider": {"name": "Anthropic"},
         "instructions": f"You are the {key}.",
+        "tools": {
+            t["name"]: {**t, "type": "function"}
+            for t in tool_list
+            if isinstance(t, dict) and "name" in t
+        },
     }
     if variation_key is None:
         return ServedConfig(key=key, config=config, from_fallback=True)
-    return ServedConfig(key=key, config=config, meta={"variationKey": variation_key, "version": 1})
+    return ServedConfig(
+        key=key,
+        config=config,
+        meta={"variationKey": variation_key, "version": 1, "modelKey": f"Anthropic.{model}", "modelVersion": 1},
+    )
 
 
 class FakeConfigManager:
@@ -28,9 +39,10 @@ class FakeConfigManager:
     def build_context(self, user_id, user_context=None):
         return {"kind": "user", "key": user_id, **(user_context or {})}
 
-    async def track(self, served_config, context, call, user_input=None):
-        result, _usage = await call()
-        return result
+    async def track(self, served_config, context, call, user_input=None, tool_handlers=None):
+        takes_args = len(inspect.signature(call).parameters) > 0
+        out = await (call(tool_handlers or {}, {"ldContext": context}) if takes_args else call())
+        return out[0]
 
 
 class FakeStructuredModel:

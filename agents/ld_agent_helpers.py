@@ -86,25 +86,28 @@ def map_provider_to_langchain(provider_name):
     return {'gemini': 'google_genai', 'mistral': 'mistralai'}.get(provider, provider)
 
 
-def create_chat_model(provider_name: str, model_name: str, config_manager):
+def create_chat_model(provider_name: str, model_name: str, config_manager, parameters: dict = None):
     """
     Create the LangChain chat model for a LaunchDarkly AI Config.
 
     Anthropic and Bedrock models go through Bedrock when AUTH_METHOD=sso,
-    otherwise through their direct API.
+    otherwise through their direct API. Variation model parameters (excluding
+    attached tool schemas) are forwarded to the model constructor.
     """
     provider = map_provider_to_langchain(provider_name)
+    model_params = {k: v for k, v in (parameters or {}).items() if k != "tools"}
 
     if provider in ('anthropic', 'bedrock') and os.getenv('AUTH_METHOD', 'api-key').lower() == 'sso':
         return create_bedrock_chat_model(
             model_id=model_name,
             session=config_manager.boto3_session,
-            region=config_manager.aws_region
+            region=config_manager.aws_region,
+            **model_params,
         )
 
     # GPT-6 models accept function tools only on the Responses API
     responses_api = {"use_responses_api": True} if provider == "openai" else {}
-    return init_chat_model(model=model_name, model_provider=provider, **responses_api)
+    return init_chat_model(model=model_name, model_provider=provider, **responses_api, **model_params)
 
 
 def ci_safe_provider_and_model(provider_name: str, model_name: str) -> tuple[str, str]:
@@ -124,14 +127,12 @@ def _tool_error_message(e: Exception) -> str:
     return f"Error: {e!r}\n Please fix your mistakes."
 
 
-def wrap_tool_with_counter(tool: Any, counter: ToolCallCounter) -> Any:
+def wrap_tool_with_counter(tool: Any, counter: ToolCallCounter, tracked_fn: Any = None) -> Any:
     """
-    Wrap a tool to track invocation count.
+    Wrap a tool to enforce max_tool_calls and delegate through the SDK's tracked handler.
 
-    Each time the tool is called, the counter is incremented.
-    If max_tool_calls is exceeded, MaxToolCallsExceeded is raised.
-
-    Uses a closure-based approach to avoid pickling issues.
+    Incrementing before delegating ensures a call past max_tool_calls raises
+    MaxToolCallsExceeded without recording an extra $ld:ai:tool_call event.
     """
     def count_call(kwargs):
         counter.increment()
@@ -145,6 +146,8 @@ def wrap_tool_with_counter(tool: Any, counter: ToolCallCounter) -> Any:
 
     async def counted_arun(**kwargs) -> str:
         count_call(kwargs)
+        if tracked_fn is not None:
+            return await tracked_fn(**kwargs)
         return await tool._arun(**kwargs)
 
     return StructuredTool(
@@ -154,6 +157,67 @@ def wrap_tool_with_counter(tool: Any, counter: ToolCallCounter) -> Any:
         coroutine=counted_arun,
         args_schema=tool.args_schema
     )
+
+
+def _to_async_tool_handler(tool: Any):
+    async def call_tool(**kwargs) -> str:
+        return await tool._arun(**kwargs)
+    return call_tool
+
+
+def _extract_turn_output(messages: List[Any]) -> Tuple[str, List[str], List[dict]]:
+    """Extract assistant response text and tool-call summaries from new turn messages."""
+    ai_response = ""
+    tool_calls_summary = []
+    tool_details = []
+
+    for msg in messages:
+        if msg.type != 'ai':
+            continue
+
+        if isinstance(msg.content, list):
+            for content_item in msg.content:
+                if isinstance(content_item, dict) and content_item.get('type') == 'text':
+                    ai_response += content_item.get('text', '') + " "
+        elif msg.content:
+            ai_response += str(msg.content) + " "
+
+        for tool_call in msg.tool_calls:
+            args = tool_call.get('args') or {}
+            detail = {"name": tool_call['name'], "args": args}
+            search_query = args.get('query') or args.get('search_query')
+            if search_query:
+                detail["search_query"] = search_query
+            tool_calls_summary.append(tool_call['name'])
+            tool_details.append(detail)
+
+    final_text = ai_response.strip() or "I understand your question. Let me help you with that."
+    return final_text, tool_calls_summary, tool_details
+
+
+def _build_react_agent(config_manager, agent_config, tools: List[Any], tracked_tools: dict = None, variables: dict = None) -> Tuple[Any, int]:
+    """Build the LangGraph ReAct agent from a resolved ServedConfig and SDK-wrapped tools."""
+    llm = create_chat_model(agent_config.provider_name, agent_config.model_name, config_manager, agent_config.parameters)
+    log_student(f"ROUTING: Using {agent_config.provider_name} for {agent_config.model_name}")
+
+    max_tool_calls = 5
+    if 'max_tool_calls' in agent_config.custom:
+        max_tool_calls = int(agent_config.custom['max_tool_calls'])
+        log_student(f"EXTRACTED max_tool_calls from LaunchDarkly: {max_tool_calls}")
+
+    counter = ToolCallCounter(max_calls=max_tool_calls)
+    tracked_map = tracked_tools or {}
+    wrapped_tools = [wrap_tool_with_counter(tool, counter, tracked_map.get(tool.name)) for tool in tools]
+
+    effective_recursion_limit = max_tool_calls * 3 + 10
+    log_student(f"CONFIG: max_tool_calls={max_tool_calls}, effective_recursion_limit={effective_recursion_limit}")
+
+    agent = create_react_agent(
+        model=llm,
+        tools=ToolNode(wrapped_tools, handle_tool_errors=_tool_error_message),
+        prompt=agent_config.render_instructions(variables),
+    )
+    return agent, effective_recursion_limit
 
 
 async def create_agent_with_fresh_config(
@@ -174,46 +238,23 @@ async def create_agent_with_fresh_config(
         config_key=config_key,
         user_context=user_context
     )
-
-    llm = create_chat_model(agent_config.provider_name, agent_config.model_name, config_manager)
-    log_student(f"ROUTING: Using {agent_config.provider_name} for {agent_config.model_name}")
-
-    # Extract max_tool_calls from LaunchDarkly config
-    max_tool_calls = 5  # Default value
-    if 'max_tool_calls' in agent_config.custom:
-        max_tool_calls = int(agent_config.custom['max_tool_calls'])
-        log_student(f"EXTRACTED max_tool_calls from LaunchDarkly: {max_tool_calls}")
-
-    # Wrap tools with call counter to track invocations
-    counter = ToolCallCounter(max_calls=max_tool_calls)
-    wrapped_tools = [wrap_tool_with_counter(tool, counter) for tool in tools]
-
-    # Calculate effective recursion limit
-    # Formula: max_tool_calls * 3 + 10 headroom
-    # Each tool call cycle: think → tool_call → tool_result → think
-    effective_recursion_limit = max_tool_calls * 3 + 10
-    log_student(f"CONFIG: max_tool_calls={max_tool_calls}, effective_recursion_limit={effective_recursion_limit}")
-
-    agent = create_react_agent(
-        model=llm,
-        tools=ToolNode(wrapped_tools, handle_tool_errors=_tool_error_message),
-        prompt=agent_config.instructions
-    )
-
+    agent, effective_recursion_limit = _build_react_agent(config_manager, agent_config, tools)
     return agent, agent_config, effective_recursion_limit
 
 
-def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any]):
+def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any], served_config=None):
     """
-    Create agent wrapper that fetches fresh LaunchDarkly config on each invocation.
+    Create agent wrapper that runs inside LaunchDarkly's execute_and_track.
 
-    Enables dynamic A/B testing and real-time config changes without restarts.
-    Tracks tokens, costs, and errors automatically.
+    Reuses `served_config` when already resolved for the turn (avoiding duplicate
+    flag evaluations), or fetches a fresh config per call when standalone.
     """
+    tool_handlers = {tool.name: _to_async_tool_handler(tool) for tool in tools}
+
     class LaunchDarklyAgent:
         async def ainvoke(self, request_data: dict) -> dict:
             """
-            Async invocation - fetches config and executes without blocking event loop
+            Async invocation - executes and records duration, tokens, tool calls, and output.
             """
             user_input = request_data.get("user_input", "")
             try:
@@ -221,42 +262,48 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                 user_context = request_data.get("user_context", {})
                 agent_messages = request_data.get("messages") or [HumanMessage(content=user_input)]
 
-                agent, served, effective_recursion_limit = await create_agent_with_fresh_config(
-                    config_manager=config_manager,
-                    config_key=config_key,
+                served = served_config or await config_manager.get_config(
                     user_id=user_id,
-                    user_context=user_context,
-                    tools=tools
+                    config_key=config_key,
+                    user_context=user_context
                 )
 
                 initial_state = {"messages": agent_messages}
                 prev_message_count = len(agent_messages)
-
                 ld_context = config_manager.build_context(user_id, user_context)
 
                 # Apply rate limiting before LLM call
                 _rate_limit_llm_call()
 
-                async def run_agent():
+                async def run_agent(tracked_tools=None, variables=None):
+                    agent, effective_recursion_limit = _build_react_agent(
+                        config_manager, served, tools, tracked_tools, variables
+                    )
                     log_student(f"EXECUTING AGENT with recursion_limit={effective_recursion_limit}")
                     try:
                         result = await agent.ainvoke(initial_state, {"recursion_limit": effective_recursion_limit})
                     except MaxToolCallsExceeded as exc:
                         # Returned, not raised: reaching the tool limit is expected and isn't a generation error.
-                        return exc, {}
+                        limit_msg = f"I've reached the tool call limit for this request. {exc}"
+                        return exc, limit_msg, {}
 
+                    new_messages = result['messages'][prev_message_count:]
                     usage = {"input_tokens": 0, "output_tokens": 0}
-                    for msg in result['messages'][prev_message_count:]:
+                    for msg in new_messages:
                         if getattr(msg, 'usage_metadata', None):
                             usage["input_tokens"] += msg.usage_metadata.get('input_tokens', 0)
                             usage["output_tokens"] += msg.usage_metadata.get('output_tokens', 0)
-                    return result, usage
 
-                response = await config_manager.track(served, ld_context, run_agent, user_input)
+                    final_text, tool_calls_summary, tool_details = _extract_turn_output(new_messages)
+                    turn_payload = (final_text, tool_calls_summary, tool_details, result['messages'])
+                    return turn_payload, final_text, usage
+
+                response = await config_manager.track(
+                    served, ld_context, run_agent, user_input, tool_handlers=tool_handlers
+                )
 
                 if isinstance(response, MaxToolCallsExceeded):
                     log_student(f"TOOL LIMIT REACHED: {response}")
-                    # Return friendly message explaining the limit
                     return {
                         "user_input": user_input,
                         "response": f"I've reached the tool call limit for this request. {response}",
@@ -265,37 +312,13 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                         "messages": []
                     }
 
-                # Parse the new AI messages into a response and the tool calls made
-                ai_response = ""
-                tool_calls_summary = []
-                tool_details = []
-
-                for msg in response['messages'][prev_message_count:]:
-                    if msg.type != 'ai':
-                        continue
-
-                    if isinstance(msg.content, list):
-                        for content_item in msg.content:
-                            if isinstance(content_item, dict) and content_item.get('type') == 'text':
-                                ai_response += content_item.get('text', '') + " "
-                    elif msg.content:
-                        ai_response += str(msg.content) + " "
-
-                    for tool_call in msg.tool_calls:
-                        args = tool_call.get('args') or {}
-                        detail = {"name": tool_call['name'], "args": args}
-                        search_query = args.get('query') or args.get('search_query')
-                        if search_query:
-                            detail["search_query"] = search_query
-                        tool_calls_summary.append(tool_call['name'])
-                        tool_details.append(detail)
-
+                final_text, tool_calls_summary, tool_details, all_messages = response
                 return {
                     "user_input": user_input,
-                    "response": ai_response.strip() or "I understand your question. Let me help you with that.",
+                    "response": final_text,
                     "tool_calls": tool_calls_summary,
                     "tool_details": tool_details,
-                    "messages": response['messages']
+                    "messages": all_messages
                 }
 
             except Exception as e:

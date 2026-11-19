@@ -2,6 +2,7 @@
 """
 Simplified ConfigManager for LaunchDarkly AI Agent integration
 """
+import inspect
 import os
 import json
 import logging
@@ -17,9 +18,12 @@ from launchdarkly_ai_server import (
     init_client,
     inspect_config,
     parse_ai_config,
+    parse_template,
+    parse_usage,
+    shutdown,
     to_ld_context,
 )
-from launchdarkly_ai_server.tracking import parse_usage
+from launchdarkly_ai_server.tracking import make_track_data
 from dotenv import load_dotenv
 from utils.cost_calculator import calculate_cost
 from utils.logger import log_student, log_debug
@@ -75,15 +79,14 @@ class ServedConfig:
             return "fallback"
         return self.meta.get("variationKey") or "unknown"
 
+    def render_instructions(self, variables: dict[str, Any] | None = None) -> str:
+        """Render Mustache placeholders (such as {{ldContext.plan}}) in instructions."""
+        return parse_template(self.instructions, variables or {})
+
     def track_data(self) -> dict[str, Any]:
         """Metadata attached to custom metric events for experiment attribution."""
-        return {
-            "version": self.meta.get("version", 1),
-            "configKey": self.key,
-            "variationKey": self.variation_key,
-            "modelName": self.model_name,
-            "providerName": self.provider_name,
-        }
+        meta = {"variationKey": "fallback", "version": 1} if self.from_fallback else self.meta
+        return make_track_data(config_key=self.key, config=self.config, meta=meta)
 
 
 class FixedConfigManager:
@@ -115,7 +118,7 @@ class FixedConfigManager:
         if time.monotonic() < self._client_retry_at:
             return False
         try:
-            await init_client({"sdkKey": self.sdk_key})
+            await init_client()
             return True
         except RuntimeError as e:
             self._client_retry_at = time.monotonic() + CLIENT_RETRY_SECONDS
@@ -191,11 +194,10 @@ class FixedConfigManager:
 
     @staticmethod
     def _normalize_tools(config_data: dict[str, Any], config_key: str) -> dict[str, Any]:
-        """Move a top-level `tools` array to `model.parameters.tools`.
+        """Normalize a top-level `tools` list into LaunchDarkly's served config shape.
 
-        ld-aic writes tools at the top level of `.ai_config_defaults.json`, but
-        LaunchDarkly serves them in `model.parameters.tools`, which is where the
-        agents read them. The SDK also rejects a top-level `tools` array.
+        ld-aic writes tools as a top-level list in `.ai_config_defaults.json`, whereas
+        LaunchDarkly serves `tools` as a `{key: spec}` dict alongside `model.parameters.tools`.
         """
         tools = config_data.pop("tools", None)
         if not isinstance(tools, list):
@@ -203,11 +205,16 @@ class FixedConfigManager:
                 config_data["tools"] = tools
             return config_data
 
+        config_data["tools"] = {
+            t["name"]: {**t, "type": "function"}
+            for t in tools
+            if isinstance(t, dict) and "name" in t
+        }
         model = config_data.setdefault("model", {})
         parameters = model.setdefault("parameters", {})
         parameters.setdefault("tools", tools)
         log_debug(
-            f"DEFAULTS: moved {len(tools)} tools into model.parameters for '{config_key}'"
+            f"DEFAULTS: normalized {len(tools)} tools for '{config_key}'"
         )
         return config_data
 
@@ -303,23 +310,37 @@ class FixedConfigManager:
         log_debug(f"CONFIG MANAGER: Fallback model: {served.model_name}")
         return served
 
-    async def track(self, served: ServedConfig, context: dict, call, user_input: str = None):
-        """Run a model call and record it in LaunchDarkly.
+    async def track(
+        self,
+        served: ServedConfig,
+        context: dict,
+        call,
+        user_input: str = None,
+        tool_handlers: dict = None,
+    ):
+        """Run a model call through the AI SDK and record it in LaunchDarkly.
 
-        `call` is an async function that returns (result, usage), with usage in
-        LangChain's usage_metadata shape. The SDK records duration, tokens, and
-        success or error. The cost goes out as the ai_cost_per_request event
-        that Tutorial 3's experiments measure. A local fallback has no variation
-        for the SDK metrics, so only the cost is sent.
+        `call` is an async function (accepting `(tracked_tools, variables)` or no
+        arguments) that returns `(result, output_text, usage)` or `(result, usage)`.
+        `execute_and_track` records duration, tokens, success/error, tool calls
+        (`$ld:ai:tool_call`), and span output; `ai_cost_per_request` is sent for
+        Tutorial 3's dollar-cost experiments.
         """
         box = {}
+        takes_args = len(inspect.signature(call).parameters) > 0
 
-        async def handler(*_):
-            box["result"], usage = await call()
-            return {"output": "", "usage": usage or {}}
+        async def handler(_cfg, _input, tracked_tools, variables, _history):
+            out = await (call(tracked_tools, variables) if takes_args else call())
+            if len(out) == 3:
+                box["result"], output_text, usage = out
+            else:
+                box["result"], usage = out
+                output_text = str(box["result"]) if box["result"] is not None else ""
+            return {"output": output_text, "usage": usage or {}}
 
         if served.from_fallback:
-            usage = parse_usage((await handler())["usage"])
+            raw = await handler(served.config, user_input, tool_handlers or {}, {"ldContext": context}, None)
+            usage = parse_usage(raw["usage"])
             track_data = served.track_data()
         else:
             tracked = await execute_and_track(
@@ -329,6 +350,7 @@ class FixedConfigManager:
                 user_context=context,
                 handler=create_handler((served.provider_name, "agent"), handler),
                 user_input=user_input,
+                tool_handlers=tool_handlers,
             )
             usage, track_data = tracked["usage"], tracked["track_data"]
 
@@ -342,6 +364,10 @@ class FixedConfigManager:
                     log_debug(f"COST TRACKING ERROR: {e}")
 
         return box["result"]
+
+    async def aclose(self):
+        """Flush pending LaunchDarkly events and telemetry spans, then close the client."""
+        await shutdown()
 
     def flush_metrics(self):
         """Flush pending LaunchDarkly events if the client is up.

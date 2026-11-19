@@ -51,7 +51,8 @@ def create_support_agent(config, config_manager):
     agent_wrapper = create_simple_agent_wrapper(
         config_manager=config_manager,
         config_key="support-agent",      # LaunchDarkly AI Config key
-        tools=available_tools            # Tools loaded from configuration
+        tools=available_tools,           # Tools loaded from configuration
+        served_config=config,            # Reuse the config already evaluated for this turn
     )
 
     # STEP 3: Return wrapper with ainvoke() method for LangGraph integration

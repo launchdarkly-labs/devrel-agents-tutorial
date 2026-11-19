@@ -134,27 +134,25 @@ def create_supervisor_agent(supervisor_config, support_config, security_config, 
 
             # Create PII pre-screening model with structured output
             provider, model = ci_safe_provider_and_model(supervisor_config.provider_name, supervisor_config.model_name)
-            base_model = create_chat_model(provider, model, config_manager)
+            base_model = create_chat_model(provider, model, config_manager, supervisor_config.parameters)
 
             # include_raw=True keeps the usage metadata that token and cost tracking need
             prescreen_model = base_model.with_structured_output(PIIPreScreening, include_raw=True)
 
-            # Get pre-screening prompt from LaunchDarkly config
-            prescreen_prompt = supervisor_config.instructions
-
-            screening_message = HumanMessage(content=f"{prescreen_prompt}\n\nUser Input: {user_input}")
-
             # Apply rate limiting before LLM call
             _rate_limit_llm_call()
 
-            async def call_prescreen():
+            async def call_prescreen(_tools=None, variables=None):
+                prescreen_prompt = supervisor_config.render_instructions(variables)
+                screening_message = HumanMessage(content=f"{prescreen_prompt}\n\nUser Input: {user_input}")
                 response = await prescreen_model.ainvoke([screening_message])
                 if response["parsed"] is None:
                     raise ValueError(f"{model} returned no structured routing decision; use a model that supports structured output")
-                return response["parsed"], response["raw"].usage_metadata
+                parsed = response["parsed"]
+                return parsed, parsed.recommended_route, response["raw"].usage_metadata
 
             ld_context = config_manager.build_context(user_id, user_context)
-            screening_result = await config_manager.track(supervisor_config, ld_context, call_prescreen)
+            screening_result = await config_manager.track(supervisor_config, ld_context, call_prescreen, user_input)
 
             # The reasoning can quote the PII, so only the route and confidence are logged
             log_student(f"ROUTING: {screening_result.recommended_route} ({screening_result.confidence:.1f})")
