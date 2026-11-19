@@ -2,15 +2,24 @@
 
 Demo application for the [Agent Graphs tutorial](https://docs.launchdarkly.com/tutorials/agent-graphs).
 
+## Prerequisites
+
+- **Python 3.12+** with [`uv`](https://docs.astral.sh/uv/getting-started/installation/)
+- **LaunchDarkly account** ([sign up for free](https://app.launchdarkly.com/signup)) and a **Writer API access token** (`LD_API_KEY`, created under **Settings → Authorization → Create token**)
+- **OpenAI API key** ([platform.openai.com/api-keys](https://platform.openai.com/api-keys))
+- **Anthropic API key** ([console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys))
+- **Mistral API key** ([console.mistral.ai](https://console.mistral.ai/), optional, used for EU security routing)
+
 ## Quick Start
 
 ```bash
 cp .env.example .env
-# Add your LD_SDK_KEY and API keys to .env
+# 1. Add LD_API_KEY, OPENAI_API_KEY, and ANTHROPIC_API_KEY (plus optional MISTRAL_API_KEY) to .env
 
 uv sync
 uv run python initialize_embeddings.py --force
 (cd bootstrap && uv run python create_configs.py)
+# 2. Copy the Production SDK key printed by create_configs.py into LD_SDK_KEY in .env
 
 # Terminal 1
 uv run uvicorn api.main:app --reload --port 8000
