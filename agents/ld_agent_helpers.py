@@ -299,7 +299,12 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                     return turn_payload, final_text, usage
 
                 response = await config_manager.track(
-                    served, ld_context, run_agent, user_input, tool_handlers=tool_handlers
+                    served,
+                    ld_context,
+                    run_agent,
+                    user_input,
+                    tool_handlers=tool_handlers,
+                    capture_content=True,  # support-agent only sees redacted, PII-free text
                 )
 
                 if isinstance(response, MaxToolCallsExceeded):

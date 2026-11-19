@@ -39,7 +39,7 @@ class FakeConfigManager:
     def build_context(self, user_id, user_context=None):
         return {"kind": "user", "key": user_id, **(user_context or {})}
 
-    async def track(self, served_config, context, call, user_input=None, tool_handlers=None):
+    async def track(self, served_config, context, call, user_input=None, tool_handlers=None, capture_content=False):
         takes_args = len(inspect.signature(call).parameters) > 0
         out = await (call(tool_handlers or {}, {"ldContext": context}) if takes_args else call())
         return out[0]

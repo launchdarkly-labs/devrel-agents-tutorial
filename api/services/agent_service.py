@@ -1,8 +1,11 @@
 import uuid
+from datetime import datetime, timezone
 from langchain_core.messages import HumanMessage, AIMessage
+from launchdarkly_ai_server import conversation_id
+from opentelemetry import trace
 from ..models import ChatResponse, AgentConfig as APIAgentConfig
 from agents.supervisor_agent import create_supervisor_agent, trim_message_history
-from config_manager import FixedConfigManager as ConfigManager
+from config_manager import FixedConfigManager as ConfigManager, TRACER_NAME
 from utils.logger import log_student, log_debug
 
 MAX_MESSAGE_LENGTH = 5000
@@ -67,7 +70,7 @@ class AgentService:
             user_id = user_id.strip() or "anonymous_user"
             user_context = user_context or {}
 
-            # Get LaunchDarkly LDAI configurations for all agents
+            # Get LaunchDarkly LDAI configurations for all agents (initializes OTel tracer provider on first call)
             supervisor_config = await self.config_manager.get_config(user_id, "supervisor-agent", user_context)
             support_config = await self.config_manager.get_config(user_id, "support-agent", user_context)
             security_config = await self.config_manager.get_config(user_id, "security-agent", user_context)
@@ -140,14 +143,26 @@ class AgentService:
             }
 
             # =============================================
-            # LANGGRAPH WORKFLOW EXECUTION
+            # LANGGRAPH WORKFLOW EXECUTION (WITH OTEL ROOT TRACE)
             # =============================================
 
             log_student("INTELLIGENT ROUTING: Starting PII pre-screening analysis")
 
-            # Execute the LangGraph workflow
-            # The supervisor will orchestrate security and support agents automatically
-            result = await supervisor_agent.ainvoke(initial_state)
+            tracer = trace.get_tracer(TRACER_NAME)
+            trace_id_hex = None
+            span_id_hex = None
+            trace_timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            with conversation_id(user_id), tracer.start_as_current_span("multi-agent-chat") as root_span:
+                root_span.set_attribute("launchdarkly.operation.type", "gen_ai")
+                root_span.set_attribute("context.contextKeys.user", user_id)
+                span_ctx = root_span.get_span_context()
+                if span_ctx and span_ctx.trace_id:
+                    trace_id_hex = format(span_ctx.trace_id, "032x")
+                    span_id_hex = format(span_ctx.span_id, "016x")
+                result = await supervisor_agent.ainvoke(initial_state)
+
+            if hasattr(self.config_manager, "flush_traces"):
+                self.config_manager.flush_traces()
 
             actual_tool_calls = result.get("support_tool_calls", [])
             security_detected = result.get("pii_detected", False)
@@ -194,6 +209,9 @@ class AgentService:
                 tool_calls=actual_tool_calls,  # Show actual tools used
                 variation_key=supervisor_config.variation_key,  # Use actual LaunchDarkly variation
                 model=supervisor_config.model_name,  # Primary model
+                trace_id=trace_id_hex,
+                span_id=span_id_hex,
+                trace_timestamp=trace_timestamp,
                 agent_configurations=agent_configurations
             )
 

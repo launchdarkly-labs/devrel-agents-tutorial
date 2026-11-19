@@ -5,13 +5,13 @@ Simplified ConfigManager for LaunchDarkly AI Agent integration
 import inspect
 import os
 import json
-import logging
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
 from launchdarkly_ai_server import (
+    SpanUsage,
     create_handler,
     execute_and_track,
     get_client,
@@ -20,10 +20,20 @@ from launchdarkly_ai_server import (
     parse_ai_config,
     parse_template,
     parse_usage,
+    set_input_content_attributes,
+    set_ld_span_attributes,
+    set_model_identity_attributes,
+    set_output_content_attributes,
+    set_tool_call_content_attributes,
+    set_usage_span_attributes,
     shutdown,
+    text_message,
     to_ld_context,
 )
+from launchdarkly_ai_server.lifecycle import _flush_tracer_provider
 from launchdarkly_ai_server.tracking import make_track_data
+from opentelemetry import trace
+from opentelemetry.trace import StatusCode as SpanStatusCode
 from dotenv import load_dotenv
 from utils.cost_calculator import calculate_cost
 from utils.logger import log_student, log_debug
@@ -31,8 +41,7 @@ import boto3
 
 load_dotenv()
 
-# The tutorial doesn't export traces, so skip the SDK's "OpenTelemetry not installed" warning
-logging.getLogger("launchdarkly_ai_server.lifecycle").setLevel(logging.ERROR)
+TRACER_NAME = "@launchdarkly/ai-langchain-agents"
 
 # How long to serve local defaults before trying to reach LaunchDarkly again
 CLIENT_RETRY_SECONDS = 60
@@ -118,7 +127,7 @@ class FixedConfigManager:
         if time.monotonic() < self._client_retry_at:
             return False
         try:
-            await init_client()
+            await init_client({"serviceName": os.getenv("LD_SERVICE_NAME", "multi-agent-chatbot")})
             return True
         except RuntimeError as e:
             self._client_retry_at = time.monotonic() + CLIENT_RETRY_SECONDS
@@ -317,26 +326,60 @@ class FixedConfigManager:
         call,
         user_input: str = None,
         tool_handlers: dict = None,
+        capture_content: bool = False,
     ):
-        """Run a model call through the AI SDK and record it in LaunchDarkly.
+        """Run a model call through the AI SDK and record metrics + OTel spans in LaunchDarkly.
 
-        `call` is an async function (accepting `(tracked_tools, variables)` or no
-        arguments) that returns `(result, output_text, usage)` or `(result, usage)`.
-        `execute_and_track` records duration, tokens, success/error, tool calls
-        (`$ld:ai:tool_call`), and span output; `ai_cost_per_request` is sent for
-        Tutorial 3's dollar-cost experiments.
+        `capture_content` is False by default so raw PII on supervisor/security calls
+        is never exported on spans; `support-agent` enables it because its input is already redacted.
         """
         box = {}
         takes_args = len(inspect.signature(call).parameters) > 0
+        tracer = trace.get_tracer(TRACER_NAME)
+
+        def _wrap_tools_with_spans(tools_map: dict) -> dict:
+            wrapped = {}
+            for name, fn in (tools_map or {}).items():
+                async def traced_tool(_name=name, _fn=fn, **kwargs):
+                    with tracer.start_as_current_span(f"execute_tool {_name}") as tool_span:
+                        tool_span.set_attribute("gen_ai.operation.name", "execute_tool")
+                        tool_span.set_attribute("gen_ai.tool.name", _name)
+                        res = await _fn(**kwargs)
+                        set_tool_call_content_attributes(tool_span, capture_content, arguments=kwargs, result=res)
+                        return res
+                wrapped[name] = traced_tool
+            return wrapped
 
         async def handler(_cfg, _input, tracked_tools, variables, _history):
-            out = await (call(tracked_tools, variables) if takes_args else call())
-            if len(out) == 3:
-                box["result"], output_text, usage = out
-            else:
-                box["result"], usage = out
-                output_text = str(box["result"]) if box["result"] is not None else ""
-            return {"output": output_text, "usage": usage or {}}
+            with tracer.start_as_current_span(f"invoke_agent {served.key}") as span:
+                span.set_attribute("gen_ai.operation.name", "invoke_agent")
+                set_model_identity_attributes(span, served.provider_name.lower(), served.model_name, legacy_system="langchain")
+                set_ld_span_attributes(span, variables, capture_content=capture_content)
+                if capture_content:
+                    set_input_content_attributes(
+                        span,
+                        True,
+                        system_instructions=served.render_instructions(variables),
+                        messages=[text_message("user", _input or "")] if _input else None,
+                    )
+                try:
+                    spanned_tools = _wrap_tools_with_spans(tracked_tools)
+                    out = await (call(spanned_tools, variables) if takes_args else call())
+                    if len(out) == 3:
+                        box["result"], output_text, raw_usage = out
+                    else:
+                        box["result"], raw_usage = out
+                        output_text = str(box["result"]) if box["result"] is not None else ""
+                    parsed = parse_usage(raw_usage or {})
+                    set_usage_span_attributes(span, SpanUsage(input=parsed["input"], output=parsed["output"]))
+                    if capture_content and output_text:
+                        set_output_content_attributes(span, True, [text_message("assistant", output_text)])
+                    span.set_status(SpanStatusCode.OK)
+                    return {"output": output_text, "usage": raw_usage or {}}
+                except Exception as exc:
+                    span.record_exception(exc)
+                    span.set_status(SpanStatusCode.ERROR, str(exc))
+                    raise
 
         if served.from_fallback:
             raw = await handler(served.config, user_input, tool_handlers or {}, {"ldContext": context}, None)
@@ -365,17 +408,13 @@ class FixedConfigManager:
 
         return box["result"]
 
-    async def aclose(self):
-        """Flush pending LaunchDarkly events and telemetry spans, then close the client."""
-        await shutdown()
+    def flush_traces(self):
+        """Export queued OpenTelemetry spans immediately so UI trace links resolve right away."""
+        _flush_tracer_provider()
 
     def flush_metrics(self):
-        """Flush pending LaunchDarkly events if the client is up.
-
-        The client is initialized lazily on the first get_config, so this can be
-        called before it exists. get_client raises in that state, and there is
-        nothing buffered to flush anyway.
-        """
+        """Flush pending LaunchDarkly events and OpenTelemetry spans if initialized."""
+        _flush_tracer_provider()
         try:
             get_client().flush()
         except Exception as e:
@@ -401,3 +440,7 @@ class FixedConfigManager:
         except Exception as e:
             log_debug(f"FEEDBACK TRACKING ERROR: {e}")
             return False
+
+    async def aclose(self):
+        """Flush pending LaunchDarkly events and telemetry spans, then close the client."""
+        await shutdown()

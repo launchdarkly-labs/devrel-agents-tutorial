@@ -54,16 +54,18 @@ def get_user_context(user_id, sample_users):
     print(f" UI: User not found, using default context: {default_context}")
     return default_context
 
-# Get API configuration from environment
+# Get API and LaunchDarkly project configuration from environment
 API_HOST = os.getenv('API_HOST', 'localhost')
 API_PORT = os.getenv('API_PORT', '8000')
 API_BASE_URL = f"http://{API_HOST}:{API_PORT}"
+LD_PROJECT_KEY = os.getenv('LD_PROJECT_KEY', 'multi-agent-chatbot')
+LD_APP_URL = os.getenv('LD_APP_URL', 'https://app.launchdarkly.com').rstrip('/')
 
 st.set_page_config(
     page_title="LaunchDarkly Multi-Agent System",
     page_icon=str(ALBERT_AVATAR),
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 st.markdown("""
@@ -208,6 +210,57 @@ html, body, [class*="css"], .stApp {
     color: #F4F5F7;
 }
 
+.trace-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-top: 0.65rem;
+    padding: 0.65rem 0.95rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 8px;
+    font-size: 0.8rem;
+    color: rgba(244, 245, 247, 0.8);
+}
+
+.trace-links {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+}
+
+.trace-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.3rem 0.7rem;
+    background: rgba(64, 91, 255, 0.16);
+    border: 1px solid rgba(96, 122, 255, 0.5);
+    border-radius: 6px;
+    color: #D8DEFF !important;
+    font-weight: 500;
+    text-decoration: none !important;
+    transition: all 0.15s ease;
+}
+
+.trace-link:hover {
+    background: #405BFF;
+    border-color: #DDFF46;
+    color: #FFFFFF !important;
+}
+
+.pii-note {
+    margin-top: 0.45rem;
+    padding: 0.45rem 0.75rem;
+    background: rgba(221, 255, 70, 0.08);
+    border-left: 3px solid #DDFF46;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    color: #E5E7EB;
+}
+
 @media (max-width: 768px) {
     .header-container {
         flex-direction: column;
@@ -235,81 +288,60 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-def process_tool_display(tools, tool_details):
-    """Single function to process tools and tool_details for consistent UI display"""
-    tools = tools or []
-    tool_details = tool_details or []
-    tool_list = []
+def show_observability_links(metadata):
+    """Render served summary, PII redaction confirmation, and direct LaunchDarkly Trace & Monitoring links."""
+    import html
+    from urllib.parse import quote
 
-    for i, tool_name in enumerate(tools):
-        # tool_details is in call order, so match by index for repeated tools
-        search_query = ""
-        if i < len(tool_details) and tool_details[i].get("name") == tool_name:
-            search_query = tool_details[i].get("search_query") or ""
+    agent_configurations = metadata.get("agent_configurations") or []
+    support = next((a for a in agent_configurations if a.get("agent_name") == "support-agent"), {})
+    security = next((a for a in agent_configurations if a.get("agent_name") == "security-agent"), {})
 
-        # Add tool with search query if available
-        if search_query:
-            tool_list.append(f"{tool_name} ('{search_query}')")
-        else:
-            tool_list.append(tool_name)
+    variation = support.get("variation_key") or metadata.get("primary_variation", "unknown")
+    model = support.get("model") or metadata.get("primary_model", "unknown")
+    tools_used = support.get("tools_used") or metadata.get("tools_used") or []
+    tools_summary = f" · tools: {', '.join(tools_used)}" if tools_used else ""
 
-    return tool_list
+    trace_id = metadata.get("trace_id")
+    span_id = metadata.get("span_id")
+    trace_ts = metadata.get("trace_timestamp")
+    if trace_id and span_id and trace_ts:
+        import json as _json
+        related = base64.b64encode(
+            _json.dumps({"type": "trace", "id": trace_id, "timestamp": trace_ts, "spanID": span_id}).encode()
+        ).decode("ascii")
+        trace_url = f"{LD_APP_URL}/projects/{LD_PROJECT_KEY}/traces?query={quote(f'trace_id={trace_id}')}&related_resource={quote(related)}"
+        trace_label = "↗ View Trace Waterfall"
+    elif trace_id:
+        query_param = quote(f"trace_id={trace_id}")
+        trace_url = f"{LD_APP_URL}/projects/{LD_PROJECT_KEY}/traces?query={query_param}"
+        trace_label = "↗ View Trace in LaunchDarkly"
+    else:
+        trace_url = f"{LD_APP_URL}/projects/{LD_PROJECT_KEY}/traces"
+        trace_label = "↗ Open Traces in LaunchDarkly"
 
-def show_workflow_details(metadata):
-    """Show each agent's served configuration and the backend console output"""
-    with st.expander("Workflow Details"):
-        agent_configurations = metadata.get("agent_configurations")
-        if agent_configurations:
-            security = next((a for a in agent_configurations if a["agent_name"] == "security-agent"), {})
+    monitoring_url = f"{LD_APP_URL}/projects/{LD_PROJECT_KEY}/ai-configs/support-agent/monitoring"
 
-            # Display each agent's configuration
-            for agent_config in agent_configurations:
-                st.markdown(f"**{agent_config['agent_name']}:**")
+    pii_html = ""
+    if security.get("detected") and security.get("redacted"):
+        escaped_redacted = html.escape(security["redacted"])
+        pii_types = html.escape(", ".join(security.get("types") or []))
+        pii_html = f'<div class="pii-note"><strong>PII redacted ({pii_types}):</strong> {escaped_redacted}</div>'
 
-                config_data = {
-                    "model": agent_config["model"],
-                    "variation_key": agent_config["variation_key"]
-                }
-
-                # Show available tools if any
-                if agent_config.get("tools"):
-                    config_data["tools_available"] = agent_config["tools"]
-
-                # Show tools actually used, with their search queries
-                tools_used = process_tool_display(agent_config.get("tools_used"), agent_config.get("tool_details"))
-                if tools_used:
-                    config_data["tools_used"] = tools_used
-
-                # Show redacted text for supervisor agent only if PII was detected
-                if agent_config["agent_name"] == "supervisor-agent" and security.get("detected") and security.get("redacted"):
-                    config_data["redacted_text"] = security["redacted"]
-
-                # Show PII findings for security agent
-                if agent_config["agent_name"] == "security-agent" and agent_config.get("detected") is not None:
-                    config_data["security_clearance"] = {
-                        "detected": agent_config["detected"],
-                        "types": agent_config.get("types", []),
-                        "redacted": agent_config.get("redacted", "")
-                    }
-
-                st.json(config_data)
-                st.markdown("---")
-        else:
-            # No per-agent details (e.g. an error response)
-            config_data = {
-                "model": metadata["primary_model"],
-                "variation_key": metadata["primary_variation"]
-            }
-            if metadata.get("tools_used"):
-                config_data["tools_used"] = metadata["tools_used"]
-            st.json(config_data)
-
-    with st.expander("Backend Console Output"):
-        if metadata.get("console_logs"):
-            for log in metadata["console_logs"]:
-                st.code(log, language="text")
-        else:
-            st.markdown("*Console output not captured*")
+    summary = html.escape(f"{variation} ({model}){tools_summary}")
+    st.markdown(
+        f"""
+        {pii_html}
+        <div class="trace-bar">
+            <span>Served: <code>{summary}</code></span>
+            <span class="trace-links">
+                <a class="trace-link" href="{trace_url}" target="_blank" rel="noopener">{trace_label}</a>
+                <a class="trace-link" href="{monitoring_url}" target="_blank" rel="noopener">↗ Monitoring &amp; Metrics</a>
+            </span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 st.markdown("""
 <div class="example-queries-container">
@@ -326,7 +358,7 @@ with col1:
 
 with col2:
     if st.button("▶ RAG + Reranking", use_container_width=True):
-        st.session_state.example_query = "Search for multi-armed bandits and exploration vs exploitation, then rerank the most relevant passages"
+        st.session_state.example_query = "In our textbook, how do multi-armed bandits balance exploration and exploitation? Search and rerank the passages."
 
 # Row 2: Security and research tools
 col4, col5, col6 = st.columns(3)
@@ -391,8 +423,7 @@ def send_feedback(message_id, feedback):
 
 # Display chat history
 for message in st.session_state.messages:
-    avatar = str(ALBERT_AVATAR) if message["role"] == "assistant" else None
-    with st.chat_message(message["role"], avatar=avatar):
+    with st.chat_message(message["role"]):
         st.write(message["content"])
         if message["role"] == "assistant":
             # Show feedback buttons for assistant messages
@@ -413,7 +444,7 @@ for message in st.session_state.messages:
                 feedback_emoji = "👍" if current_feedback == "positive" else "👎"
                 st.caption(f"Feedback: {feedback_emoji}")
 
-            show_workflow_details(message["metadata"])
+            show_observability_links(message["metadata"])
 
 # Handle input sources
 prompt = None
@@ -441,7 +472,7 @@ if prompt:
         st.write(prompt)
 
     # Get agent response inside the assistant bubble so a live spinner shows immediately
-    with st.chat_message("assistant", avatar=str(ALBERT_AVATAR)):
+    with st.chat_message("assistant"):
         try:
             user_context = get_user_context(st.session_state.user_id, sample_users)
 
@@ -485,6 +516,9 @@ if prompt:
                     "primary_variation": data["variation_key"],
                     "primary_model": data["model"],
                     "tools_used": data["tool_calls"],
+                    "trace_id": data.get("trace_id"),
+                    "span_id": data.get("span_id"),
+                    "trace_timestamp": data.get("trace_timestamp"),
                     "console_logs": data.get("console_logs", []),
                     "agent_configurations": data.get("agent_configurations") or []
                 }
@@ -514,7 +548,7 @@ if prompt:
                     st.button("👎 Not helpful", key=f"new_thumbs_down_{message_id}", help="This response was not helpful",
                               on_click=send_feedback, args=(message_id, "negative"))
 
-                show_workflow_details(metadata)
+                show_observability_links(metadata)
 
                 # Clear example query only after successful processing to avoid losing it on reruns
                 if st.session_state.get("example_query") == prompt:

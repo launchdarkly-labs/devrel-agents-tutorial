@@ -63,10 +63,9 @@ class SearchToolV2(BaseTool):
             # Build concise human summary
             summary_lines = [f"📚 Found {len(results)} relevant document(s):\n"]
             for idx, (doc, score, _metadata) in enumerate(results, 1):
-                # brief snippet for readability - shortened to 200 chars
                 snippet = (doc or "").strip().replace("\n", " ")
-                if len(snippet) > 200:
-                    snippet = snippet[:200] + "..."
+                if len(snippet) > 800:
+                    snippet = snippet[:800] + "..."
 
                 summary_lines.append(f"{idx}. [Score: {score:.2f}]")
                 summary_lines.append(f"   {snippet}\n")
