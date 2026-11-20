@@ -302,6 +302,8 @@ class MultiAgentBootstrap:
             "tools": [{"key": tool, "version": 1} for tool in variation_data.get("tools", [])],
             "modelConfigKey": model_config_key
         }
+        if variation_data.get("customParameters"):
+            payload["model"] = {"custom": variation_data["customParameters"]}
         print(f"     Updating with modelConfigKey: {model_config_key}")
         
         response = http.patch(url, headers=self.headers, json=payload, timeout=30)

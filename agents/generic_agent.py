@@ -75,7 +75,7 @@ def create_generic_agent(agent_config, config_manager, valid_routes: List[str] =
                 user_input = state.get("processed_input", state.get("user_input", ""))
                 messages = state.get("messages", [HumanMessage(content=user_input)])
 
-                _rate_limit_llm_call()
+                await _rate_limit_llm_call()
                 start_time = time.time()
 
                 # Execute based on whether we have tools

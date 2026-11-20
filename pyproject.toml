@@ -50,3 +50,8 @@ dev = [
 [tool.setuptools]
 packages = ["api", "agents"]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+

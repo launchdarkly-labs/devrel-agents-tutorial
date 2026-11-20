@@ -1,4 +1,4 @@
-# Multi-Agent Chatbot with LaunchDarkly AgentControl
+# Multi-Agent Chatbot with LaunchDarkly Agent Management
 
 Demo application for the [Agent Graphs tutorial](https://docs.launchdarkly.com/tutorials/agent-graphs).
 
@@ -43,20 +43,20 @@ Open http://localhost:8501
 ### LaunchDarkly Integration
 | File | Purpose |
 |------|---------|
-| `config_manager.py` | **Core LD integration** - fetches AgentControl configs and agent graphs |
+| `config_manager.py` | **Core LD integration** - fetches AI configs and agent graphs |
 | `api/services/agent_service.py` | **Graph orchestration** - traverses Agent Graph, routes between agents |
-| `bootstrap/create_configs.py` | Creates AgentControl configs, tools, segments, and targeting rules in LD |
+| `bootstrap/create_configs.py` | Creates AI configs, tools, segments, and targeting rules in LD |
 
 ### Agents
 | File | Purpose |
 |------|---------|
-| `agents/generic_agent.py` | Runs any graph node (supervisor, security, support) from its AgentControl config and tools |
+| `agents/generic_agent.py` | Runs any graph node (supervisor, security, support) from its AI config and tools |
 | `agents/ld_agent_helpers.py` | Shared helpers - model creation, tool call limits |
 
 ### Tools
 | File | Purpose |
 |------|---------|
-| `tools_impl/dynamic_tool_factory.py` | Creates tools from AgentControl config definitions |
+| `tools_impl/dynamic_tool_factory.py` | Creates tools from AI config definitions |
 | `tools_impl/search_v1.py` | Basic keyword search |
 | `tools_impl/search_v2.py` | Semantic vector search |
 | `tools_impl/reranking.py` | BM25 relevance scoring |
@@ -77,7 +77,7 @@ Open http://localhost:8501
 ┌─────────────────────────────────────────────────────────────┐
 │                    LaunchDarkly Dashboard                    │
 │  • Agent Graph (chatbot-flow)                               │
-│  • AgentControl configs (supervisor, security, support)     │
+│  • AI configs (supervisor, security, support)               │
 │  • Targeting rules (free/paid, EU/other)                    │
 └─────────────────────────────────────────────────────────────┘
                               │
@@ -115,7 +115,7 @@ Open http://localhost:8501
 | Graph edges (routing) | No |
 | Targeting rules (user segments) | No |
 | Variation rollout percentages | No |
-| New agent type | **Yes** (register in `AGENT_REGISTRY`) |
+| New agent node (using existing tools) | No |
 | New tool integration | **Yes** (implement in `tools_impl/`) |
 | Routing contract changes | **Yes** (update `_select_next_node()`) |
 
@@ -123,13 +123,9 @@ Open http://localhost:8501
 
 The `AgentGraphExecutor` is stateless and generic:
 
-- **AGENT_REGISTRY**: Maps node key patterns to factory functions
+- **Generic node runner (`create_generic_agent`)**: Builds each node at runtime from its LaunchDarkly AI config, instructions, and tools
 - **Edge-following**: `while current_node` loop until terminal node
 - **Routing**: Matches `routing_decision` to edge `handoff.route`
 - **Safety**: Cycle detection, max hop limit (10)
 
-To add a new agent type:
-```python
-# In agent_service.py
-AGENT_REGISTRY["my_agent"] = create_my_agent
-```
+To add a new agent node, create its AI config in LaunchDarkly and connect it with an edge in the `chatbot-flow` agent graph—`AgentGraphExecutor` executes it automatically through `create_generic_agent` without code changes unless it needs a new tool in `tools_impl/`.

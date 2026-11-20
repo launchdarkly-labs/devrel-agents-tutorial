@@ -100,7 +100,7 @@ class AgentGraphExecutor:
 
                 # Track
                 if graph_tracker:
-                    graph_tracker.track_node_invocation(node_key)
+                    graph_tracker.track_node_invocation(current_node)
                     if prev_node_key:
                         graph_tracker.track_handoff_success(prev_node_key, node_key)
 
@@ -217,12 +217,22 @@ class AgentGraphExecutor:
             ctx["messages"] = [HumanMessage(content=result["redacted"])]
 
         var_key = (meta or {}).get("variationKey") or "unknown"
+        version = (meta or {}).get("version", 1)
+        raw_tools = (config or {}).get("tools")
+        if isinstance(raw_tools, dict):
+            configured_tools = list(raw_tools.keys())
+        elif isinstance(raw_tools, list):
+            configured_tools = [t["name"] if isinstance(t, dict) and "name" in t else str(t) for t in raw_tools]
+        else:
+            configured_tools = []
 
         # Record agent config - fully generic, include all result fields
         agent_info = {
             "agent_name": node_key,
             "variation_key": var_key,
+            "version": version,
             "model": ((config or {}).get("model") or {}).get("name", "unknown"),
+            "tools": configured_tools,
             "tools_used": result.get("tool_calls", []),
         }
 
@@ -280,16 +290,23 @@ class AgentService:
                 user_context=user_context or {}
             )
 
+            agent_configs = result.get("agent_configs", [])
+            primary_cfg = next(
+                (cfg for cfg in agent_configs if cfg.get("agent_name") == "support-agent"),
+                agent_configs[-1] if agent_configs else {},
+            )
+
             return ChatResponse(
                 id=str(uuid.uuid4()),
                 response=result.get("final_response", ""),
                 tool_calls=result.get("tool_calls", []),
-                variation_key="agent-graph",
-                model="multi-agent",
+                variation_key=primary_cfg.get("variation_key", "agent-graph"),
+                model=primary_cfg.get("model", "multi-agent"),
                 agent_configurations=[
                     APIAgentConfig(
                         agent_name=cfg["agent_name"],
                         variation_key=cfg.get("variation_key", "default"),
+                        version=cfg.get("version"),
                         model=cfg.get("model", "unknown"),
                         tools=cfg.get("tools", []),
                         tools_used=cfg.get("tools_used", []),
@@ -297,7 +314,7 @@ class AgentService:
                         types=cfg.get("types"),
                         redacted=cfg.get("redacted")
                     )
-                    for cfg in result.get("agent_configs", [])
+                    for cfg in agent_configs
                 ]
             )
 

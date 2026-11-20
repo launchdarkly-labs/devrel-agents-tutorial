@@ -12,6 +12,7 @@ class ChatRequest(BaseModel):
 class AgentConfig(BaseModel):
     agent_name: str
     variation_key: str
+    version: Optional[int] = None
     model: str
     tools: List[str]  # Available tools configured from LaunchDarkly
     tools_used: Optional[List[str]] = None  # Actual tools that were executed
@@ -36,10 +37,12 @@ class FeedbackRequest(BaseModel):
     ai_response: str
     feedback: str  # "positive" or "negative"
     variation_key: str
+    version: Optional[int] = None
     model: str
     tool_calls: List[str]
     source: str  # "real_user" or "simulated"
     user_context: Optional[Dict] = None  # Geographic and plan attributes for LaunchDarkly targeting
+    agent_configurations: Optional[List[AgentConfig]] = None
     
 class FeedbackResponse(BaseModel):
     success: bool

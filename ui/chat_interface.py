@@ -359,6 +359,9 @@ for message in st.session_state.messages:
             if "message_id" in message:
                 message_id = message["message_id"]
                 current_feedback = message.get("feedback")
+                msg_meta = message.get("metadata") or {}
+                msg_agent_configs = msg_meta.get("agent_configurations") or []
+                msg_context = message.get("user_context") or get_user_context(st.session_state.user_id, sample_users)
                 
                 col1, col2, col3 = st.columns([1, 1, 8])
                 with col1:
@@ -375,13 +378,15 @@ for message in st.session_state.messages:
                                     "user_query": message.get("user_query", ""),
                                     "ai_response": message["content"],
                                     "feedback": "positive",
-                                    "variation_key": message["metadata"].get("primary_variation", "unknown"),
-                                    "model": message["metadata"].get("primary_model", "unknown"),
-                                    "tool_calls": message["metadata"].get("tools_used", []),
-                                    "source": "real_user"
+                                    "variation_key": msg_meta.get("primary_variation", "unknown"),
+                                    "model": msg_meta.get("primary_model", "unknown"),
+                                    "tool_calls": msg_meta.get("tools_used", []),
+                                    "source": "real_user",
+                                    "user_context": msg_context,
+                                    "agent_configurations": msg_agent_configs,
                                 }
                             )
-                            if feedback_response.status_code == 200:
+                            if feedback_response.status_code == 200 and feedback_response.json().get("success", True):
                                 message["feedback"] = "positive"
                                 st.rerun()
                             else:
@@ -403,13 +408,15 @@ for message in st.session_state.messages:
                                     "user_query": message.get("user_query", ""),
                                     "ai_response": message["content"],
                                     "feedback": "negative",
-                                    "variation_key": message["metadata"].get("primary_variation", "unknown"),
-                                    "model": message["metadata"].get("primary_model", "unknown"),
-                                    "tool_calls": message["metadata"].get("tools_used", []),
-                                    "source": "real_user"
+                                    "variation_key": msg_meta.get("primary_variation", "unknown"),
+                                    "model": msg_meta.get("primary_model", "unknown"),
+                                    "tool_calls": msg_meta.get("tools_used", []),
+                                    "source": "real_user",
+                                    "user_context": msg_context,
+                                    "agent_configurations": msg_agent_configs,
                                 }
                             )
-                            if feedback_response.status_code == 200:
+                            if feedback_response.status_code == 200 and feedback_response.json().get("success", True):
                                 message["feedback"] = "negative"
                                 st.rerun()
                             else:
@@ -572,6 +579,7 @@ if prompt:
                 "metadata": metadata,
                 "message_id": message_id,
                 "user_query": prompt,
+                "user_context": user_context,
                 "feedback": None
             })
             
@@ -613,10 +621,12 @@ if prompt:
                                             "variation_key": data["variation_key"],
                                             "model": data["model"],
                                             "tool_calls": data["tool_calls"],
-                                            "source": "real_user"
+                                            "source": "real_user",
+                                            "user_context": user_context,
+                                            "agent_configurations": data.get("agent_configurations") or [],
                                         }
                                     )
-                                    if feedback_response.status_code == 200:
+                                    if feedback_response.status_code == 200 and feedback_response.json().get("success", True):
                                         # Update message in session state immediately
                                         for msg in st.session_state.messages:
                                             if msg.get("message_id") == message_id:
@@ -644,10 +654,12 @@ if prompt:
                                             "variation_key": data["variation_key"],
                                             "model": data["model"],
                                             "tool_calls": data["tool_calls"],
-                                            "source": "real_user"
+                                            "source": "real_user",
+                                            "user_context": user_context,
+                                            "agent_configurations": data.get("agent_configurations") or [],
                                         }
                                     )
-                                    if feedback_response.status_code == 200:
+                                    if feedback_response.status_code == 200 and feedback_response.json().get("success", True):
                                         # Update message in session state immediately
                                         for msg in st.session_state.messages:
                                             if msg.get("message_id") == message_id:

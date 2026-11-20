@@ -4,13 +4,20 @@ Simplified ConfigManager for LaunchDarkly AI Agent integration
 """
 import os
 import uuid
+import boto3
 import ldclient
+from dotenv import load_dotenv
 from launchdarkly_ai_server import (
     get_client,
     init_client,
     inspect_config,
+    make_track_data,
     resolve_graph,
 )
+from launchdarkly_ai_server.tracking import make_track_data as make_config_track_data
+from utils.logger import log_student, log_debug
+
+load_dotenv()
 
 # The AI SDK has no feedback API, so these are emitted directly. Keep the keys
 # byte-identical to the ones the previous SDK sent or the existing feedback
@@ -30,10 +37,17 @@ class GraphTracker:
     graph and per-config monitoring views pick them up.
     """
 
-    def __init__(self, graph_key: str, context: dict):
+    def __init__(self, graph_key: str, context: dict, meta: dict | None = None):
         self._graph_key = graph_key
+        self._run_id = str(uuid.uuid4())
         self._context = ldclient.Context.from_dict(context)
-        self._data = {"runId": str(uuid.uuid4()), "configKey": graph_key, "graphKey": graph_key}
+        self._data = make_config_track_data(
+            config_key=graph_key,
+            config={},
+            meta=meta or {},
+            graph_key=graph_key,
+            run_id=self._run_id,
+        )
         self._nodes_entered = 0
 
     def _send(self, event: str, data: dict, value=1):
@@ -46,22 +60,17 @@ class GraphTracker:
         self._send(event, {**self._data, **(extra or {})}, value)
 
     def _node_data(self, node) -> dict:
-        config = node.config or {}
-        meta = node.meta or {}
-        return {
-            "runId": self._data["runId"],
-            "graphKey": self._graph_key,
-            "configKey": node.key,
-            "variationKey": meta.get("variationKey", ""),
-            "version": meta.get("version", 1),
-            "modelName": (config.get("model") or {}).get("name", ""),
-            "providerName": (config.get("provider") or {}).get("name", ""),
-        }
+        return make_track_data(node, self._graph_key, self._run_id)
 
-    def track_node_invocation(self, node_key: str):
+    def track_node_invocation(self, node):
         """Record this node as it is entered; the ordered series is the path."""
-        log_debug(f"GRAPH: entering node {node_key}")
-        self._track("$ld:ai:graph:node", 1, {"nodeKey": node_key, "index": self._nodes_entered})
+        log_debug(f"GRAPH: entering node {node.key}")
+        node_data = self._node_data(node)
+        self._send(
+            "$ld:ai:graph:node",
+            {**node_data, "nodeKey": node.key, "index": self._nodes_entered},
+            1,
+        )
         self._nodes_entered += 1
 
     def track_handoff_success(self, source_key: str, target_key: str):
@@ -97,12 +106,6 @@ class GraphTracker:
     def track_total_tokens(self, total: int):
         self._track("$ld:ai:graph:total_tokens", total)
 
-
-from dotenv import load_dotenv
-from utils.logger import log_student, log_debug
-import boto3
-
-load_dotenv()
 
 class FixedConfigManager:
     def __init__(self):
@@ -212,7 +215,11 @@ class FixedConfigManager:
         ld_user_context = self.build_context(user_id, user_context)
 
         graph = await resolve_graph(graph_key, context=ld_user_context)
-        return graph, GraphTracker(graph_key, ld_user_context)
+        raw_graph = self.ld_client.variation(
+            graph_key, ldclient.Context.from_dict(ld_user_context), {}
+        )
+        graph_meta = (raw_graph.get("_ldMeta") or {}) if isinstance(raw_graph, dict) else {}
+        return graph, GraphTracker(graph_key, ld_user_context, meta=graph_meta)
     
 
     def clear_cache(self):
@@ -227,20 +234,41 @@ class FixedConfigManager:
         """Flush metrics and clear SDK cache"""
         self.ld_client.flush()
 
-    async def track_feedback(self, context, config_key: str, thumbs_up: bool):
-        """Track user feedback with LaunchDarkly.
+    async def track_feedback(
+        self,
+        context,
+        config_key: str,
+        thumbs_up: bool,
+        variation_key: str | None = None,
+        version: int | None = None,
+    ):
+        """Track user feedback with LaunchDarkly, attributed to the served variation.
 
-        The AI SDK has no feedback API, so this emits the event directly on
-        the same context the config was evaluated with. Monitoring counts it
-        only when the event names the config and the variation that was served.
+        Prefers the variationKey and version returned with the response so feedback
+        never re-evaluates targeting later; falls back to inspect_config only when
+        the caller omitted the served variation, and fails if none can be resolved.
         """
         try:
             await self._ensure_ai_client()
-            meta = (await inspect_config(config_key, context))["meta"] or {}
-            data = {"configKey": config_key, "variationKey": meta.get("variationKey", ""), "version": meta.get("version", 1)}
+            resolved_variation = (variation_key or "").strip()
+            resolved_version = version
+            if not resolved_variation:
+                meta = (await inspect_config(config_key, context))["meta"] or {}
+                resolved_variation = (meta.get("variationKey") or "").strip()
+                if resolved_version is None:
+                    resolved_version = meta.get("version", 1)
+            if not resolved_variation:
+                log_debug(f"FEEDBACK TRACKING ERROR: no served variationKey for '{config_key}'")
+                return False
+
+            data = {
+                "configKey": config_key,
+                "variationKey": resolved_variation,
+                "version": resolved_version if resolved_version is not None else 1,
+            }
             ld_context = ldclient.Context.from_dict(context)
             self.ld_client.track(FEEDBACK_EVENTS[bool(thumbs_up)], ld_context, data, 1)
-            log_student(f"FEEDBACK TRACKED: {'👍 Positive' if thumbs_up else '👎 Negative'}")
+            log_student(f"FEEDBACK TRACKED: {'👍 Positive' if thumbs_up else '👎 Negative'} ({resolved_variation})")
             self.ld_client.flush()
             return True
         except Exception as e:

@@ -1,4 +1,5 @@
 """LaunchDarkly AI agent helpers - model creation and metric tracking."""
+import asyncio
 import time
 import os
 from typing import Any
@@ -30,17 +31,18 @@ class ToolCallCounter:
 
 
 # Rate limiting
-_last_llm_call_time = 0
+_last_llm_call_time = 0.0
 _min_call_interval = 1.0
 
 
-def _rate_limit_llm_call():
-    """Simple rate limiter for LLM calls."""
+async def _rate_limit_llm_call():
+    """Non-blocking rate limiter for LLM calls across concurrent requests."""
     global _last_llm_call_time
-    elapsed = time.time() - _last_llm_call_time
-    if elapsed < _min_call_interval:
-        time.sleep(_min_call_interval - elapsed)
-    _last_llm_call_time = time.time()
+    now = time.monotonic()
+    target_time = max(now, _last_llm_call_time + _min_call_interval) if _last_llm_call_time > 0 else now
+    _last_llm_call_time = target_time
+    if target_time > now:
+        await asyncio.sleep(target_time - now)
 
 
 def map_provider_to_langchain(provider_name: str) -> str:

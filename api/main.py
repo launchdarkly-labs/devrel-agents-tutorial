@@ -74,6 +74,19 @@ async def flush_metrics():
         return {"success": False, "message": f"Failed to flush metrics: {e}"}
 
 
+def _resolve_served_variation(feedback: FeedbackRequest, target_agent: str = "support-agent") -> tuple[str | None, int | None]:
+    """Extract the variationKey and version that actually served the response."""
+    configs = feedback.agent_configurations or []
+    matched = next((cfg for cfg in configs if cfg.agent_name == target_agent), None)
+    if matched is None and configs:
+        matched = configs[-1]
+    if matched and matched.variation_key and matched.variation_key not in ("unknown", "error", "validation"):
+        return matched.variation_key, matched.version
+    if feedback.variation_key and feedback.variation_key not in ("unknown", "agent-graph", "error", "validation"):
+        return feedback.variation_key, feedback.version
+    return None, feedback.version
+
+
 @app.post("/feedback", response_model=FeedbackResponse)
 async def submit_feedback(feedback: FeedbackRequest):
     """Submit user feedback for AI responses"""
@@ -85,17 +98,20 @@ async def submit_feedback(feedback: FeedbackRequest):
                 feedback.user_id,
                 feedback.user_context
             )
+            served_variation, served_version = _resolve_served_variation(feedback, "support-agent")
             success = await agent_service.config_manager.track_feedback(
                 context,
                 "support-agent",
-                thumbs_up=feedback.feedback == "positive"
+                thumbs_up=feedback.feedback == "positive",
+                variation_key=served_variation,
+                version=served_version,
             )
 
             if success:
-                log_debug(f"FEEDBACK SUBMITTED: {feedback.feedback} for {feedback.variation_key}")
+                log_debug(f"FEEDBACK SUBMITTED: {feedback.feedback} for {served_variation or feedback.variation_key}")
                 return FeedbackResponse(
                     success=True,
-                    message=f"Feedback submitted successfully"
+                    message="Feedback submitted successfully"
                 )
             else:
                 log_debug(f"FEEDBACK: Failed to submit feedback to LaunchDarkly")

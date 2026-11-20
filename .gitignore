@@ -41,8 +41,7 @@ env/
 ehthumbs.db
 Thumbs.db
 
-# Tests
-tests/
+.pytest_cache/
 
 # Documentation
 docs/

@@ -156,7 +156,8 @@ Complexity guide:
                     "response": data.get("response", ""),
                     "variation_key": data.get("variation_key"),
                     "model": data.get("model"),
-                    "tool_calls": data.get("tool_calls", [])  # Add tool_calls from response
+                    "tool_calls": data.get("tool_calls", []),  # Add tool_calls from response
+                    "agent_configurations": data.get("agent_configurations") or [],
                 }
             else:
                 return {"success": False}
@@ -216,7 +217,8 @@ Most users don't give feedback unless the answer is notably good or bad."""
                     "model": chat_data.get("model", "unknown"),
                     "tool_calls": chat_data.get("tool_calls", []),  # Add required tool_calls field
                     "source": "simulated",
-                    "user_context": self.user_context  # Add context for LaunchDarkly targeting
+                    "user_context": self.user_context,  # Add context for LaunchDarkly targeting
+                    "agent_configurations": chat_data.get("agent_configurations") or [],
                 },
                 timeout=10
             )
