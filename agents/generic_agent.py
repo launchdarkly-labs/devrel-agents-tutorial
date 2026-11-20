@@ -35,13 +35,6 @@ def create_generic_agent(agent_config, config_manager, valid_routes: List[str] =
 
         async def ainvoke(self, state: dict) -> dict:
             """Execute the agent using LaunchDarkly config."""
-
-            # Configs are plain dicts now. A node in an enabled graph always
-            # has one; an empty config means nothing was served.
-            if not agent_config:
-                log_student(f"AGENT DISABLED: skipping")
-                return {"response": "", "_skipped": True}
-
             model_cfg = agent_config.get("model") or {}
             provider_name = (agent_config.get("provider") or {}).get("name")
 
@@ -216,17 +209,15 @@ def create_generic_agent(agent_config, config_manager, valid_routes: List[str] =
                         route = data.get("route", "").lower().strip()
                         fields = {k: v for k, v in data.items() if k != "route" and not k.startswith("_")}
 
-                        # Exact match validation against valid routes
+                        # Return original casing when matched; preserve unrecognized route
+                        # so _select_next_node can record it on handoff_failure and fail closed.
                         if self.valid_routes:
                             valid_lower = [r.lower() for r in self.valid_routes]
                             if route in valid_lower:
-                                # Return the original casing from valid_routes
                                 idx = valid_lower.index(route)
                                 return self.valid_routes[idx], fields
-                            else:
-                                log_student(f"INVALID ROUTE: '{route}' not in {self.valid_routes}")
-                                return None, fields
-                        return route, fields
+                            log_student(f"INVALID ROUTE: '{route}' not in {self.valid_routes}")
+                        return route or None, fields
                     except json.JSONDecodeError:
                         continue
 

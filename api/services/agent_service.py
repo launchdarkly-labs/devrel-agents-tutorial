@@ -120,12 +120,15 @@ class AgentGraphExecutor:
                 result = await agent.ainvoke(ctx)
 
                 duration_ms = int((time.time() - node_start) * 1000)
-                if graph_tracker and not result.get("_skipped"):
+                if graph_tracker:
                     graph_tracker.track_node_result(
                         current_node, duration_ms, not result.get("_error"), result.get("_token_usage")
                     )
                     for tool_name in result.get("tool_calls") or []:
                         graph_tracker.track_tool_call(current_node, tool_name)
+
+                if result.get("_error"):
+                    raise RuntimeError(f"{node_key} failed: {result['_error']}")
 
                 # Update context with results (generic)
                 self._update_context(node_key, config, result, ctx, current_node.meta)
@@ -146,6 +149,7 @@ class AgentGraphExecutor:
         except Exception as e:
             log_student(f"GRAPH ERROR: {e}")
             if graph_tracker:
+                graph_tracker.track_latency(int((time.time() - graph_start_time) * 1000))
                 graph_tracker.track_invocation_failure()
             raise
 
@@ -164,17 +168,18 @@ class AgentGraphExecutor:
                 route_map[route] = edge.target_key
             log_student(f"  EDGE: → {edge.target_key} (route={route})")
 
-        # Exact match only - fail closed on unrecognized routes
+        # Exact match only - fail closed on missing or unrecognized routes
         if routing and routing in route_map:
             target = route_map[routing]
             log_student(f"  MATCHED: routing='{routing}' → {target}")
             return nodes.get(target)
-        elif routing:
+        if route_map:
             log_student(f"  UNRECOGNIZED ROUTE: '{routing}' not in {list(route_map.keys())}")
             if graph_tracker:
-                graph_tracker.track_handoff_failure(source_key, routing)
+                graph_tracker.track_handoff_failure(source_key, routing or "")
+            raise ValueError(f"{source_key} chose no valid route: {routing!r}")
 
-        # Default: first edge (fallback)
+        # Edges without routes hand off to the first target
         if edges:
             default = edges[0].target_key
             log_student(f"  DEFAULT: → {default}")
@@ -246,7 +251,7 @@ class AgentService:
         self.graph_executor = AgentGraphExecutor(self.config_manager)
 
     def flush_metrics(self):
-        self.config_manager.close()
+        self.config_manager.flush()
 
     async def process_message(
         self,
