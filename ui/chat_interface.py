@@ -1,11 +1,36 @@
-import streamlit as st
-import requests
-import json
+import base64
 import os
+from pathlib import Path
+import requests
+import streamlit as st
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+
+UI_DIR = Path(__file__).resolve().parent
+ASSETS_DIR = UI_DIR / "assets"
+KB_DIR = UI_DIR.parent / "kb"
+ALBERT_AVATAR = ASSETS_DIR / "albert-proud.png"
+USER_AVATAR = ASSETS_DIR / "avatar-user.png"
+ASSISTANT_AVATAR = ASSETS_DIR / "avatar-assistant.png"
+LD_WORDMARK_SVG = ASSETS_DIR / "launchdarkly-logo-white.svg"
+
+# Clear identifiers (always redacted) plus employer, city, and role (redacted only by strict security).
+SECURITY_CHECK_QUERY = (
+    "My name is Jane Doe, email jane.doe@example.com. "
+    "I work at Acme Corp in Berlin as a manager. "
+    "Can you explain temporal-difference learning?"
+)
+
+LD_LOGO_B64 = base64.b64encode(LD_WORDMARK_SVG.read_bytes()).decode("ascii")
+ALBERT_B64 = base64.b64encode(ALBERT_AVATAR.read_bytes()).decode("ascii")
+KB_FILES = sorted(p.name for p in KB_DIR.glob("*.pdf"))
+KB_SUMMARY = (
+    f"{', '.join(KB_FILES)} (Reinforcement Learning)"
+    if KB_FILES == ["SuttonBartoIPRLBook2ndEd.pdf"]
+    else (", ".join(KB_FILES) if KB_FILES else "No PDFs in kb/")
+)
 
 # Sample users for LaunchDarkly targeting (hardcoded)
 sample_users = [
@@ -38,321 +63,357 @@ def get_user_context(user_id, sample_users):
     print(f" UI: User not found, using default context: {default_context}")
     return default_context
 
-# Get API configuration from environment
+# Get API and LaunchDarkly project configuration from environment
 API_HOST = os.getenv('API_HOST', 'localhost')
 API_PORT = os.getenv('API_PORT', '8000')
 API_BASE_URL = f"http://{API_HOST}:{API_PORT}"
-
-# Get UI configuration from environment
-UI_PORT = int(os.getenv('UI_PORT', '8501'))
+LD_PROJECT_KEY = os.getenv('LD_PROJECT_KEY', 'multi-agent-chatbot')
+LD_APP_URL = os.getenv('LD_APP_URL', 'https://app.launchdarkly.com').rstrip('/')
 
 st.set_page_config(
-    page_title="LangGraph Multi-Agent System",
-    page_icon="→",
+    page_title="LaunchDarkly Multi-Agent System",
+    page_icon=str(ALBERT_AVATAR),
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 st.markdown("""
 <style>
-.main {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Sora:wght@600;700&display=swap');
+
+html, body, [class*="css"], .stApp {
+    background-color: #191919;
+    color: #F4F5F7;
+    font-family: 'Inter', sans-serif;
 }
 
-/* Simplified header styling */
-.header-container {
-    background: transparent;
-    padding: 1rem 0;
-    margin-bottom: 1.5rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.header-title {
-    font-size: 1.5rem;
-    font-weight: 600;
-    margin: 0;
-    color: #ffffff;
-    text-align: left;
-    margin-bottom: 0.25rem;
-}
-
-.header-subtitle {
-    font-size: 0.85rem;
-    color: rgba(255, 255, 255, 0.7);
-    text-align: left;
-    margin: 0;
-    font-weight: 400;
-    line-height: 1.4;
-}
-
-.header-badge {
-    display: inline-block;
-    background: rgba(255, 255, 255, 0.08);
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
-    font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.8);
-    margin-top: 0.5rem;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-/* Simplified example queries section */
-.example-queries-container {
-    background: transparent;
-    padding: 0.5rem 0;
-    margin: 1rem 0;
-    border: none;
-}
-
-.example-queries-title {
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.9);
-    margin-bottom: 0.25rem;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.example-queries-subtitle {
-    color: rgba(255, 255, 255, 0.6);
-    margin-bottom: 1rem;
-    font-size: 0.75rem;
-    line-height: 1.4;
-}
-
-/* Gradient button styling inspired by LaunchDarkly cards */
-.stButton > button {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border: none;
-    border-radius: 8px;
-    padding: 0.5rem 1rem;
-    font-weight: 500;
-    font-size: 0.8rem;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+.slide {
+    margin-bottom: 1.25rem;
+    border-radius: 28px;
+    background:
+        linear-gradient(#F8F8F8, #F8F8F8) padding-box,
+        linear-gradient(100deg, #DDFF46 0%, #FF35A2 46%, #3DD6F5 100%) border-box;
+    border: 14px solid transparent;
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
     position: relative;
     overflow: hidden;
 }
 
-.stButton > button::before {
-    content: '';
+.slide::before {
+    content: "";
     position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-    transition: left 0.5s;
+    inset: 0;
+    border-radius: inherit;
+    background-image:
+        linear-gradient(rgba(25, 25, 25, 0.16) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(25, 25, 25, 0.16) 1px, transparent 1px);
+    background-size: 26px 26px;
+    mask-image: linear-gradient(#000, transparent 72%);
+    pointer-events: none;
 }
 
-.stButton > button:hover {
-    background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+.slide-body {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    background: #FFFFFF;
+    border-radius: 16px 16px 0 0;
+    padding: 1.6rem 1.8rem 1.2rem;
 }
 
-.stButton > button:hover::before {
-    left: 100%;
+.eyebrow {
+    display: inline-block;
+    background: #DDFF46;
+    color: #191919;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.22rem 0.45rem;
+    border-radius: 2px;
+    margin-bottom: 0.7rem;
 }
 
-.stButton > button:active {
-    transform: translateY(0);
-    background: linear-gradient(135deg, #4c51bf 0%, #553c9a 100%);
+.slide h1.header-title {
+    font-family: 'Sora', sans-serif;
+    font-size: 2.35rem;
+    font-weight: 700;
+    margin: 0 0 0.45rem;
+    color: #191919 !important;
+    letter-spacing: -0.03em;
+    line-height: 1.05;
 }
 
-/* Purple, pink, and green button variations inspired by LaunchDarkly cards */
-/* Use JavaScript to target buttons by text content */
+.header-subtitle {
+    font-size: 1rem;
+    color: #6D6E71;
+    margin: 0;
+    line-height: 1.45;
+    max-width: 38rem;
+}
 
-/* Chat message styling */
-.stChatMessage {
-    background: rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(10px);
+.slide-albert {
+    width: 168px;
+    height: 168px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    background:
+        radial-gradient(circle at 35% 30%, #DDFF46 0%, #DDFF46 42%, transparent 43%),
+        radial-gradient(circle at 78% 72%, #FF35A2 0%, #FF35A2 36%, transparent 37%),
+        #F8F8F8;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.header-mascot {
+    height: 150px;
+    width: auto;
+}
+
+.slide-foot {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    background: #191919;
+    padding: 0.85rem 1.3rem;
+    border-radius: 0 0 12px 12px;
+}
+
+.ld-wordmark {
+    height: 22px;
+    width: auto;
+}
+
+.kb-foot {
+    color: #DDFF46;
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.queries-label {
+    color: #A7A9AC;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin: 0.2rem 0 0.55rem;
+}
+
+[class*="st-key-ask-"] button {
+    background: #212124;
+    color: #F4F5F7;
+    border: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    text-align: left;
+    padding: 0.72rem 1rem;
+    font-weight: 600;
+}
+
+[class*="st-key-ask-"] button:hover {
+    border-color: #DDFF46;
+    color: #FFFFFF;
+    background: #26262A;
+}
+
+.stButton > button {
+    background: #282A30;
+    color: #F4F5F7;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 10px;
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+}
+
+[data-testid="stSidebar"] .stButton > button {
+    background: #DDFF46;
+    color: #191919;
+    border: none;
+}
+
+[data-testid="stSidebar"] .stButton > button:hover {
+    background: #FFFFFF;
+    color: #191919;
+}
+
+.stChatMessage {
+    background: #212124;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
     margin: 0.5rem 0;
 }
 
-.stTitle {
-    color: white;
+.stChatMessage img {
+    border-radius: 8px;
 }
 
-/* Enhanced dropdown styling */
 .stSelectbox > div > div {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: #282A30;
+    border: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: 6px;
-    color: white;
+    color: #F4F5F7;
 }
 
-.stSelectbox > div > div:hover {
-    background: rgba(255, 255, 255, 0.12);
-    border-color: rgba(255, 255, 255, 0.25);
+.trace-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-top: 0.65rem;
+    padding: 0.65rem 0.95rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 8px;
+    font-size: 0.8rem;
+    color: rgba(244, 245, 247, 0.8);
 }
 
-.stSelectbox > div > div > div {
-    color: white;
+.trace-links {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
 }
 
-/* Sidebar styling */
-.css-1d391kg {
-    background: rgba(0, 0, 0, 0.1);
+.trace-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.3rem 0.7rem;
+    background: rgba(64, 91, 255, 0.16);
+    border: 1px solid rgba(96, 122, 255, 0.5);
+    border-radius: 6px;
+    color: #D8DEFF !important;
+    font-weight: 500;
+    text-decoration: none !important;
+    transition: all 0.15s ease;
 }
 
-/* Responsive design */
+.trace-link:hover {
+    background: #405BFF;
+    border-color: #DDFF46;
+    color: #FFFFFF !important;
+}
+
+.pii-note {
+    margin-top: 0.45rem;
+    padding: 0.45rem 0.75rem;
+    background: rgba(221, 255, 70, 0.08);
+    border-left: 3px solid #DDFF46;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    color: #E5E7EB;
+}
+
 @media (max-width: 768px) {
+    .slide-body {
+        flex-direction: column;
+        align-items: flex-start;
+    }
     .header-title {
-        font-size: 1.25rem;
-    }
-    
-    .header-subtitle {
-        font-size: 0.8rem;
-    }
-    
-    .example-queries-container {
-        padding: 0.25rem 0;
+        font-size: 1.6rem;
     }
 }
 </style>
-
-<script>
-// Apply different colors to buttons based on their text content
-document.addEventListener('DOMContentLoaded', function() {
-    function styleButtons() {
-        const buttons = document.querySelectorAll('.stButton button');
-        
-        buttons.forEach(button => {
-            const text = button.textContent.trim();
-            
-            // Reset any existing styles
-            button.style.background = '';
-            button.style.color = '';
-            
-            // Apply colors based on button text
-            if (text === 'Basic Search' || text === 'ArXiv Research') {
-                // Pink buttons
-                button.style.background = 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)';
-                button.style.color = 'white';
-            } else if (text === 'RAG + Reranking' || text === 'Semantic Scholar') {
-                // Purple buttons
-                button.style.background = 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)';
-                button.style.color = 'white';
-            } else if (text === 'Security Check' || text === 'Full Research Stack') {
-                // Green buttons
-                button.style.background = 'linear-gradient(135deg, #10b981 0%, #047857 100%)';
-                button.style.color = 'white';
-            }
-        });
-    }
-    
-    // Style buttons on page load
-    styleButtons();
-    
-    // Style buttons when new content is added (Streamlit reruns)
-    const observer = new MutationObserver(function(mutations) {
-        mutations.forEach(function(mutation) {
-            if (mutation.type === 'childList') {
-                styleButtons();
-            }
-        });
-    });
-    
-    observer.observe(document.body, {
-        childList: true,
-        subtree: true
-    });
-});
-</script>
 """, unsafe_allow_html=True)
 
-# Simplified header section
-st.markdown("""
-<div class="header-container">
-    <h1 class="header-title">LaunchDarkly Multi-Agent System</h1>
-    <p class="header-subtitle">Intelligent document search and research powered by LangGraph and RAG architecture</p>
+st.markdown(f"""
+<div class="slide">
+    <div class="slide-body">
+        <div>
+            <span class="eyebrow">Research demo</span>
+            <h1 class="header-title">Multi-Agent Research System</h1>
+            <p class="header-subtitle">A LangGraph supervisor, a PII security boundary, and hybrid RAG with live academic search.</p>
+        </div>
+        <div class="slide-albert">
+            <img class="header-mascot" src="data:image/png;base64,{ALBERT_B64}" alt="Albert" />
+        </div>
+    </div>
+    <div class="slide-foot">
+        <img class="ld-wordmark" src="data:image/svg+xml;base64,{LD_LOGO_B64}" alt="LaunchDarkly" />
+        <span class="kb-foot">{KB_SUMMARY} · ArXiv · OpenAlex</span>
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
-def process_tool_display(tools, tool_details):
-    """Single function to process tools and tool_details for consistent UI display"""
-    tool_list = []
-    
-    # Handle None values
-    if tools is None:
-        tools = []
-    if tool_details is None:
-        tool_details = []
-    
-    # Define mapping from actual tool names to display names
-    mcp_name_mapping = {
-        "search_papers": "arxiv_search",
-        "search_semantic_scholar": "semantic_scholar"
-    }
-    
-    for i, tool in enumerate(tools):
-        tool_name = tool if isinstance(tool, str) else tool.get("name", str(tool))
-        
-        # Get search query from matching tool_details with proper name mapping
-        # Use index-based matching for multiple instances of the same tool
-        search_query = ""
-        if i < len(tool_details):
-            detail = tool_details[i]
-            detail_name = detail.get("name")
-            # Check both direct match and mapped match
-            mapped_name = mcp_name_mapping.get(detail_name, detail_name)
-            if mapped_name == tool_name:
-                search_query = detail.get("search_query", "") or ""
-        
-        # Add tool with search query if available
-        if search_query:
-            tool_list.append(f"{tool_name} ('{search_query}')")
-        else:
-            tool_list.append(tool_name)
-    
-    return tool_list
+def show_observability_links(metadata):
+    """Render served summary, PII redaction confirmation, and direct LaunchDarkly Trace & Monitoring links."""
+    import html
+    from urllib.parse import quote
 
-# Enhanced example queries section
-st.markdown("""
-<div class="example-queries-container">
-    <h3 class="example-queries-title">Example Queries</h3>
-    <p class="example-queries-subtitle">Test different tool combinations with these curated queries</p>
-</div>
-""", unsafe_allow_html=True)
+    agent_configurations = metadata.get("agent_configurations") or []
+    support = next((a for a in agent_configurations if a.get("agent_name") == "support-agent"), {})
+    security = next((a for a in agent_configurations if a.get("agent_name") == "security-agent"), {})
 
-# Row 1: Basic search tools
-col1, col2 = st.columns(2)
-with col1:
-    if st.button("Basic Search", use_container_width=True):
-        st.session_state.example_query = "What are the key concepts I should understand from your knowledge base?"
+    variation = support.get("variation_key") or metadata.get("primary_variation", "unknown")
+    model = support.get("model") or metadata.get("primary_model", "unknown")
+    tools_used = support.get("tools_used") or metadata.get("tools_used") or []
+    tools_summary = f" · tools: {', '.join(tools_used)}" if tools_used else ""
 
-with col2:
-    if st.button("RAG + Reranking", use_container_width=True):
-        st.session_state.example_query = "Search for implementation guidance, then rerank the results to show me the most relevant information"
+    trace_id = metadata.get("trace_id")
+    span_id = metadata.get("span_id")
+    trace_ts = metadata.get("trace_timestamp")
+    if trace_id and span_id and trace_ts:
+        import json as _json
+        related = base64.b64encode(
+            _json.dumps({"type": "trace", "id": trace_id, "timestamp": trace_ts, "spanID": span_id}).encode()
+        ).decode("ascii")
+        trace_url = f"{LD_APP_URL}/projects/{LD_PROJECT_KEY}/traces?query={quote(f'trace_id={trace_id}')}&related_resource={quote(related)}"
+        trace_label = "↗ View Trace Waterfall"
+    elif trace_id:
+        query_param = quote(f"trace_id={trace_id}")
+        trace_url = f"{LD_APP_URL}/projects/{LD_PROJECT_KEY}/traces?query={query_param}"
+        trace_label = "↗ View Trace in LaunchDarkly"
+    else:
+        trace_url = f"{LD_APP_URL}/projects/{LD_PROJECT_KEY}/traces"
+        trace_label = "↗ Open Traces in LaunchDarkly"
 
-# Row 2: Security and research tools
-col4, col5, col6 = st.columns(3)
-with col4:
-    if st.button("Security Check", use_container_width=True):
-        st.session_state.example_query = "My name is John Doe, email: john.doe@example.com. I'm a VP at StarSystems, and I need help with my account"
+    monitoring_url = f"{LD_APP_URL}/projects/{LD_PROJECT_KEY}/ai-configs/support-agent/monitoring"
 
-with col5:
-    if st.button("ArXiv Research", use_container_width=True):
-        st.session_state.example_query = "Find recent ArXiv papers on machine learning from the last 6 months"
+    pii_html = ""
+    if security.get("detected") and security.get("redacted"):
+        escaped_redacted = html.escape(security["redacted"])
+        pii_types = html.escape(", ".join(security.get("types") or []))
+        pii_html = f'<div class="pii-note"><strong>PII redacted ({pii_types}):</strong> {escaped_redacted}</div>'
 
-with col6:
-    if st.button("Semantic Scholar", use_container_width=True):
-        st.session_state.example_query = "Search Semantic Scholar for research papers on artificial intelligence with citations"
+    summary = html.escape(f"{variation} ({model}){tools_summary}")
+    st.markdown(
+        f"""
+        {pii_html}
+        <div class="trace-bar">
+            <span>Served: <code>{summary}</code></span>
+            <span class="trace-links">
+                <a class="trace-link" href="{trace_url}" target="_blank" rel="noopener">{trace_label}</a>
+                <a class="trace-link" href="{monitoring_url}" target="_blank" rel="noopener">↗ Monitoring &amp; Metrics</a>
+            </span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-# Row 3: Advanced research
-col7 = st.columns(1)[0]
-with col7:
-    if st.button("Full Research Stack", use_container_width=True):
-        st.session_state.example_query = "Compare what you know from your internal documentation with recent academic research papers"
+EXAMPLE_QUERIES = [
+    ("basic", "Basic Search", "How does Q-learning differ from SARSA in your knowledge base?"),
+    ("rerank", "RAG + Reranking", "In our textbook, how do multi-armed bandits balance exploration and exploitation? Search and rerank the passages."),
+    ("security", "Security Check", SECURITY_CHECK_QUERY),
+    ("arxiv", "ArXiv Research", "Find recent ArXiv papers on offline reinforcement learning"),
+    ("openalex", "OpenAlex Research", "Search OpenAlex for highly cited papers on reinforcement learning from human feedback"),
+    ("full", "Full Research Stack", "Compare how our textbook defines policy gradient methods with recent academic research papers"),
+]
 
-st.markdown("---")
+st.markdown('<p class="queries-label">Example queries</p>', unsafe_allow_html=True)
+for start in (0, 3):
+    columns = st.columns(3)
+    for column, (key, title, prompt) in zip(columns, EXAMPLE_QUERIES[start:start + 3]):
+        with column:
+            if st.button(title, key=f"ask-{key}", use_container_width=True):
+                st.session_state.example_query = prompt
 
 # Initialize session state with dual history for PII isolation
 if "messages" not in st.session_state:
@@ -366,159 +427,67 @@ if "sanitized_messages" not in st.session_state:
 if "user_id" not in st.session_state:
     st.session_state.user_id = "user_other_paid_001"
 
+
+def send_feedback(message_id, feedback):
+    """Button callback, so a click on the newest response isn't lost on rerun."""
+    message = next(m for m in st.session_state.messages if m.get("message_id") == message_id)
+    try:
+        feedback_response = requests.post(
+            f"{API_BASE_URL}/feedback",
+            json={
+                "user_id": st.session_state.user_id,
+                "message_id": message_id,
+                "user_query": message.get("user_query", ""),
+                "ai_response": message["content"],
+                "feedback": feedback,
+                "variation_key": message["metadata"].get("primary_variation", "unknown"),
+                "model": message["metadata"].get("primary_model", "unknown"),
+                "tool_calls": message["metadata"].get("tools_used", []),
+                "source": "real_user",
+                "user_context": get_user_context(st.session_state.user_id, sample_users),
+            },
+        )
+        if feedback_response.status_code == 200:
+            message["feedback"] = feedback
+        else:
+            st.error("Failed to submit feedback")
+    except Exception as e:
+        st.error(f"Failed to submit feedback: {e}")
+
 # Display chat history
 for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
+    with st.chat_message(message["role"], avatar=str(USER_AVATAR if message["role"] == "user" else ASSISTANT_AVATAR)):
         st.write(message["content"])
-        if message["role"] == "assistant" and "metadata" in message:
+        if message["role"] == "assistant":
             # Show feedback buttons for assistant messages
-            if "message_id" in message:
-                message_id = message["message_id"]
-                current_feedback = message.get("feedback")
-                
-                col1, col2, col3 = st.columns([1, 1, 8])
-                with col1:
-                    feedback_key = f"hist_thumbs_up_{message_id}"
-                    disabled = current_feedback == "positive"
-                    if st.button("👍", key=feedback_key, disabled=disabled, help="Helpful response"):
-                        # Send feedback for historical message
-                        try:
-                            feedback_response = requests.post(
-                                f"{API_BASE_URL}/feedback",
-                                json={
-                                    "user_id": st.session_state.user_id,
-                                    "message_id": message_id,
-                                    "user_query": message.get("user_query", ""),
-                                    "ai_response": message["content"],
-                                    "feedback": "positive",
-                                    "variation_key": message["metadata"].get("primary_variation", "unknown"),
-                                    "model": message["metadata"].get("primary_model", "unknown"),
-                                    "tool_calls": message["metadata"].get("tools_used", []),
-                                    "source": "real_user"
-                                }
-                            )
-                            if feedback_response.status_code == 200:
-                                message["feedback"] = "positive"
-                                st.rerun()
-                            else:
-                                st.error("Failed to submit feedback")
-                        except Exception as e:
-                            st.error(f"Failed to submit feedback: {e}")
-                
-                with col2:
-                    feedback_key = f"hist_thumbs_down_{message_id}"
-                    disabled = current_feedback == "negative"
-                    if st.button("👎", key=feedback_key, disabled=disabled, help="Not helpful"):
-                        # Send feedback for historical message
-                        try:
-                            feedback_response = requests.post(
-                                f"{API_BASE_URL}/feedback",
-                                json={
-                                    "user_id": st.session_state.user_id,
-                                    "message_id": message_id,
-                                    "user_query": message.get("user_query", ""),
-                                    "ai_response": message["content"],
-                                    "feedback": "negative",
-                                    "variation_key": message["metadata"].get("primary_variation", "unknown"),
-                                    "model": message["metadata"].get("primary_model", "unknown"),
-                                    "tool_calls": message["metadata"].get("tools_used", []),
-                                    "source": "real_user"
-                                }
-                            )
-                            if feedback_response.status_code == 200:
-                                message["feedback"] = "negative"
-                                st.rerun()
-                            else:
-                                st.error("Failed to submit feedback")
-                        except Exception as e:
-                            st.error(f"Failed to submit feedback: {e}")
-                            
-                # Show current feedback status
-                if current_feedback:
-                    feedback_emoji = "👍" if current_feedback == "positive" else "👎"
-                    st.caption(f"Feedback: {feedback_emoji}")
-            with st.expander("Workflow Details"):
-                metadata = message["metadata"]
-                if "agent_configurations" in metadata:
-                    # Display each agent's configuration
-                    for agent_config in metadata["agent_configurations"]:
-                        st.markdown(f"**{agent_config['agent_name']}:**")
-                        
-                        # Process both available tools and tools used
-                        tools_available = agent_config.get("tools", [])
-                        tools_used = agent_config.get("tools_used", [])
-                        tool_details = agent_config.get("tool_details", [])
-                        
-                        # Process tools used with details for display
-                        processed_tools_used = process_tool_display(tools_used, tool_details)
-                        
-                        config_data = {
-                            "model": agent_config["model"],
-                            "variation_key": agent_config["variation_key"]
-                        }
-                        
-                        # Show available tools if any
-                        if tools_available:
-                            config_data["tools_available"] = tools_available
-                        
-                        # Show tools actually used if any
-                        if processed_tools_used:
-                            config_data["tools_used"] = processed_tools_used
-                        
-                        # Show redacted text for supervisor agent only if PII was detected
-                        if agent_config.get("agent_name") == "supervisor-agent":
-                            # Look for redacted text from security agent in metadata
-                            agent_data = metadata.get("agent_configurations", [])
-                            for agent in agent_data:
-                                if (agent.get("agent_name") == "security-agent" and 
-                                    agent.get("detected") == True and 
-                                    agent.get("redacted")):
-                                    config_data["redacted_text"] = agent.get("redacted", "")
-                                    break
-                        
-                        # Show PII findings for security agent
-                        if agent_config.get("agent_name") == "security-agent":
-                            # Show tools used (if any)
-                            if tool_details:
-                                for detail in tool_details:
-                                    if detail.get("name") == "pii_detection" and detail.get("pii_result"):
-                                        # Use the PII result directly from the tool (new schema format)
-                                        config_data["pii_analysis"] = detail["pii_result"]
-                            
-                            # Show security clearance status from agent response
-                            # This will be passed from the API response
-                            agent_data = metadata.get("agent_configurations", [])
-                            for agent in agent_data:
-                                if agent.get("agent_name") == "security-agent":
-                                    if agent.get("detected") is not None:
-                                        config_data["security_clearance"] = {
-                                            "detected": agent.get("detected"),
-                                            "types": agent.get("types", []),
-                                            "redacted": agent.get("redacted", "")
-                                        }
-                            
-                        st.json(config_data)
-                        st.markdown("---")
-                else:
-                    # Fallback for old format
-                    st.json(metadata)
-            
-            with st.expander("Backend Console Output"):
-                if message["metadata"].get("console_logs"):
-                    for log in message["metadata"]["console_logs"]:
-                        st.code(log, language="text")
-                else:
-                    st.markdown("*Console output not captured*")
+            message_id = message["message_id"]
+            current_feedback = message.get("feedback")
+
+            col1, col2, col3 = st.columns([1, 1, 8])
+            with col1:
+                st.button("👍", key=f"hist_thumbs_up_{message_id}", disabled=current_feedback == "positive",
+                          help="Helpful response", on_click=send_feedback, args=(message_id, "positive"))
+
+            with col2:
+                st.button("👎", key=f"hist_thumbs_down_{message_id}", disabled=current_feedback == "negative",
+                          help="Not helpful", on_click=send_feedback, args=(message_id, "negative"))
+
+            # Show current feedback status
+            if current_feedback:
+                feedback_emoji = "👍" if current_feedback == "positive" else "👎"
+                st.caption(f"Feedback: {feedback_emoji}")
+
+            show_observability_links(message["metadata"])
 
 # Handle input sources
 prompt = None
 
 # Check for example query first
-if "example_query" in st.session_state and st.session_state.example_query:
+if st.session_state.get("example_query"):
     prompt = st.session_state.example_query
 
 # Always show chat input - it should never disappear
-user_text = st.chat_input("Ask questions about your documents or request research...")
+user_text = st.chat_input(f"Ask about {KB_SUMMARY}, test PII redaction, or search ArXiv & OpenAlex...")
 if user_text is not None:
     user_text = user_text.strip()
     if user_text:
@@ -530,272 +499,119 @@ if user_text is not None:
 if prompt:
     # Add user message
     st.session_state.messages.append({"role": "user", "content": prompt})
-    
+
     # Display user message
-    with st.chat_message("user"):
+    with st.chat_message("user", avatar=str(USER_AVATAR)):
         st.write(prompt)
-    
-    # Get agent response
-    try:
-        # Get user context for LaunchDarkly targeting
-        user_context = get_user_context(st.session_state.user_id, sample_users)
-        
-        # SECURITY BOUNDARY: Send only sanitized conversation history to API
-        # Raw messages (with PII) are never sent to backend - support agent isolation maintained
-        response = requests.post(
-            f"{API_BASE_URL}/chat",
-            json={
-                "user_id": st.session_state.user_id,
-                "message": prompt,  # Raw current message (security agent will process)
-                "user_context": user_context,
-                "sanitized_conversation_history": st.session_state.sanitized_messages  # PII-free history only
-            }
-        )
-        
-        if response.status_code == 200:
-            data = response.json()
-            
-            # Extract console logs if available
-            console_logs = data.get("console_logs", [])
-            
-            # SECURITY BOUNDARY: Extract sanitized messages from security agent
-            # Support agent only ever sees these PII-free versions
-            sanitized_user_message = prompt  # Default fallback
-            
-            # Extract redacted user message from security agent output
-            if "agent_configurations" in data:
-                for agent_config in data["agent_configurations"]:
+
+    # Get agent response inside the assistant bubble so a live spinner shows immediately
+    with st.chat_message("assistant", avatar=str(ASSISTANT_AVATAR)):
+        try:
+            user_context = get_user_context(st.session_state.user_id, sample_users)
+
+            with st.spinner("Running multi-agent workflow (Supervisor → Security → Support + RAG/MCP tools)..."):
+                # SECURITY BOUNDARY: Send only sanitized conversation history to API
+                response = requests.post(
+                    f"{API_BASE_URL}/chat",
+                    json={
+                        "user_id": st.session_state.user_id,
+                        "message": prompt,  # Raw current message (security agent will process)
+                        "user_context": user_context,
+                        "sanitized_conversation_history": st.session_state.sanitized_messages  # PII-free history only
+                    }
+                )
+
+            if response.status_code == 200:
+                data = response.json()
+
+                # SECURITY BOUNDARY: Extract sanitized messages from security agent
+                # Support agent only ever sees these PII-free versions
+                sanitized_user_message = prompt  # Default fallback
+
+                # Extract redacted user message from security agent output
+                for agent_config in data.get("agent_configurations") or []:
                     if agent_config.get("agent_name") == "security-agent" and agent_config.get("redacted"):
                         sanitized_user_message = agent_config["redacted"]
                         break
-            
-            # Update sanitized conversation history (PII-free, for API calls)
-            st.session_state.sanitized_messages.append({
-                "role": "user",
-                "content": sanitized_user_message  # Redacted version only
-            })
-            st.session_state.sanitized_messages.append({
-                "role": "assistant",
-                "content": data["response"]
-            })
-            
-            # Add assistant message with all agent configurations
-            metadata = {
-                "primary_variation": data["variation_key"],
-                "primary_model": data["model"],
-                "tools_used": data["tool_calls"],
-                "console_logs": console_logs
-            }
-            
-            # Add individual agent configurations if available
-            if "agent_configurations" in data and data["agent_configurations"]:
-                metadata["agent_configurations"] = data["agent_configurations"]
-            
-            # Add message with unique ID for feedback tracking
-            message_id = f"msg_{len(st.session_state.messages)}"
-            st.session_state.messages.append({
-                "role": "assistant", 
-                "content": data["response"],
-                "metadata": metadata,
-                "message_id": message_id,
-                "user_query": prompt,
-                "feedback": None
-            })
-            
-            # Display assistant message
-            with st.chat_message("assistant"):
-                st.write(data["response"])
-                
-                # Add improved feedback system after the response
-                message_obj = None
-                for msg in st.session_state.messages:
-                    if msg.get("message_id") == message_id:
-                        message_obj = msg
-                        break
-                
-                if message_obj:
-                    current_feedback = message_obj.get("feedback")
-                    
-                    # Show feedback status if already provided
-                    if current_feedback:
-                        feedback_emoji = "👍" if current_feedback == "positive" else "👎"
-                        st.caption(f"Feedback recorded: {feedback_emoji}")
-                    else:
-                        # Show feedback options
-                        st.markdown("**Was this response helpful?**")
-                        col1, col2, col3 = st.columns([1, 1, 8])
-                        
-                        with col1:
-                            if st.button("👍 Helpful", key=f"new_thumbs_up_{message_id}", help="This response was helpful"):
-                                # Send positive feedback to backend
-                                try:
-                                    feedback_response = requests.post(
-                                        f"{API_BASE_URL}/feedback",
-                                        json={
-                                            "user_id": st.session_state.user_id,
-                                            "message_id": message_id,
-                                            "user_query": prompt,
-                                            "ai_response": data["response"],
-                                            "feedback": "positive",
-                                            "variation_key": data["variation_key"],
-                                            "model": data["model"],
-                                            "tool_calls": data["tool_calls"],
-                                            "source": "real_user"
-                                        }
-                                    )
-                                    if feedback_response.status_code == 200:
-                                        # Update message in session state immediately
-                                        for msg in st.session_state.messages:
-                                            if msg.get("message_id") == message_id:
-                                                msg["feedback"] = "positive"
-                                                break
-                                        # Force a rerun to update UI immediately
-                                        st.rerun()
-                                    else:
-                                        st.error("Failed to submit feedback")
-                                except Exception as e:
-                                    st.error(f"Failed to submit feedback: {e}")
-                        
-                        with col2:
-                            if st.button("👎 Not helpful", key=f"new_thumbs_down_{message_id}", help="This response was not helpful"):
-                                # Send negative feedback to backend
-                                try:
-                                    feedback_response = requests.post(
-                                        f"{API_BASE_URL}/feedback",
-                                        json={
-                                            "user_id": st.session_state.user_id,
-                                            "message_id": message_id,
-                                            "user_query": prompt,
-                                            "ai_response": data["response"],
-                                            "feedback": "negative",
-                                            "variation_key": data["variation_key"],
-                                            "model": data["model"],
-                                            "tool_calls": data["tool_calls"],
-                                            "source": "real_user"
-                                        }
-                                    )
-                                    if feedback_response.status_code == 200:
-                                        # Update message in session state immediately
-                                        for msg in st.session_state.messages:
-                                            if msg.get("message_id") == message_id:
-                                                msg["feedback"] = "negative"
-                                                break
-                                        # Force a rerun to update UI immediately
-                                        st.rerun()
-                                    else:
-                                        st.error("Failed to submit feedback")
-                                except Exception as e:
-                                    st.error(f"Failed to submit feedback: {e}")
-                    
-                with st.expander("Workflow Details"):
-                    if "agent_configurations" in data and data["agent_configurations"]:
-                        # Display each agent's configuration
-                        for agent_config in data["agent_configurations"]:
-                            st.markdown(f"**{agent_config['agent_name']}:**")
-                            
-                            # Process both available tools and tools used
-                            tools_available = agent_config.get("tools", [])
-                            tools_used = agent_config.get("tools_used", [])
-                            tool_details = agent_config.get("tool_details", [])
-                            
-                            # Process tools used with details for display
-                            processed_tools_used = process_tool_display(tools_used, tool_details)
-                            
-                            config_data = {
-                                "model": agent_config["model"],
-                                "variation_key": agent_config["variation_key"]
-                            }
-                            
-                            # Show available tools if any
-                            if tools_available:
-                                config_data["tools_available"] = tools_available
-                            
-                            # Show tools actually used if any
-                            if processed_tools_used:
-                                config_data["tools_used"] = processed_tools_used
-                            
-                            # Show redacted text for supervisor agent only if PII was detected
-                            if agent_config.get("agent_name") == "supervisor-agent":
-                                # Look for redacted text from security agent in data
-                                for agent in data["agent_configurations"]:
-                                    if (agent.get("agent_name") == "security-agent" and 
-                                        agent.get("detected") == True and 
-                                        agent.get("redacted")):
-                                        config_data["redacted_text"] = agent.get("redacted", "")
-                                        break
-                            
-                            # Show PII findings for security agent
-                            if agent_config.get("agent_name") == "security-agent" and tool_details:
-                                for detail in tool_details:
-                                    if detail.get("name") == "pii_detection" and detail.get("pii_result"):
-                                        # Use the PII result directly from the tool (new schema format)
-                                        config_data["pii_analysis"] = detail["pii_result"]
-                                
-                            st.json(config_data)
-                            st.markdown("---")
-                    else:
-                        # Fallback to single configuration - use shared tool processing
-                        tools_used = data.get("tool_calls", [])
-                        # Convert old format to new format for compatibility
-                        tool_details = []
-                        processed_tools = process_tool_display(tools_used, tool_details)
-                        
-                        config_data = {
-                            "model": data["model"],
-                            "variation_key": data["variation_key"]
-                        }
-                        
-                        if processed_tools:
-                            config_data["tools_used"] = processed_tools
-                            
-                        st.json(config_data)
-                
-                with st.expander("Backend Console Output"):
-                    if metadata.get("console_logs"):
-                        for log in metadata["console_logs"]:
-                            st.code(log, language="text")
-                    else:
-                        st.markdown("*Console output not captured*")
 
-            # Clear example query only after successful processing to avoid losing it on reruns
-            if "example_query" in st.session_state and st.session_state.example_query == prompt:
-                del st.session_state.example_query
-        else:
-            st.error(f"Error: {response.status_code}")
-            
-    except Exception as e:
-        st.error(f"Connection error: {e}")
+                # Update sanitized conversation history (PII-free, for API calls)
+                st.session_state.sanitized_messages.append({
+                    "role": "user",
+                    "content": sanitized_user_message  # Redacted version only
+                })
+                st.session_state.sanitized_messages.append({
+                    "role": "assistant",
+                    "content": data["response"]
+                })
+
+                # Add assistant message with all agent configurations
+                metadata = {
+                    "primary_variation": data["variation_key"],
+                    "primary_model": data["model"],
+                    "tools_used": data["tool_calls"],
+                    "trace_id": data.get("trace_id"),
+                    "span_id": data.get("span_id"),
+                    "trace_timestamp": data.get("trace_timestamp"),
+                    "console_logs": data.get("console_logs", []),
+                    "agent_configurations": data.get("agent_configurations") or []
+                }
+
+                # Add message with unique ID for feedback tracking
+                message_id = f"msg_{len(st.session_state.messages)}"
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": data["response"],
+                    "metadata": metadata,
+                    "message_id": message_id,
+                    "user_query": prompt,
+                    "feedback": None
+                })
+
+                st.write(data["response"])
+
+                # Show feedback options
+                st.markdown("**Was this response helpful?**")
+                col1, col2, col3 = st.columns([1, 1, 8])
+
+                with col1:
+                    st.button("👍 Helpful", key=f"new_thumbs_up_{message_id}", help="This response was helpful",
+                              on_click=send_feedback, args=(message_id, "positive"))
+
+                with col2:
+                    st.button("👎 Not helpful", key=f"new_thumbs_down_{message_id}", help="This response was not helpful",
+                              on_click=send_feedback, args=(message_id, "negative"))
+
+                show_observability_links(metadata)
+
+                # Clear example query only after successful processing to avoid losing it on reruns
+                if st.session_state.get("example_query") == prompt:
+                    del st.session_state.example_query
+            else:
+                st.error(f"Error: {response.status_code}")
+
+        except Exception as e:
+            st.error(f"Connection error: {e}")
 
 # Sidebar for user settings
 with st.sidebar:
     st.header("Context")
-    
-    # User ID selection with improved styling
+
     user_options = [user['id'] for user in sample_users]
-    # Find default index for user_other_paid_001
-    default_index = 0
-    if "user_other_paid_001" in user_options:
-        default_index = user_options.index("user_other_paid_001")
-    elif st.session_state.user_id in user_options:
-        default_index = user_options.index(st.session_state.user_id)
-    
-    selected_user_id = st.selectbox("User ID", user_options, index=default_index,
+    selected_user_id = st.selectbox("User ID", user_options, index=user_options.index("user_other_paid_001"),
                                    help="Different User IDs may receive different AI configurations via LaunchDarkly")
-    
+
     # Show user context for selected user
-    if sample_users:
-        user_context = get_user_context(selected_user_id, sample_users)
-        st.caption(f"Context: {user_context['country']} {user_context['plan']} user")
-    
+    user_context = get_user_context(selected_user_id, sample_users)
+    st.caption(f"Context: {user_context['country']} {user_context['plan']} user")
+
     if selected_user_id != st.session_state.user_id:
         st.session_state.user_id = selected_user_id
         # Clear both message histories when switching users
         st.session_state.messages = []
         st.session_state.sanitized_messages = []
         st.rerun()
-    
+
     if st.button("Clear Chat"):
         st.session_state.messages = []
         st.session_state.sanitized_messages = []
         st.rerun()
-    

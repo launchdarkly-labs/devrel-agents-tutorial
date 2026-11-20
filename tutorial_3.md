@@ -4,16 +4,16 @@
 
 ## Overview
 
-<Callout intent="info" title="Published October 2025 — newer AgentControl features available">
+<Callout intent="info" title="Published October 2025: newer AgentControl features available">
 
 This guide was published in October 2025, before LaunchDarkly shipped several features that supersede or extend the experiment patterns shown below. The methodology still works, but for new experiments you'll likely also want to use:
 
-- [**Online evaluations**](https://launchdarkly.com/docs/home/ai-configs/online-evaluations) and [**custom judges**](https://launchdarkly.com/docs/home/ai-configs/custom-judges) — LLM-as-a-judge scores feed directly into experiment metrics, so judge accuracy or toxicity can be the primary metric
-- [**Agent graphs**](https://launchdarkly.com/docs/home/ai-configs/agent-graphs) — A/B test routing topology and per-node model choices, not just whole-config swaps
-- [**Offline evaluations + datasets**](https://launchdarkly.com/docs/home/ai-configs/offline-evaluations) — lock in a regression baseline before running a live experiment
-- [**LLM Playground**](https://launchdarkly.com/docs/home/ai-configs/playground) — pilot variations on test prompts before sending them to real traffic
+- [**Online evaluations**](https://launchdarkly.com/docs/home/agentcontrol/online-evaluations) and [**custom judges**](https://launchdarkly.com/docs/home/agentcontrol/judges): LLM-as-a-judge scores feed directly into experiment metrics, so judge accuracy or toxicity can be the primary metric
+- [**Agent graphs**](https://launchdarkly.com/docs/home/agentcontrol/agent-graphs): A/B test routing topology and per-node model choices, not just whole-config swaps
+- [**Offline evaluations + datasets**](https://launchdarkly.com/docs/home/agentcontrol/offline-evaluations): lock in a regression baseline before running a live experiment
+- [**LLM Playground**](https://launchdarkly.com/docs/home/agentcontrol/playground): pilot variations on test prompts before sending them to real traffic
 
-LaunchDarkly is also rebranding **AI Configs** as **AgentControl**. Slugs, SDK names, and APIs are unchanged. For the current reference, see [AgentControl documentation](https://launchdarkly.com/docs/home/ai-configs).
+AI Configs is now **AgentControl**. Config keys, SDK names, and APIs are unchanged. For the current reference, see [AgentControl documentation](https://launchdarkly.com/docs/home/agentcontrol).
 
 </Callout>
 
@@ -24,7 +24,7 @@ Imagine a scenario where your CEO asks you "Is the new expensive AI model worth 
 You will run two A/B tests that reveal:
 
 - Whether aggressive PII redaction hurts user satisfaction
-- Whether Claude Opus 4 is worth 33% more than GPT-4o
+- Whether Claude Opus 5.5 is worth its premium over GPT-6.2 Sol
 - Any other unexpected gains from using the new model
 
 You can use this guide in one of two ways:
@@ -37,14 +37,18 @@ You can use this guide in one of two ways:
 If you choose to complete the full tutorial, you need the following prerequisites:
 
 - An active LaunchDarkly project, set up according to the following tutorials:
-    - [Build a LangGraph Multi-Agent system in 20 Minutes with LaunchDarkly AI Configs](https://launchdarkly.com/docs/tutorials/agents-langgraph)
+    - [Build a LangGraph Multi-Agent system in 20 Minutes with LaunchDarkly AgentControl](https://launchdarkly.com/docs/tutorials/agents-langgraph)
     - [Smart AI Agent Targeting with MCP Tools](https://launchdarkly.com/docs/tutorials/multi-agent-mcp-targeting)
-- API keys for Anthropic, OpenAI, and LaunchDarkly:
-    - [Sign up for a free LaunchDarkly account](http://app.launchdarkly.com/signup) and then [follow these instructions to get your API access token](https://launchdarkly.com/docs/home/account/api-create).
+- Accounts and API keys configured in `.env` from Parts 1 and 2:
+    - **LaunchDarkly**: [sign up for a free LaunchDarkly account](https://app.launchdarkly.com/signup) and [create a Writer API access token](https://launchdarkly.com/docs/home/account/api-create) (`LD_SDK_KEY` and `LD_API_KEY`)
+    - **OpenAI**: [create an API key at platform.openai.com/api-keys](https://platform.openai.com/api-keys) (`OPENAI_API_KEY`)
+    - **Anthropic**: [create an API key at console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) (`ANTHROPIC_API_KEY`)
+    - **Mistral**: [create a free API key at console.mistral.ai](https://console.mistral.ai/) (`MISTRAL_API_KEY`, used by the `Strict Security` treatment)
+    - **OpenAlex MCP**: signed in via `uv run python tools_impl/openalex_auth.py` ([free account at openalex.org/signup](https://openalex.org/signup))
 
 ### Agent costs
 
-The agent costs associated with the experiment may cost anywhere from \$5 to \$35. The default walk-through uses Claude Opus 4 (premium model) for testing. To reduce costs while still learning the experimentation patterns, you can modify `bootstrap/tutorial_3_experiment_variations.py` in your cloned repository to test with the free Mistral model instead.
+The agent costs associated with the experiment may cost anywhere from \$5 to \$35. The default walk-through uses Claude Opus 5.5 (premium model) for testing. To reduce costs while still learning the experimentation patterns, you can modify `bootstrap/tutorial_3_experiment_variations.py` in your cloned repository to test with the free Mistral model instead.
 
 To reduce costs, change the following in the `create_premium_model_variations` function:
 
@@ -54,7 +58,7 @@ To reduce costs, change the following in the `create_premium_model_variations` f
 ```python
 # Original (expensive):
 "model": {
-    "name": "claude-opus-4-7",
+    "name": "claude-opus-5-5",
     "provider": "anthropic"
 }
 
@@ -68,7 +72,7 @@ To reduce costs, change the following in the `create_premium_model_variations` f
 </CodeBlock>
 </CodeBlocks>
 
-This reduces the experiment cost by about \$20. You will still have costs from the control group using GPT-4o and other agents in the system.
+This reduces the experiment cost by about \$20. You will still have costs from the control group using GPT-6.2 Sol and other agents in the system.
 
 ## How the experiments work
 
@@ -102,7 +106,7 @@ Here is an overview of the first experiment:
 
 - Hypothesis: "Strict security using free Mistral model with aggressive PII redaction will improve performance without harming user experience or significantly increasing system costs."
 - Variations (50% each):
-    - **Control**: Basic security with Claude Haiku, including moderate PII redaction
+    - **Control**: Basic security with Claude Haiku 5.5, including moderate PII redaction
     - **Treatment**: Strict security with Mistral free, including aggressive PII redaction
 - Success criteria:
     - Positive feedback rate: stable or improving (not significantly worse)
@@ -114,12 +118,12 @@ Here is an overview of the first experiment:
 
 Here is an overview of the second experiment:
 
-- Hypothesis: "Claude Opus 4 will justify its premium cost over GPT-4o due to its improved feedback rate."
+- Hypothesis: "Claude Opus 5.5 will justify its premium cost over GPT-6.2 Sol due to its improved feedback rate."
 - Variations (50% each):
-    - **Control**: GPT-4o with full tools (current version)
-    - **Treatment**: Claude Opus 4 with identical tools
+    - **Control**: GPT-6.2 Sol with full tools (current version)
+    - **Treatment**: Claude Opus 5.5 with identical tools
 - Success criteria (must meet 90% threshold):
-    - ≥15% positive feedback rate improvement by Claude Opus 4
+    - ≥15% positive feedback rate improvement by Claude Opus 5.5
     - Cost-value ratio ≥ 0.25 (positive feedback rate gain % ÷ cost increase %)
 
 ## Step 1: Set up metrics
@@ -230,7 +234,7 @@ In addition to the above custom metrics, you will also use these [built-in metri
   </tr>
 </table>
 
-The cost tracking is implemented in `utils/cost_calculator.py`, which calculates actual dollar costs using the formula `(input_tokens × input_price + output_tokens × output_price) / 1M`. The system has pre-configured pricing for each model as of October 2025: GPT-4o at \$2.50/\$10 per million tokens, Claude Opus 4 at \$15/\$75, and Claude Sonnet at \$3/\$15. When a request completes, the cost is immediately calculated and sent to LaunchDarkly as a custom event, enabling direct cost-per-user analysis in your experiments.
+The cost tracking is implemented in `utils/cost_calculator.py`, which calculates actual dollar costs using the formula `(input_tokens × input_price + output_tokens × output_price) / 1M`. The system has pre-configured pricing for each model from the LaunchDarkly model catalog: GPT-6.2 Sol at \$2/\$10 per million tokens, Claude Opus 5.5 at \$4/\$20, and Claude Haiku 5.5 at \$0.10/\$0.50. When a request completes, the cost is immediately calculated and sent to LaunchDarkly as a custom event, enabling direct cost-per-user analysis in your experiments.
 
 ## Step 2: Create experiment variations
 
@@ -246,11 +250,11 @@ uv run python bootstrap/tutorial_3_experiment_variations.py
  </CodeBlock>
 </CodeBlocks>
 
-This creates the `claude-opus-treatment` variation for the "Premium model value analysis" experiment. To verify the script worked correctly, navigate to your "support-model-config" feature flag in LaunchDarkly. You should now see the `claude-opus-treatment` variation alongside your existing variations. The "Security agent analysis" experiment will use your existing baseline and enhanced variations. Both experiments use the existing `other-paid` configuration as their control group.
+This creates the `claude-opus-treatment` variation for the "Premium model value analysis" experiment. To verify the script worked correctly, open your `support-agent` config in LaunchDarkly. You should now see the `claude-opus-treatment` variation alongside your existing variations. The "Security agent analysis" experiment will use your existing `basic-security` and `strict-security` variations. Both experiments use the existing `other-paid` configuration as their control group.
 
 ## Step 3: Configure the security agent experiment
 
-In the left navigation, expand **AI**, then select **Configs**, then open **security-agent**. In the right navigation, click the plus **+** sign next to **Experiments** to create a new experiment.
+In the left navigation, expand **Agents**, then select **Configs**, then open **security-agent**. In the right navigation, click the plus **+** sign next to **Experiments** to create a new experiment.
 
 Here is how to set up your experiment:
 
@@ -262,7 +266,7 @@ Here is how to set up your experiment:
     - `Negative feedback rate`
     - `p95_total_user_latency`
     - `ai_cost_per_request`
-- **Flag or AI Config**: security-agent
+- **Flag or AgentControl config**: security-agent
 **Targeting rule:** Rule 4
     - This configures `If Context` > `is in Segment` then `Other Paid`
 - **Variations served outside of this experiment:** `Basic Security`
@@ -286,12 +290,12 @@ You may see a "Health warning" indicator after starting the experiment. This is 
 
 ## Step 4: Configure the premium model experiment
 
-In the left navigation, expand **AI**, then select **Configs**, then open **support-agent**. In the right navigation, click the plus **+** sign next to **Experiments** to create a new experiment.
+In the left navigation, expand **Agents**, then select **Configs**, then open **support-agent**. In the right navigation, click the plus **+** sign next to **Experiments** to create a new experiment.
 
 Here is how to set up your experiment:
 
 - **Name:** Premium model value analysis
-- **Hypothesis:** "Claude Opus 4 will justify its premium cost over GPT-4o due to its improved feedback rate."
+- **Hypothesis:** "Claude Opus 5.5 will justify its premium cost over GPT-6.2 Sol due to its improved feedback rate."
 - **Randomize by:** `user`
 - **Metrics:** Click "Select metrics or metric groups" and add:
     - `Positive feedback rate`: Select first to set as **Primary**
@@ -299,7 +303,7 @@ Here is how to set up your experiment:
     - `p95_total_user_latency`
     - `average_total_user_tokens`
     - `ai_cost_per_request`
-- **Flag or AI Config**: support-agent
+- **Flag or AgentControl config**: support-agent
 - **Targeting rule:** Rule 4
     - This configures `If Context` > `is in Segment` then `Other Paid`
 - **Variations served outside of this experiment:** `other-paid`
@@ -312,7 +316,7 @@ Here is how to set up your experiment:
     - `other-paid`: `50%`
     - `international-standard`: `0%`
     - `claude-opus-treatment`: `50%`
-    - To set these percentages, first scroll down to the **Control** field and set `Basic Security` as the control variation, otherwise you won't be able to allocate 50% traffic to it.
+    - To set these percentages, first scroll down to the **Control** field and set `other-paid` as the control variation, otherwise you won't be able to allocate 50% traffic to it.
 - **Control:** `other-paid`
 - **Statistical approach:** `Bayesian`
 - **Threshold:** `90%`
@@ -330,7 +334,7 @@ You may see a "Health warning" indicator after starting the experiment. This is 
 If two independent experiments are running concurrently on the same users, then each user experiences:
 
 - One security variation (`Basic Security` or `Strict Security`)
-- One model variation (`Claude Opus 4 Treatment` or `Other Paid (GPT-4o)`)
+- One model variation (`Claude Opus 5.5 Treatment` or `Other Paid`)
 
 Random assignment ensures balance, because ~50% of users receive each combination.
 
@@ -360,8 +364,9 @@ uv run python -u tools/concurrent_traffic_generator.py --queries 200 --concurren
 
 This configuration includes:
 
-- 200 queries by default. You can edit the script to change this number.
+- 200 queries, set by `--queries` (the default is 50).
 - 10 concurrent requests running in parallel.
+- 15% of queries with PII by default, set by `--pii-percentage`.
 - 2000-second timeout (33 minutes) per request to handle MCP tool rate limits.
 
 Runtime depends largely on if you retain MCP tool enablement as these take much longer to complete.
@@ -386,35 +391,52 @@ uv run python tools/traffic_generator.py --queries 50 --delay 2
 
 What happens during traffic simulation:
 
-1. **Knowledge extraction:** Claude analyzes your docs and identifies 20+ realistic topics
+1. **Topic generation:** Claude lists reinforcement learning topics from the sample Sutton & Barto textbook in `kb/` (20 for the concurrent generator, 15 for the sequential one)
 2. **Query generation:** Each test randomly selects from these topics for diversity
-3. **AI-powered evaluation:** Claude judges responses as thumbs_up/thumbs_down/neutral
+3. **AI-powered evaluation:** Claude judges each response as `positive` (thumbs up), `negative` (thumbs down), or `none` (no rating), and the generator sends positive and negative feedback to the API
 4. **Automatic tracking:** All metrics flow to LaunchDarkly in real-time
 
-Here is an example of the traffic generation output you might see:
+Here is the output of a short run with `--queries 10 --concurrency 5`. A 200-query run prints the same lines, one per query:
 
 <CodeBlocks>
 <CodeBlock title="Data output">
 
 ```
-📚 Analyzing knowledge base...
-✅ Generated 23 topics
+🚀 Concurrent Traffic Generator
+======================================================================
+Queries: 10
+Concurrency: 5 parallel requests
+Timeout: 2000s (33 minutes) per request
+Target: http://localhost:8000
+======================================================================
 
-⚡ Sending 200 requests with 10 concurrent workers...
+📚 Generating base topics...
+✅ Generated 20 base topics
+🔄 Generating 10 queries concurrently (15% with PII)...
+📝 Generated 10/10 queries...
+✅ Generated 10 queries concurrently (2 with PII, 8 clean)
 
-✅ [1/200] Success (23.4s) - other_paid: What is reinforcement learning?...
-✅ [2/200] Success (45.2s) - other_paid: How does Q-learning work?...
-⏱️  [15/200] Timeout (>2000s) - other_paid: Complex research query...
-                              ↑ This is normal - MCP rate limits
-✅ [200/200] Success (387.1s) - other_paid: Explain temporal difference...
+⚡ Sending 10 requests with 5 concurrent workers...
+
+✅ [1/10] Success (13.3s) - other_paid: Hi, I'm Dana Whitfield, a Senior ML Engineer at Brightpath A...
+✅ [2/10] Success (18.8s) - other_paid: What's the basic idea behind dynamic programming in reinforc...
+✅ [3/10] Success (24.6s) - other_paid: How does SARSA differ from Q-learning in terms of how they u...
+✅ [4/10] Success (27.3s) - other_paid: How does value iteration's convergence guarantee depend on t...
+✅ [5/10] Success (18.0s) - other_paid: How do Monte Carlo methods differ from temporal difference l...
+✅ [6/10] Success (10.4s) - other_paid: What's the basic idea behind dynamic programming in reinforc...
+✅ [7/10] Success (37.9s) - other_paid: How does the Dyna-Q algorithm's use of simulated experience ...
+✅ [8/10] Success (22.9s) - other_paid: How does on-policy prediction with function approximation di...
+✅ [9/10] Success (15.6s) - other_paid: Hi, I'm Sarah Johnson, a Product Manager at Brightwave Analy...
+✅ [10/10] Success (32.4s) - other_paid: How does SARSA's on-policy update interact with function app...
 
 ======================================================================
 ✅ COMPLETE
 ======================================================================
-Total time: 45.3 minutes (2718s)
-Successful: 195/200 (97.5%)
-Failed: 5/200 (2.5%)
-Average: 13.6s per query (with concurrency)
+Total time: 1.0 minutes (61s)
+Successful: 10/10 (100.0%)
+Failed: 0/10 (0.0%)
+Average: 6.1s per query (with concurrency)
+======================================================================
 ```
 
 </CodeBlock>
@@ -423,7 +445,7 @@ Average: 13.6s per query (with concurrency)
 Relevant performance information includes:
 
 - Most queries complete in 10-60 seconds
-- Queries using `semantic_scholar` MCP tool may take 5-20 minutes due to API rate limits
+- Each `openalex_search` call spends part of your free OpenAlex daily budget of about 500 searches
 - Concurrent execution handles slow requests gracefully by continuing with others
 - Failed/timeout requests (typically less than 5%) don't affect experiment validity
 
@@ -433,7 +455,7 @@ Refresh your LaunchDarkly experiment **Results** tabs to see data flowing in. Co
 
 ## Interpreting your results
 
-After your experiments have collected data from about 100 users per variation, you'll see results in the LaunchDarkly UI. Here's how to interpret them:
+After your experiments have collected data from about 100 users per variation, you'll see results in the LaunchDarkly UI. Here's how to interpret them. The results below come from our October 2025 run, which compared Claude Opus 4 with GPT-4o and used GPT-4o mini as the supervisor, so your numbers will differ:
 
 ### Question 1: Security agent analysis
 
@@ -519,7 +541,7 @@ IF positive_feedback_rate increase ≥ 15%
    AND probability_to_beat for positive_feedback_rate ≥ 90%
    AND probability_to_beat for cost ≥ 90%
    AND cost-value ratio increase ≥ .25
-THEN deploy_claude_opus_4()
+THEN deploy_claude_opus()
 ELSE keep_current_model()
 ```
 
@@ -597,11 +619,11 @@ This section includes troubleshooting solutions.
 
 ### **Long response times (>20 minutes)**
 
-If you see requests taking exceptionally long, the root cause is likely the `semantic_scholar` MCP tool hitting API rate limits, which causes 30-second retry delays. Queries using this tool may take 5-20 minutes to complete. The 2000-second timeout handles this gracefully, but if you need faster responses (60-120 seconds typical), consider removing `semantic_scholar` from tool configurations. You can verify this issue by checking logs for `HTTP/1.1 429` errors indicating rate limiting.
+If you see requests taking exceptionally long, check the server logs for `HTTP/1.1 429` errors, which mean an MCP research tool is being rate limited. A large experiment run can use up the free OpenAlex daily budget, after which `openalex_search` calls fail until the next day. The 2000-second timeout handles slow requests gracefully, but if you need faster responses (60-120 seconds typical), consider removing `openalex_search` and `arxiv_search` from tool configurations.
 
 ### **Cost metrics not appearing**
 
-If `ai_cost_per_request` events aren't showing in LaunchDarkly, first verify that `utils/cost_calculator.py` has pricing configured for your models. Cost is only tracked when requests complete successfully (not on timeout or error). The system flushes cost events to LaunchDarkly immediately after each request completion. To debug, look for `COST CALCULATED:` and `COST TRACKING (async):` messages in your API logs.
+If `ai_cost_per_request` events aren't showing in LaunchDarkly, first verify that `utils/cost_calculator.py` has pricing configured for your models. Cost is only tracked when requests complete successfully (not on timeout or error). The system flushes cost events to LaunchDarkly immediately after each request completion. To debug, look for `TOKENS:` and `COST CALCULATED:` messages in your API logs.
 
 ## Beyond this tutorial: Advanced AI Experimentation patterns
 
@@ -610,11 +632,11 @@ In this guide you ran two experiments:
 - **Security‑agent test**: a bundle change, where both prompt/instructions and the model changed.
 - **Premium‑model test**: a model‑only change.
 
-AI Configs come in two modes: **prompt‑based** (single‑step completions) and **agent‑based** (multi‑step workflows with tools). Below are additional patterns to explore.
+AgentControl configs come in two modes: **prompt‑based** (single‑step completions) and **agent‑based** (multi‑step workflows with tools). Below are additional patterns to explore.
 
-### AI Config experiments
+### AgentControl config experiments
 
-Experiments you can run entirely in AI Configs with no app redeploy include:
+Experiments you can run entirely in AgentControl with no app redeploy include:
 
 - **Prompt and template experiments (prompt‑based or agent instructions):** Duplicate a variation and iterate on system/assistant messages or agent instructions to measure adherence to schema, tone, or qualitative satisfaction. Use LaunchDarkly Experimentation to tie those variations to product metrics.
 
@@ -633,7 +655,7 @@ Recommendations include:
 
 Experiments you can run with feature flags include:
 
-- **Fine‑grained RAG tuning:** k‑values, similarity thresholds, chunking, reranker swaps, and cache policy are typically coded inside your retrieval layer. Expose these as flags or AI Config custom parameters if you want to A/B them.
+- **Fine‑grained RAG tuning:** k‑values, similarity thresholds, chunking, reranker swaps, and cache policy are typically coded inside your retrieval layer. Expose these as flags or config custom parameters if you want to A/B them.
 
 - **Tool‑routing guardrails:** Fallback flows (for example, retry with a different tool/model on error), escalation rules, or heuristics need logic in your agent/orchestrator. Gate those behaviors behind flags and measure with custom metrics.
 
@@ -645,14 +667,14 @@ Experiments you can run with feature flags include:
 
 These ideas work with all of the experiment suggestions we listed above:
 
-- Target by plan/tier, geo, device, or org using AI Config targeting rules and percentage rollouts.
+- Target by plan/tier, geo, device, or org using config targeting rules and percentage rollouts.
 - Keep variations narrow, one change per experiment, to avoid confounding. Reserve "bundle" tests for tool‑stack comparisons.
 
 Require statistical evidence before shipping configuration changes. Pair each variation with clear success metrics, then A/B test prompt or tool adjustments and use confidence intervals to confirm improvements. When you introduce the new code paths above, protect them behind feature flags so you can run sequential tests, [multi-armed bandits](https://launchdarkly.com/docs/home/multi-armed-bandits) for faster convergence, or change your [experiment design](https://launchdarkly.com/docs/guides/experimentation/designing-experiments) to understand how prompts, tools, and safety levers interact.
 
 ## Conclusion: From chaos to clarity
 
-Across this three-part series, you've transformed from hardcoded AI configurations to a scientifically rigorous, data-driven optimization engine. [Part 1](https://launchdarkly.com/docs/tutorials/agents-langgraph) established your foundation with a dynamic multi-agent [LangGraph](https://langchain-ai.github.io/langgraph/) system controlled by [LaunchDarkly AI Configs](https://launchdarkly.com/docs/guides/ai-configs), eliminating the need for code deployments when adjusting AI behavior. [Part 2](https://launchdarkly.com/docs/tutorials/multi-agent-mcp-targeting) added sophisticated targeting with geographic privacy rules, user segmentation by plan tiers, and [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) tool integration for real academic research capabilities. This tutorial, Part 3, completed your journey with statistical experimentation that proves ROI and guides optimization decisions with mathematical confidence rather than intuition.
+Across this three-part series, you've transformed from hardcoded AI configurations to a scientifically rigorous, data-driven optimization engine. [Part 1](https://launchdarkly.com/docs/tutorials/agents-langgraph) established your foundation with a dynamic multi-agent [LangGraph](https://langchain-ai.github.io/langgraph/) system controlled by [LaunchDarkly AgentControl](https://launchdarkly.com/docs/home/agentcontrol), eliminating the need for code deployments when adjusting AI behavior. [Part 2](https://launchdarkly.com/docs/tutorials/multi-agent-mcp-targeting) added sophisticated targeting with geographic privacy rules, user segmentation by plan tiers, and [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) tool integration for real academic research capabilities. This tutorial, Part 3, completed your journey with statistical experimentation that proves ROI and guides optimization decisions with mathematical confidence rather than intuition.
 
 You now possess a defensible AI system that adapts to changing requirements, scales across user segments, and continuously improves through measured experimentation. Your stakeholders receive concrete evidence for AI investments, your engineering team deploys features with statistical backing, and your users benefit from optimized experiences driven by real data rather than assumptions. The chaos of ad-hoc AI development has given way to clarity through systematic, scientific product development.
 

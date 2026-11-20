@@ -27,6 +27,9 @@ class ChatResponse(BaseModel):
     tool_calls: List[str]
     variation_key: str
     model: str
+    trace_id: Optional[str] = None
+    span_id: Optional[str] = None
+    trace_timestamp: Optional[str] = None
     agent_configurations: Optional[List[AgentConfig]] = None
     console_logs: Optional[List[str]] = None
 

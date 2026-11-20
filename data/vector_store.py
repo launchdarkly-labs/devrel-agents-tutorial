@@ -64,22 +64,10 @@ class VectorStore:
         # Auto-detect provider if not specified
         self.provider = provider or self._detect_provider()
 
-        # Log provider selection with migration context
-        explicit_provider = os.getenv('EMBEDDING_PROVIDER', '').lower()
-        if explicit_provider:
+        if os.getenv('EMBEDDING_PROVIDER'):
             log_student(f"EMBEDDINGS: Using explicit provider: {self.provider}")
-            log_debug(f"MIGRATION: Provider explicitly set via EMBEDDING_PROVIDER={explicit_provider}")
         else:
             log_student(f"EMBEDDINGS: Auto-detected provider: {self.provider}")
-            auth_method = os.getenv('AUTH_METHOD', 'api-key').lower()
-            has_openai = os.getenv('OPENAI_API_KEY')
-
-            if auth_method == 'sso' and not has_openai:
-                log_debug("MIGRATION: Auto-selected Bedrock (AUTH_METHOD=sso, no OpenAI key)")
-            elif has_openai:
-                log_debug("MIGRATION: Auto-selected OpenAI (API key available)")
-            else:
-                log_debug("MIGRATION: Defaulted to OpenAI (backward compatibility)")
 
         # Initialize provider-specific client and settings
         self._initialize_embedding_client()
@@ -317,23 +305,9 @@ class VectorStore:
                 log_student(
                     f"⚠️  PROVIDER MISMATCH: Vector store uses {stored_provider}, "
                     f"but current config uses {self.provider}. "
-                    f"Run 'initialize_embeddings.py --force' to rebuild for {self.provider}."
+                    f"Run 'initialize_embeddings.py --force' to rebuild for {self.provider}, "
+                    f"or set EMBEDDING_PROVIDER={stored_provider} to keep these embeddings."
                 )
-
-                # Enhanced migration guidance
-                if stored_provider == "openai" and self.provider == "bedrock":
-                    log_debug("MIGRATION: OpenAI → Bedrock transition detected")
-                    log_debug("MIGRATION: Consider hybrid setup: keep OpenAI embeddings, use Bedrock chat")
-                    log_debug("MIGRATION: Set EMBEDDING_PROVIDER=openai to preserve embeddings")
-                elif stored_provider == "bedrock" and self.provider == "openai":
-                    log_debug("MIGRATION: Bedrock → OpenAI transition detected")
-                    log_debug("MIGRATION: Embeddings will change from Titan to OpenAI model")
-                else:
-                    log_debug(f"MIGRATION: {stored_provider} → {self.provider} transition requires rebuild")
-
-                self.index = None
-                self.documents = []
-                self.metadata = []
                 return
 
             # Validate dimension compatibility
@@ -343,21 +317,6 @@ class VectorStore:
                     f"but current config expects {self.dimension}. "
                     f"Run 'initialize_embeddings.py --force' to rebuild."
                 )
-
-                # Enhanced dimension migration guidance
-                if stored_dimension == 1536 and self.dimension == 1024:
-                    log_debug("MIGRATION: OpenAI (1536) → Bedrock (1024) dimension change")
-                    log_debug("MIGRATION: Bedrock Titan V2 uses configurable dimensions")
-                    log_debug("MIGRATION: Set BEDROCK_EMBEDDING_DIMENSIONS=1536 to match OpenAI")
-                elif stored_dimension == 1024 and self.dimension == 1536:
-                    log_debug("MIGRATION: Bedrock (1024) → OpenAI (1536) dimension change")
-                    log_debug("MIGRATION: OpenAI text-embedding-3-small uses fixed 1536 dimensions")
-                else:
-                    log_debug(f"MIGRATION: Dimension change {stored_dimension} → {self.dimension}")
-
-                self.index = None
-                self.documents = []
-                self.metadata = []
                 return
 
             # If validation passes, load the store

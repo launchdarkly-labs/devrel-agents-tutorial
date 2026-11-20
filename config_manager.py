@@ -2,35 +2,167 @@
 """
 Simplified ConfigManager for LaunchDarkly AI Agent integration
 """
+import inspect
 import os
-import time
 import json
+import time
+from dataclasses import dataclass, field
 from pathlib import Path
-import ldclient
-from ldclient import Context
-from ldai import LDAIClient, AIAgentConfigDefault, ModelConfig, ProviderConfig
-from ldai.tracker import FeedbackKind
+from typing import Any, Optional
+
+from launchdarkly_ai_server import (
+    SpanUsage,
+    create_handler,
+    execute_and_track,
+    get_client,
+    init_client,
+    inspect_config,
+    parse_ai_config,
+    parse_template,
+    parse_usage,
+    set_input_content_attributes,
+    set_ld_span_attributes,
+    set_model_identity_attributes,
+    set_output_content_attributes,
+    set_tool_call_content_attributes,
+    set_usage_span_attributes,
+    shutdown,
+    text_message,
+    to_ld_context,
+)
+from launchdarkly_ai_server.tracking import make_track_data
+from opentelemetry import trace
+from opentelemetry.trace import StatusCode as SpanStatusCode
 from dotenv import load_dotenv
+from utils.cost_calculator import calculate_cost
 from utils.logger import log_student, log_debug
 import boto3
 
 load_dotenv()
 
+TRACER_NAME = "@launchdarkly/ai-langchain-agents"
+
+# How long to serve local defaults before trying to reach LaunchDarkly again
+CLIENT_RETRY_SECONDS = 60
+
+# The AI SDK has no feedback API, so these are sent as custom events. LaunchDarkly's
+# built-in feedback metrics listen for these exact keys.
+FEEDBACK_POSITIVE_EVENT = "$ld:ai:feedback:user:positive"
+FEEDBACK_NEGATIVE_EVENT = "$ld:ai:feedback:user:negative"
+
+@dataclass
+class ServedConfig:
+    """One resolved AgentControl config, from LaunchDarkly or from local defaults."""
+
+    key: str
+    config: dict[str, Any]
+    meta: dict[str, Any] = field(default_factory=dict)
+    from_fallback: bool = False
+
+    @property
+    def instructions(self) -> str:
+        return self.config.get("instructions") or ""
+
+    @property
+    def model_name(self) -> str:
+        return (self.config.get("model") or {}).get("name") or "unknown"
+
+    @property
+    def provider_name(self) -> str:
+        return (self.config.get("provider") or {}).get("name") or "unknown"
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return (self.config.get("model") or {}).get("parameters") or {}
+
+    @property
+    def custom(self) -> dict[str, Any]:
+        """Custom model params (e.g. max_tool_calls)."""
+        return (self.config.get("model") or {}).get("custom") or {}
+
+    @property
+    def variation_key(self) -> str:
+        """The served variation. Local fallbacks have no variation, hence 'fallback'."""
+        if self.from_fallback:
+            return "fallback"
+        return self.meta.get("variationKey") or "unknown"
+
+    def render_instructions(self, variables: dict[str, Any] | None = None) -> str:
+        """Render Mustache placeholders (such as {{ldContext.plan}}) in instructions."""
+        return parse_template(self.instructions, variables or {})
+
+    def track_data(self) -> dict[str, Any]:
+        """Metadata attached to custom metric events for experiment attribution."""
+        meta = {"variationKey": "fallback", "version": 1} if self.from_fallback else self.meta
+        return make_track_data(config_key=self.key, config=self.config, meta=meta)
+
+
 class FixedConfigManager:
     def __init__(self):
-        """Initialize LaunchDarkly client and AI client"""
+        """Initialize config defaults and the AWS session.
+
+        The LaunchDarkly client is initialized lazily, because the current AI
+        SDK's init_client is async and this constructor is not.
+        """
         self.sdk_key = os.getenv('LD_SDK_KEY')
         if not self.sdk_key:
             raise ValueError("LD_SDK_KEY environment variable is required")
+        self._client_retry_at = 0.0
 
         # Load defaults from .ai_config_defaults.json
         self._load_config_defaults()
 
-        self._initialize_launchdarkly_client()
-        self._initialize_ai_client()
-
         # Initialize AWS Bedrock session for SSO authentication
         self._initialize_bedrock_session()
+
+    async def _ensure_client(self) -> bool:
+        """Initialize the shared LaunchDarkly client. init_client is idempotent, so
+        this is safe to await on every request.
+
+        Returns False if the client can't connect, so get_config serves the
+        local defaults. A failed connection takes up to 10 seconds, so after one
+        the local defaults are served for CLIENT_RETRY_SECONDS before retrying.
+        """
+        if time.monotonic() < self._client_retry_at:
+            return False
+        try:
+            await init_client({"serviceName": os.getenv("LD_SERVICE_NAME", "multi-agent-chatbot")})
+            return True
+        except RuntimeError as e:
+            self._client_retry_at = time.monotonic() + CLIENT_RETRY_SECONDS
+            log_student(f"CONFIG MANAGER: LaunchDarkly client unavailable, retrying in {CLIENT_RETRY_SECONDS}s: {e}")
+            return False
+
+    def _initialize_bedrock_session(self):
+        """Initialize AWS Bedrock session if AUTH_METHOD=sso"""
+        auth_method = os.getenv('AUTH_METHOD', 'api-key').lower()
+
+        if auth_method != 'sso':
+            self.boto3_session = None
+            log_debug("AUTH_METHOD not set to 'sso', Bedrock unavailable")
+            return
+
+        aws_profile = os.getenv('AWS_PROFILE')
+        try:
+            # Use the profile if specified, otherwise the default credentials
+            self.aws_region = os.getenv('AWS_REGION', 'us-east-1')
+            self.boto3_session = boto3.Session(region_name=self.aws_region, profile_name=aws_profile)
+            log_debug(f"AWS: Using profile '{aws_profile or 'default'}' in region {self.aws_region}")
+
+            # Test current SSO session
+            sts = self.boto3_session.client('sts')
+            identity = sts.get_caller_identity()
+            user_name = identity['Arn'].split('/')[-1]
+            account = identity['Account']
+            log_student(f"AWS: Connected via SSO as {user_name} (Account: {account})")
+
+        except Exception as e:
+            log_student(f"AWS SSO session not available: {e}")
+
+            # Provide helpful login command with profile if specified
+            profile_hint = f" --profile {aws_profile}" if aws_profile else ""
+            log_student(f"Run: aws sso login{profile_hint}")
+            raise
 
     def _load_config_defaults(self):
         """Load AI config defaults from .ai_config_defaults.json
@@ -68,17 +200,41 @@ class FixedConfigManager:
                 "  ld-aic validate --config-keys 'supervisor-agent,support-agent,security-agent'"
             )
 
-    def _get_default_config(self, config_key: str) -> AIAgentConfigDefault:
-        """Get fallback config from .ai_config_defaults.json
+    @staticmethod
+    def _normalize_tools(config_data: dict[str, Any], config_key: str) -> dict[str, Any]:
+        """Normalize a top-level `tools` list into LaunchDarkly's served config shape.
 
-        Args:
-            config_key: The AI config key (e.g., 'support-agent')
+        ld-aic writes tools as a top-level list in `.ai_config_defaults.json`, whereas
+        LaunchDarkly serves `tools` as a `{key: spec}` dict alongside `model.parameters.tools`.
+        """
+        tools = config_data.pop("tools", None)
+        if not isinstance(tools, list):
+            if tools is not None:
+                config_data["tools"] = tools
+            return config_data
 
-        Returns:
-            AIAgentConfigDefault object with config from the defaults file
+        config_data["tools"] = {
+            t["name"]: {**t, "type": "function"}
+            for t in tools
+            if isinstance(t, dict) and "name" in t
+        }
+        model = config_data.setdefault("model", {})
+        parameters = model.setdefault("parameters", {})
+        parameters.setdefault("tools", tools)
+        log_debug(
+            f"DEFAULTS: normalized {len(tools)} tools for '{config_key}'"
+        )
+        return config_data
+
+    def _get_default_config(self, config_key: str) -> dict[str, Any]:
+        """Get the fallback config for a key from .ai_config_defaults.json
+
+        The file is written in the same shape the SDK parses, so this strips the
+        `enabled` flag and validates the rest with the SDK's own parser rather
+        than trusting it.
 
         Raises:
-            ValueError: If config key not found in defaults
+            ValueError: If the key is missing, disabled, or fails validation.
         """
         if config_key not in self.config_defaults:
             available_keys = list(self.config_defaults.keys())
@@ -87,105 +243,41 @@ class FixedConfigManager:
                 f"Available configs: {', '.join(available_keys)}\n\n"
                 "To add this config:\n"
                 "  1. Create it in LaunchDarkly dashboard\n"
-                "  2. Run: ld-aic validate --config-keys '{config_key},...'\n"
+                f"  2. Run: ld-aic validate --config-keys '{config_key},...'\n"
                 "  3. The config will be added to .ai_config_defaults.json"
             )
 
-        config_data = self.config_defaults[config_key]
+        config_data = dict(self.config_defaults[config_key])
+        config_data = self._normalize_tools(config_data, config_key)
 
-        # Convert JSON config to AIAgentConfigDefault
-        # Note: Tools are managed by LaunchDarkly and not part of defaults
-        return AIAgentConfigDefault(
-            enabled=config_data.get("enabled", True),
-            model=ModelConfig(
-                name=config_data["model"]["name"],
-                parameters=config_data["model"].get("parameters", {})
-            ),
-            provider=ProviderConfig(
-                name=config_data["provider"]["name"]
-            ),
-            instructions=config_data.get("instructions", "You are a helpful assistant.")
-        )
-    
-    def _initialize_launchdarkly_client(self):
-        """Initialize LaunchDarkly client"""
-        config = ldclient.Config(self.sdk_key)
-        ldclient.set_config(config)
-        self.ld_client = ldclient.get()
-        
-        max_wait = 10
-        wait_time = 0
-        while not self.ld_client.is_initialized() and wait_time < max_wait:
-            time.sleep(0.5)
-            wait_time += 0.5
-        
-        if not self.ld_client.is_initialized():
-            raise RuntimeError("LaunchDarkly client initialization failed")
-    
-    def _initialize_ai_client(self):
-        """Initialize AI client"""
-        self.ai_client = LDAIClient(self.ld_client)
+        if not config_data.pop("enabled", True):
+            raise ValueError(
+                f"❌ Fallback config '{config_key}' is marked disabled in "
+                ".ai_config_defaults.json, so there is nothing to serve."
+            )
 
-    def _initialize_bedrock_session(self):
-        """Initialize AWS Bedrock session if AUTH_METHOD=sso"""
-        auth_method = os.getenv('AUTH_METHOD', 'api-key').lower()
+        result = parse_ai_config(config_data)
+        if not result.success:
+            raise ValueError(
+                f"❌ Fallback config '{config_key}' in .ai_config_defaults.json is "
+                f"not a valid AI config: {result.error.get('message')}\n\n"
+                "Regenerate it by running:\n"
+                f"  ld-aic validate --config-keys '{config_key},...'"
+            )
 
-        if auth_method != 'sso':
-            self.boto3_session = None
-            log_debug("AUTH_METHOD not set to 'sso', Bedrock unavailable")
-            return
+        return result.data
 
-        try:
-            # Initialize AWS session with optional profile support
-            aws_region = os.getenv('AWS_REGION', 'us-east-1')
-            aws_profile = os.getenv('AWS_PROFILE')
-
-            # Create session with profile if specified, otherwise use default credentials
-            if aws_profile:
-                self.boto3_session = boto3.Session(
-                    region_name=aws_region,
-                    profile_name=aws_profile
-                )
-                log_debug(f"AWS: Using profile '{aws_profile}' in region {aws_region}")
-            else:
-                self.boto3_session = boto3.Session(region_name=aws_region)
-                log_debug(f"AWS: Using default credentials in region {aws_region}")
-
-            self.aws_region = aws_region
-            self.aws_profile = aws_profile
-
-            # Test current SSO session
-            sts = self.boto3_session.client('sts')
-            identity = sts.get_caller_identity()
-            user_name = identity['Arn'].split('/')[-1]
-            account = identity['Account']
-            log_student(f"AWS: Connected via SSO as {user_name} (Account: {account})")
-
-        except Exception as e:
-            log_student(f"AWS SSO session not available: {e}")
-
-            # Provide helpful login command with profile if specified
-            profile_hint = f" --profile {os.getenv('AWS_PROFILE')}" if os.getenv('AWS_PROFILE') else ""
-            log_student(f"Run: aws sso login{profile_hint}")
-            raise
-
-    def build_context(self, user_id: str, user_context: dict = None) -> Context:
+    def build_context(self, user_id: str, user_context: dict = None) -> dict[str, Any]:
         """Build a LaunchDarkly context with consistent attributes.
-        
+
         This ensures the same context is used for both AI Config evaluation
         and custom metric tracking, which is required for experiment association.
         """
-        context_builder = Context.builder(user_id).kind('user')
-        
-        if user_context:
-            # Set all attributes from user_context for consistency
-            for key, value in user_context.items():
-                context_builder.set(key, value)
-                log_debug(f"CONFIG MANAGER: Set {key}={value}")
-        
-        return context_builder.build()
-    
-    async def get_config(self, user_id: str, config_key: str = None, user_context: dict = None):
+        context = {"kind": "user", "key": user_id, **(user_context or {})}
+        log_debug(f"CONFIG MANAGER: Built LaunchDarkly context: {context}")
+        return context
+
+    async def get_config(self, user_id: str, config_key: str, user_context: dict = None) -> ServedConfig:
         """Get LaunchDarkly AI Config with fallback to .ai_config_defaults.json
 
         Fallback chain:
@@ -194,107 +286,165 @@ class FixedConfigManager:
         3. If config not in defaults file, raise helpful error
         """
         log_debug(f"CONFIG MANAGER: Getting config for user_id={user_id}, config_key={config_key}")
-        log_debug(f"CONFIG MANAGER: User context: {user_context}")
 
-        # Build context using centralized method
+        client_ready = await self._ensure_client()
         ld_user_context = self.build_context(user_id, user_context)
-        log_debug(f"CONFIG MANAGER: Built LaunchDarkly context: {ld_user_context}")
 
-        ai_config_key = config_key or os.getenv('LAUNCHDARKLY_AI_CONFIG_KEY', 'support-agent')
-        log_debug(f"CONFIG MANAGER: Using AI config key: {ai_config_key}")
-
-        # Load default from .ai_config_defaults.json (fails with helpful error if not found)
-        default_config = self._get_default_config(ai_config_key)
-        log_debug(f"CONFIG MANAGER: Loaded fallback default - model: {default_config.model.name}")
-
-        # Call LaunchDarkly - SDK automatically falls back to default if LD unavailable
-        result = self.ai_client.agent_config(
-            ai_config_key,
-            ld_user_context,
-            default=default_config,  # Use validated production defaults from file
+        inspected = (
+            await inspect_config(config_key, ld_user_context)
+            if client_ready
+            else {"enabled": False, "config": None, "meta": None}
         )
-        log_debug("CONFIG MANAGER: ✅ Got config (from LaunchDarkly or fallback)")
 
-        # Debug the actual configuration received (basic info only)
-        try:
-            config_dict = result.to_dict()
-            log_debug(f"CONFIG MANAGER: Model: {config_dict.get('model', {}).get('name', 'unknown')}")
-            tracker = result.create_tracker()
-            if hasattr(tracker, '_variation_key'):
-                log_debug(f"CONFIG MANAGER: Variation: {tracker._variation_key}")
-        except Exception as debug_e:
-            log_debug(f"CONFIG MANAGER: Could not debug result: {debug_e}")
+        if inspected["enabled"] and inspected["config"]:
+            served = ServedConfig(
+                key=config_key,
+                config=inspected["config"],
+                meta=inspected["meta"] or {},
+            )
+            log_debug(f"CONFIG MANAGER: ✅ Got config from LaunchDarkly: {served.model_name} ({served.variation_key})")
+            return served
 
-        return result
-    
+        # LaunchDarkly is unavailable, the key is unknown, or targeting is off.
+        log_student(
+            f"CONFIG MANAGER: '{config_key}' not served by LaunchDarkly; "
+            "using .ai_config_defaults.json"
+        )
+        served = ServedConfig(
+            key=config_key,
+            config=self._get_default_config(config_key),
+            from_fallback=True,
+        )
+        log_debug(f"CONFIG MANAGER: Fallback model: {served.model_name}")
+        return served
 
-    def clear_cache(self):
-        """Clear LaunchDarkly SDK cache"""
-        self.ld_client.flush()
+    async def track(
+        self,
+        served: ServedConfig,
+        context: dict,
+        call,
+        user_input: str = None,
+        tool_handlers: dict = None,
+        capture_content: bool = False,
+    ):
+        """Run a model call through the AI SDK and record metrics + OTel spans in LaunchDarkly.
+
+        `capture_content` is False by default so raw PII on supervisor/security calls
+        is never exported on spans; `support-agent` enables it because its input is already redacted.
+        """
+        box = {}
+        takes_args = len(inspect.signature(call).parameters) > 0
+        tracer = trace.get_tracer(TRACER_NAME)
+
+        def _wrap_tools_with_spans(tools_map: dict) -> dict:
+            wrapped = {}
+            for name, fn in (tools_map or {}).items():
+                async def traced_tool(_name=name, _fn=fn, **kwargs):
+                    with tracer.start_as_current_span(f"execute_tool {_name}") as tool_span:
+                        tool_span.set_attribute("gen_ai.operation.name", "execute_tool")
+                        tool_span.set_attribute("gen_ai.tool.name", _name)
+                        res = await _fn(**kwargs)
+                        set_tool_call_content_attributes(tool_span, capture_content, arguments=kwargs, result=res)
+                        return res
+                wrapped[name] = traced_tool
+            return wrapped
+
+        async def handler(_cfg, _input, tracked_tools, variables, _history):
+            with tracer.start_as_current_span(f"invoke_agent {served.key}") as span:
+                span.set_attribute("gen_ai.operation.name", "invoke_agent")
+                set_model_identity_attributes(span, served.provider_name.lower(), served.model_name, legacy_system="langchain")
+                set_ld_span_attributes(span, variables, capture_content=capture_content)
+                if capture_content:
+                    set_input_content_attributes(
+                        span,
+                        True,
+                        system_instructions=served.render_instructions(variables),
+                        messages=[text_message("user", _input or "")] if _input else None,
+                    )
+                try:
+                    spanned_tools = _wrap_tools_with_spans(tracked_tools)
+                    out = await (call(spanned_tools, variables) if takes_args else call())
+                    if len(out) == 3:
+                        box["result"], output_text, raw_usage = out
+                    else:
+                        box["result"], raw_usage = out
+                        output_text = str(box["result"]) if box["result"] is not None else ""
+                    parsed = parse_usage(raw_usage or {})
+                    set_usage_span_attributes(span, SpanUsage(input=parsed["input"], output=parsed["output"]))
+                    if capture_content and output_text:
+                        set_output_content_attributes(span, True, [text_message("assistant", output_text)])
+                    span.set_status(SpanStatusCode.OK)
+                    return {"output": output_text, "usage": raw_usage or {}}
+                except Exception as exc:
+                    span.record_exception(exc)
+                    span.set_status(SpanStatusCode.ERROR, str(exc))
+                    raise
+
+        if served.from_fallback:
+            raw = await handler(served.config, user_input, tool_handlers or {}, {"ldContext": context}, None)
+            usage = parse_usage(raw["usage"])
+            track_data = served.track_data()
+        else:
+            tracked = await execute_and_track(
+                config_key=served.key,
+                config=served.config,
+                meta=served.meta,
+                user_context=context,
+                handler=create_handler((served.provider_name, "agent"), handler),
+                user_input=user_input,
+                tool_handlers=tool_handlers,
+            )
+            usage, track_data = tracked["usage"], tracked["track_data"]
+
+        if usage["total"] > 0:
+            log_student(f"{served.key.upper()} TOKENS: {usage['total']} ({usage['input']} in, {usage['output']} out)")
+            cost = calculate_cost(served.model_name, usage["input"], usage["output"])
+            if cost > 0:
+                try:
+                    self._track("ai_cost_per_request", context, track_data, cost)
+                except Exception as e:
+                    log_debug(f"COST TRACKING ERROR: {e}")
+
+        return box["result"]
+
+    def flush_traces(self):
+        """Export queued OpenTelemetry spans immediately so UI trace links resolve right away."""
+        flush = getattr(trace.get_tracer_provider(), "force_flush", None)
+        if callable(flush):
+            try:
+                flush()
+            except Exception as e:
+                log_debug(f"TRACE FLUSH SKIPPED: {e}")
 
     def flush_metrics(self):
-        """Flush metrics to LaunchDarkly"""
-        self.ld_client.flush()
-
-    def track_cost_metric(self, agent_config, context, cost, config_key):
-        """Track cost metric with AI Config metadata for experiment attribution.
-        
-        This ensures cost events include trackJsonData so they're properly
-        associated with AI Config variations in experiments, matching the
-        pattern used by token and feedback tracking.
-        
-        Args:
-            agent_config: The AI config object with tracker
-            context: LaunchDarkly context
-            cost: Cost value in dollars
-            config_key: The AI config key (e.g., 'support-agent', 'security-agent')
-        """
+        """Flush pending LaunchDarkly events and OpenTelemetry spans if initialized."""
+        self.flush_traces()
         try:
-            # Extract metadata from agent_config for experiment attribution
-            tracker = agent_config.create_tracker()
-            metadata = {
-                "version": 1,
-                "configKey": config_key,
-                "variationKey": tracker._variation_key if hasattr(tracker, '_variation_key') else 'unknown',
-                "modelName": agent_config.model.name if hasattr(agent_config, 'model') else 'unknown',
-                "providerName": agent_config.provider.name if hasattr(agent_config, 'provider') else 'unknown'
-            }
-            
-            # Track with metadata - this creates trackJsonData in the event
-            self.ld_client.track("ai_cost_per_request", context, metadata, cost)
-            self.ld_client.flush()
-            
+            get_client().flush()
         except Exception as e:
-            log_debug(f"COST TRACKING ERROR: {e}")
-            # Fallback to basic tracking if metadata extraction fails
-            self.ld_client.track("ai_cost_per_request", context, None, cost)
-            self.ld_client.flush()
+            log_debug(f"FLUSH SKIPPED (client not initialized yet): {e}")
 
-    def track_feedback(self, tracker, thumbs_up: bool):
-        """Track user feedback with LaunchDarkly"""
-        if not tracker:
+    @staticmethod
+    def _track(event: str, context: dict, data, value):
+        """Send a custom event. LDClient.track needs a Context, not a dict."""
+        client = get_client()
+        client.track(event, to_ld_context(client, context), data, value)
+        client.flush()
+
+    def track_feedback(self, served: Optional[ServedConfig], context, thumbs_up: bool) -> bool:
+        """Track user feedback with LaunchDarkly, attributed to the served variation."""
+        if not served:
             return False
 
         try:
-            # Use LaunchDarkly's feedback tracking
-            feedback_dict = {
-                "kind": FeedbackKind.Positive if thumbs_up else FeedbackKind.Negative
-            }
-            tracker.track_feedback(feedback_dict)
+            event = FEEDBACK_POSITIVE_EVENT if thumbs_up else FEEDBACK_NEGATIVE_EVENT
+            self._track(event, context, served.track_data(), 1)
             log_student(f"FEEDBACK TRACKED: {'👍 Positive' if thumbs_up else '👎 Negative'}")
-            self.ld_client.flush()
             return True
         except Exception as e:
             log_debug(f"FEEDBACK TRACKING ERROR: {e}")
             return False
 
-    def close(self):
-        """Close LaunchDarkly client"""
-        try:
-            self.ld_client.flush()
-        except Exception:
-            pass
-        try:
-            self.ld_client.close()
-        except Exception:
-            pass
+    async def aclose(self):
+        """Flush pending LaunchDarkly events and telemetry spans, then close the client."""
+        await shutdown()

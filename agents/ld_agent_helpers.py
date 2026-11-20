@@ -4,14 +4,15 @@ LaunchDarkly AI agent helpers.
 Creates agents with dynamic configuration from LaunchDarkly AI Configs.
 Routes between Bedrock (SSO) and direct API providers based on AUTH_METHOD.
 """
-import asyncio
 import time
 import os
 from typing import List, Any, Tuple
 from langchain.chat_models import init_chat_model
-from langgraph.prebuilt import create_react_agent
-from ldai.tracker import TokenUsage
+from langchain_core.messages import HumanMessage
+from langchain_core.tools import StructuredTool
+from langgraph.prebuilt import ToolNode, create_react_agent
 from utils.logger import log_student
+from utils.bedrock_helpers import ensure_bedrock_inference_profile
 from langchain_aws import ChatBedrockConverse
 import boto3
 
@@ -49,34 +50,19 @@ def create_bedrock_chat_model(model_id: str, session: boto3.Session, region: str
     Auto-corrects direct model IDs to inference profiles.
     Region from BEDROCK_INFERENCE_REGION env var or AWS_REGION.
     """
-    try:
-        from utils.bedrock_helpers import ensure_bedrock_inference_profile
+    corrected_model_id = ensure_bedrock_inference_profile(model_id, region)
 
-        # Auto-correct to inference profile if needed
-        corrected_model_id = ensure_bedrock_inference_profile(model_id, region)
+    log_student(f"BEDROCK: Creating model {corrected_model_id} in region {region}")
 
-        log_student(f"BEDROCK: Creating model {corrected_model_id} in region {region}")
+    model = ChatBedrockConverse(
+        client=session.client(service_name='bedrock-runtime', region_name=region),
+        model_id=corrected_model_id,
+        region_name=region,
+        **kwargs
+    )
 
-        # Create Bedrock client using the provided session
-        bedrock_client = session.client(
-            service_name='bedrock-runtime',
-            region_name=region
-        )
-
-        # Create the ChatBedrockConverse model
-        model = ChatBedrockConverse(
-            client=bedrock_client,
-            model_id=corrected_model_id,
-            region_name=region,
-            **kwargs
-        )
-
-        log_student(f"BEDROCK: Successfully created {corrected_model_id}")
-        return model
-
-    except Exception as e:
-        log_student(f"BEDROCK ERROR: Failed to create model {model_id}: {e}")
-        raise
+    log_student(f"BEDROCK: Successfully created {corrected_model_id}")
+    return model
 
 def _rate_limit_llm_call():
     """Simple rate limiter for LLM calls"""
@@ -93,79 +79,145 @@ def _rate_limit_llm_call():
 
 
 def map_provider_to_langchain(provider_name):
-    """Map LaunchDarkly provider names to LangChain provider names."""
-    provider_mapping = {
-        'anthropic': 'bedrock',   # CHANGED: Route through Bedrock
-        'bedrock': 'bedrock',     # NEW: Explicit Bedrock provider
-        'gemini': 'google_genai',
-        'openai': 'openai',
-        'mistral': 'mistralai'
-    }
-    lower_provider = provider_name.lower()
-    return provider_mapping.get(lower_provider, lower_provider)
+    """Map LaunchDarkly provider names (e.g. 'Anthropic', 'bedrock:anthropic') to LangChain provider names."""
+    provider = provider_name.lower()
+    if provider.startswith('bedrock:'):
+        return 'bedrock'
+    return {'gemini': 'google_genai', 'mistral': 'mistralai'}.get(provider, provider)
 
 
-def wrap_tool_with_counter(tool: Any, counter: ToolCallCounter) -> Any:
+def create_chat_model(provider_name: str, model_name: str, config_manager, parameters: dict = None):
     """
-    Wrap a tool to track invocation count.
+    Create the LangChain chat model for a LaunchDarkly AI Config.
 
-    Each time the tool is called, the counter is incremented.
-    If max_tool_calls is exceeded, MaxToolCallsExceeded is raised.
-
-    Uses a closure-based approach to avoid pickling issues.
+    Anthropic and Bedrock models go through Bedrock when AUTH_METHOD=sso,
+    otherwise through their direct API. Variation model parameters (excluding
+    attached tool schemas) are forwarded to the model constructor.
     """
-    from langchain_core.tools import StructuredTool
+    provider = map_provider_to_langchain(provider_name)
+    model_params = {k: v for k, v in (parameters or {}).items() if k != "tools"}
 
-    # Store original methods
-    original_run = tool._run if hasattr(tool, '_run') else None
-    original_arun = tool._arun if hasattr(tool, '_arun') else None
+    if provider in ('anthropic', 'bedrock') and os.getenv('AUTH_METHOD', 'api-key').lower() == 'sso':
+        return create_bedrock_chat_model(
+            model_id=model_name,
+            session=config_manager.boto3_session,
+            region=config_manager.aws_region,
+            **model_params,
+        )
+
+    # GPT-6 models accept function tools only on the Responses API
+    responses_api = {"use_responses_api": True} if provider == "openai" else {}
+    return init_chat_model(model=model_name, model_provider=provider, **responses_api, **model_params)
+
+
+def ci_safe_provider_and_model(provider_name: str, model_name: str) -> tuple[str, str]:
+    """Under CI_SAFE_MODE, use OpenAI when only an OpenAI key is available."""
+    ci = os.getenv("CI_SAFE_MODE", "").lower() in {"1", "true", "yes"}
+    if ci and not os.getenv("ANTHROPIC_API_KEY") and os.getenv("OPENAI_API_KEY"):
+        return ("openai", "gpt-6-luna")
+    return (provider_name, model_name)
+
+
+def _tool_error_message(e: Exception) -> str:
+    """Tell the model a tool failed, but stop the run once the tool call limit is reached."""
+    # ToolNode turns every tool exception into a message for the model by default,
+    # which would let the agent keep calling tools past max_tool_calls.
+    if isinstance(e, MaxToolCallsExceeded):
+        raise e
+    return f"Error: {e!r}\n Please fix your mistakes."
+
+
+def wrap_tool_with_counter(tool: Any, counter: ToolCallCounter, tracked_fn: Any = None) -> Any:
+    """
+    Wrap a tool to enforce max_tool_calls and delegate through the SDK's tracked handler.
+
+    Incrementing before delegating ensures a call past max_tool_calls raises
+    MaxToolCallsExceeded without recording an extra $ld:ai:tool_call event.
+    """
+    def count_call(kwargs):
+        counter.increment()
+        query = kwargs.get('query') or kwargs.get('search_query')
+        query_info = f" | Query: '{query}'" if query else ""
+        log_student(f"TOOL CALL #{counter.count}/{counter.max_calls}: {tool.name}{query_info}")
 
     def counted_run(**kwargs) -> str:
-        """Wrapped synchronous execution"""
-        counter.increment()
-
-        # Extract and log search query if present
-        query_info = ""
-        if 'query' in kwargs:
-            query_info = f" | Query: '{kwargs['query']}'"
-        elif 'search_query' in kwargs:
-            query_info = f" | Query: '{kwargs['search_query']}'"
-
-        log_student(f"TOOL CALL #{counter.count}/{counter.max_calls}: {tool.name}{query_info}")
-
-        if original_run:
-            return original_run(**kwargs)
-        else:
-            raise NotImplementedError(f"Tool {tool.name} has no _run method")
+        count_call(kwargs)
+        return tool._run(**kwargs)
 
     async def counted_arun(**kwargs) -> str:
-        """Wrapped asynchronous execution"""
-        counter.increment()
+        count_call(kwargs)
+        if tracked_fn is not None:
+            return await tracked_fn(**kwargs)
+        return await tool._arun(**kwargs)
 
-        # Extract and log search query if present
-        query_info = ""
-        if 'query' in kwargs:
-            query_info = f" | Query: '{kwargs['query']}'"
-        elif 'search_query' in kwargs:
-            query_info = f" | Query: '{kwargs['search_query']}'"
-
-        log_student(f"TOOL CALL #{counter.count}/{counter.max_calls}: {tool.name}{query_info}")
-
-        if original_arun:
-            return await original_arun(**kwargs)
-        elif original_run:
-            return original_run(**kwargs)
-        else:
-            raise NotImplementedError(f"Tool {tool.name} has no run method")
-
-    # Create new StructuredTool with wrapped methods
     return StructuredTool(
         name=tool.name,
         description=tool.description,
         func=counted_run,
-        coroutine=counted_arun if original_arun or original_run else None,
-        args_schema=tool.args_schema if hasattr(tool, 'args_schema') else None
+        coroutine=counted_arun,
+        args_schema=tool.args_schema
     )
+
+
+def _to_async_tool_handler(tool: Any):
+    async def call_tool(**kwargs) -> str:
+        return await tool._arun(**kwargs)
+    return call_tool
+
+
+def _extract_turn_output(messages: List[Any]) -> Tuple[str, List[str], List[dict]]:
+    """Extract assistant response text and tool-call summaries from new turn messages."""
+    ai_response = ""
+    tool_calls_summary = []
+    tool_details = []
+
+    for msg in messages:
+        if msg.type != 'ai':
+            continue
+
+        if isinstance(msg.content, list):
+            for content_item in msg.content:
+                if isinstance(content_item, dict) and content_item.get('type') == 'text':
+                    ai_response += content_item.get('text', '') + " "
+        elif msg.content:
+            ai_response += str(msg.content) + " "
+
+        for tool_call in msg.tool_calls:
+            args = tool_call.get('args') or {}
+            detail = {"name": tool_call['name'], "args": args}
+            search_query = args.get('query') or args.get('search_query')
+            if search_query:
+                detail["search_query"] = search_query
+            tool_calls_summary.append(tool_call['name'])
+            tool_details.append(detail)
+
+    final_text = ai_response.strip() or "I understand your question. Let me help you with that."
+    return final_text, tool_calls_summary, tool_details
+
+
+def _build_react_agent(config_manager, agent_config, tools: List[Any], tracked_tools: dict = None, variables: dict = None) -> Tuple[Any, int]:
+    """Build the LangGraph ReAct agent from a resolved ServedConfig and SDK-wrapped tools."""
+    llm = create_chat_model(agent_config.provider_name, agent_config.model_name, config_manager, agent_config.parameters)
+    log_student(f"ROUTING: Using {agent_config.provider_name} for {agent_config.model_name}")
+
+    max_tool_calls = 5
+    if 'max_tool_calls' in agent_config.custom:
+        max_tool_calls = int(agent_config.custom['max_tool_calls'])
+        log_student(f"EXTRACTED max_tool_calls from LaunchDarkly: {max_tool_calls}")
+
+    counter = ToolCallCounter(max_calls=max_tool_calls)
+    tracked_map = tracked_tools or {}
+    wrapped_tools = [wrap_tool_with_counter(tool, counter, tracked_map.get(tool.name)) for tool in tools]
+
+    effective_recursion_limit = max_tool_calls * 3 + 10
+    log_student(f"CONFIG: max_tool_calls={max_tool_calls}, effective_recursion_limit={effective_recursion_limit}")
+
+    agent = create_react_agent(
+        model=llm,
+        tools=ToolNode(wrapped_tools, handle_tool_errors=_tool_error_message),
+        prompt=agent_config.render_instructions(variables),
+    )
+    return agent, effective_recursion_limit
 
 
 async def create_agent_with_fresh_config(
@@ -173,281 +225,105 @@ async def create_agent_with_fresh_config(
     config_key: str,
     user_id: str,
     user_context: dict,
-    tools: List[Any] = None
-) -> Tuple[Any, Any, bool, int]:
+    tools: List[Any]
+) -> Tuple[Any, Any, int]:
     """
     Create LangChain agent with LaunchDarkly AI Config.
 
     Routes to Bedrock (AUTH_METHOD=sso) or direct API based on config.
-    Returns: (agent, tracker, disabled, max_tool_calls)
+    Returns: (agent, served_config, recursion_limit)
     """
-    if tools is None:
-        tools = []
-
-    try:
-        # Fetch config from LaunchDarkly
-        agent_config = await config_manager.get_config(
-            user_id=user_id,
-            config_key=config_key,
-            user_context=user_context
-        )
-
-        if not agent_config.enabled:
-            default_recursion_limit = 5 * 3 + 10  # Default: 5 tool calls * 3 + headroom
-            return None, None, True, default_recursion_limit
-
-        # Map provider and create LangChain model
-        from utils.bedrock_helpers import normalize_bedrock_provider
-
-        # Normalize provider name to handle bedrock:anthropic format
-        normalized_provider = normalize_bedrock_provider(agent_config.provider.name)
-        langchain_provider = map_provider_to_langchain(normalized_provider)
-
-        # Check if we need to use Bedrock
-        if langchain_provider == 'bedrock':
-            # Get AUTH_METHOD to determine routing
-            auth_method = os.getenv('AUTH_METHOD', 'api-key').lower()
-
-            if auth_method == 'sso':
-                # Use Bedrock with SSO authentication
-                if not hasattr(config_manager, 'boto3_session') or not config_manager.boto3_session:
-                    raise ValueError("Bedrock authentication requires AWS SSO session. Run: aws sso login")
-
-                # Use model ID directly from LaunchDarkly AI Config (FR-006 compliance)
-                bedrock_model_id = agent_config.model.name
-
-                # 🚨 DEBUG: Log what we received from LaunchDarkly
-                log_student("DEBUG: LaunchDarkly AI Config details:")
-                log_student(f"  - Provider: {agent_config.provider.name}")
-                log_student(f"  - Model ID: {bedrock_model_id}")
-                log_student(f"  - Region: {config_manager.aws_region}")
-
-                # Create Bedrock model using our factory
-                llm = create_bedrock_chat_model(
-                    model_id=bedrock_model_id,
-                    session=config_manager.boto3_session,
-                    region=config_manager.aws_region
-                )
-                log_student(f"ROUTING: Using Bedrock SSO with direct model ID: {bedrock_model_id}")
-            else:
-                # Fall back to direct API access for backward compatibility
-                # Route 'anthropic' through 'anthropic' provider directly when using api-key auth
-                fallback_provider = 'anthropic' if agent_config.provider.name.lower() == 'anthropic' else langchain_provider
-                llm = init_chat_model(
-                    model=agent_config.model.name,
-                    model_provider=fallback_provider,
-                )
-                log_student(f"ROUTING: Using direct API for {agent_config.model.name} via {fallback_provider}")
-        else:
-            # Use standard LangChain initialization for non-Bedrock providers
-            llm = init_chat_model(
-                model=agent_config.model.name,
-                model_provider=langchain_provider,
-            )
-            log_student(f"ROUTING: Using {langchain_provider} for {agent_config.model.name}")
-
-        # Extract max_tool_calls from LaunchDarkly config
-        max_tool_calls = 5  # Default value
-        try:
-            config_dict = agent_config.to_dict()
-            if 'model' in config_dict and 'custom' in config_dict['model'] and config_dict['model']['custom']:
-                custom_params = config_dict['model']['custom']
-                if 'max_tool_calls' in custom_params:
-                    max_tool_calls = int(custom_params['max_tool_calls'])
-                    log_student(f"EXTRACTED max_tool_calls from LaunchDarkly: {max_tool_calls}")
-        except Exception as e:
-            log_student(f"DEBUG: Error extracting max_tool_calls: {e}")
-
-        # Wrap tools with call counter to track invocations
-        counter = ToolCallCounter(max_calls=max_tool_calls)
-        wrapped_tools = [wrap_tool_with_counter(tool, counter) for tool in tools]
-
-        # Calculate effective recursion limit
-        # Formula: max_tool_calls * 3 + 10 headroom
-        # Each tool call cycle: think → tool_call → tool_result → think
-        effective_recursion_limit = max_tool_calls * 3 + 10
-        log_student(f"CONFIG: max_tool_calls={max_tool_calls}, effective_recursion_limit={effective_recursion_limit}")
-
-        # Create React agent with wrapped tools
-        agent = create_react_agent(
-            model=llm,
-            tools=wrapped_tools,
-            prompt=agent_config.instructions
-        )
-
-        return agent, agent_config.create_tracker(), False, effective_recursion_limit
-
-    except Exception as e:
-        log_student(f"ERROR in create_agent_with_fresh_config: {e}")
-        default_recursion_limit = 5 * 3 + 10  # Default: 5 tool calls * 3 + headroom
-        return None, None, True, default_recursion_limit
+    agent_config = await config_manager.get_config(
+        user_id=user_id,
+        config_key=config_key,
+        user_context=user_context
+    )
+    agent, effective_recursion_limit = _build_react_agent(config_manager, agent_config, tools)
+    return agent, agent_config, effective_recursion_limit
 
 
-def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any] = None):
+def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any], served_config=None):
     """
-    Create agent wrapper that fetches fresh LaunchDarkly config on each invocation.
+    Create agent wrapper that runs inside LaunchDarkly's execute_and_track.
 
-    Enables dynamic A/B testing and real-time config changes without restarts.
-    Tracks tokens, costs, and errors automatically.
+    Reuses `served_config` when already resolved for the turn (avoiding duplicate
+    flag evaluations), or fetches a fresh config per call when standalone.
     """
-    if tools is None:
-        tools = []
+    tool_handlers = {tool.name: _to_async_tool_handler(tool) for tool in tools}
 
     class LaunchDarklyAgent:
         async def ainvoke(self, request_data: dict) -> dict:
             """
-            Async invocation - fetches config and executes without blocking event loop
+            Async invocation - executes and records duration, tokens, tool calls, and output.
             """
+            user_input = request_data.get("user_input", "")
             try:
-                # Extract request parameters
-                user_input = request_data.get("user_input", "")
                 user_id = request_data.get("user_id", "agent_user")
                 user_context = request_data.get("user_context", {})
-                messages = request_data.get("messages", [])
+                agent_messages = request_data.get("messages") or [HumanMessage(content=user_input)]
 
-                # Create agent with config
-                agent, tracker, disabled, effective_recursion_limit = await create_agent_with_fresh_config(
-                    config_manager=config_manager,
-                    config_key=config_key,
-                    user_id=user_id,
-                    user_context=user_context,
-                    tools=tools
-                )
-
-                if disabled:
-                    log_student(f"{config_key}: AI Config is disabled")
-                    return {
-                        "user_input": user_input,
-                        "response": f"AI Config {config_key} is disabled",
-                        "tool_calls": [],
-                        "tool_details": [],
-                        "messages": []
-                    }
-
-                # Prepare messages for agent
-                if messages:
-                    agent_messages = messages
-                else:
-                    from langchain_core.messages import HumanMessage
-                    agent_messages = [HumanMessage(content=user_input)]
-
-                # Build state
-                initial_state = {"messages": agent_messages}
-                prev_message_count = len(agent_messages)
-
-                # Get agent configuration for tracking
-                agent_config = await config_manager.get_config(
+                served = served_config or await config_manager.get_config(
                     user_id=user_id,
                     config_key=config_key,
                     user_context=user_context
                 )
 
+                initial_state = {"messages": agent_messages}
+                prev_message_count = len(agent_messages)
+                ld_context = config_manager.build_context(user_id, user_context)
+
                 # Apply rate limiting before LLM call
                 _rate_limit_llm_call()
 
-                # Execute agent with tracking
-                start_time = time.time()
-                try:
-                    # Execute agent with effective recursion limit
+                async def run_agent(tracked_tools=None, variables=None):
+                    agent, effective_recursion_limit = _build_react_agent(
+                        config_manager, served, tools, tracked_tools, variables
+                    )
                     log_student(f"EXECUTING AGENT with recursion_limit={effective_recursion_limit}")
-                    response = await agent.ainvoke(initial_state, {"recursion_limit": effective_recursion_limit})
+                    try:
+                        result = await agent.ainvoke(initial_state, {"recursion_limit": effective_recursion_limit})
+                    except MaxToolCallsExceeded as exc:
+                        # Returned, not raised: reaching the tool limit is expected and isn't a generation error.
+                        limit_msg = f"I've reached the tool call limit for this request. {exc}"
+                        return exc, limit_msg, {}
 
-                    # Track success and latency
-                    tracker.track_success()
-                    latency_ms = int((time.time() - start_time) * 1000)
-                    tracker.track_duration(latency_ms)
-
-                    # Extract token usage from new messages
-                    new_messages = response['messages'][prev_message_count:]
-                    total_input = 0
-                    total_output = 0
-
+                    new_messages = result['messages'][prev_message_count:]
+                    usage = {"input_tokens": 0, "output_tokens": 0}
                     for msg in new_messages:
-                        if hasattr(msg, 'usage_metadata') and msg.usage_metadata:
-                            total_input += msg.usage_metadata.get('input_tokens', 0)
-                            total_output += msg.usage_metadata.get('output_tokens', 0)
+                        if getattr(msg, 'usage_metadata', None):
+                            usage["input_tokens"] += msg.usage_metadata.get('input_tokens', 0)
+                            usage["output_tokens"] += msg.usage_metadata.get('output_tokens', 0)
 
-                    # Track tokens if found
-                    if total_input > 0 or total_output > 0:
-                        token_usage = TokenUsage(
-                            input=total_input,
-                            output=total_output,
-                            total=total_input + total_output
-                        )
-                        tracker.track_tokens(token_usage)
-                        log_student(f"AGENT TOKENS: {token_usage.total} tokens ({token_usage.input} in, {token_usage.output} out)")
+                    final_text, tool_calls_summary, tool_details = _extract_turn_output(new_messages)
+                    turn_payload = (final_text, tool_calls_summary, tool_details, result['messages'])
+                    return turn_payload, final_text, usage
 
-                        # Track cost metric with AI Config metadata for experiment attribution
-                        from utils.cost_calculator import calculate_cost
-                        cost = calculate_cost(agent_config.model.name, total_input, total_output)
-                        if cost > 0:
-                            # Use centralized context builder to ensure exact match with AI Config evaluation
-                            ld_context = config_manager.build_context(user_id, user_context)
+                response = await config_manager.track(
+                    served,
+                    ld_context,
+                    run_agent,
+                    user_input,
+                    tool_handlers=tool_handlers,
+                    capture_content=True,  # support-agent only sees redacted, PII-free text
+                )
 
-                            # Track cost with metadata for experiment attribution
-                            config_manager.track_cost_metric(agent_config, ld_context, cost, config_key)
-                            log_student(f"COST TRACKING: ${cost:.6f} for {agent_config.model.name}")
-
-                except MaxToolCallsExceeded as e:
-                    # Handle tool limit gracefully - this is expected behavior, not an error
-                    log_student(f"TOOL LIMIT REACHED: {e}")
-                    # Return friendly message explaining the limit
+                if isinstance(response, MaxToolCallsExceeded):
+                    log_student(f"TOOL LIMIT REACHED: {response}")
                     return {
                         "user_input": user_input,
-                        "response": f"I've reached the tool call limit for this request. {str(e)}",
+                        "response": f"I've reached the tool call limit for this request. {response}",
                         "tool_calls": [],
                         "tool_details": [],
                         "messages": []
                     }
-                except Exception:
-                    tracker.track_error()
-                    raise
 
-                # Extract new messages
-                new_messages = response['messages'][prev_message_count:]
-
-                # Parse response
-                ai_response = ""
-                tool_calls_summary = []
-                tool_details = []
-
-                for msg in new_messages:
-                    # Get AI message content
-                    if hasattr(msg, 'content') and msg.content:
-                        if isinstance(msg.content, list):
-                            for content_item in msg.content:
-                                if hasattr(content_item, 'text'):
-                                    ai_response += content_item.text + " "
-                        else:
-                            ai_response += str(msg.content) + " "
-
-                    # Track tool calls
-                    if hasattr(msg, 'tool_calls') and msg.tool_calls:
-                        for tool_call in msg.tool_calls:
-                            if hasattr(tool_call, 'name'):
-                                tool_name = tool_call.name
-                                tool_calls_summary.append(tool_name)
-
-                                # Try to extract details with search query
-                                if hasattr(tool_call, 'args'):
-                                    detail = {
-                                        "name": tool_name,
-                                        "args": tool_call.args
-                                    }
-                                    # Extract search query from args if present
-                                    if isinstance(tool_call.args, dict):
-                                        if 'query' in tool_call.args:
-                                            detail["search_query"] = tool_call.args['query']
-                                        elif 'search_query' in tool_call.args:
-                                            detail["search_query"] = tool_call.args['search_query']
-                                    tool_details.append(detail)
-
+                final_text, tool_calls_summary, tool_details, all_messages = response
                 return {
                     "user_input": user_input,
-                    "response": ai_response.strip() if ai_response else "I understand your question. Let me help you with that.",
+                    "response": final_text,
                     "tool_calls": tool_calls_summary,
                     "tool_details": tool_details,
-                    "messages": response['messages']
+                    "messages": all_messages
                 }
 
             except Exception as e:
@@ -456,32 +332,6 @@ def create_simple_agent_wrapper(config_manager, config_key: str, tools: List[Any
                 log_student(f"Traceback: {traceback.format_exc()}")
                 return {
                     "user_input": user_input,
-                    "response": f"I apologize, but I encountered an error: {e}",
-                    "tool_calls": [],
-                    "tool_details": [],
-                    "messages": []
-                }
-
-        def invoke(self, request_data: dict) -> dict:
-            """
-            Synchronous invocation - runs async code in new event loop
-            """
-            try:
-                # Try to run in existing event loop first
-                try:
-                    asyncio.get_running_loop()
-                    # We're in an async context, create task
-                    import concurrent.futures
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        future = executor.submit(asyncio.run, self.ainvoke(request_data))
-                        return future.result()
-                except RuntimeError:
-                    # No event loop, create one
-                    return asyncio.run(self.ainvoke(request_data))
-            except Exception as e:
-                log_student(f"SYNC INVOKE ERROR in {config_key}: {e}")
-                return {
-                    "user_input": request_data.get("user_input", ""),
                     "response": f"I apologize, but I encountered an error: {e}",
                     "tool_calls": [],
                     "tool_details": [],

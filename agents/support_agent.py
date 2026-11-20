@@ -11,10 +11,8 @@ This agent demonstrates how to:
 Instead of hardcoded tools, this agent's capabilities are entirely controlled
 by LaunchDarkly configuration, enabling A/B testing of tool availability.
 """
-from typing import List, Any
 from .ld_agent_helpers import create_simple_agent_wrapper
 from tools_impl.dynamic_tool_factory import create_dynamic_tools_from_launchdarkly
-from utils.logger import log_student
 
 
 def create_support_agent(config, config_manager):
@@ -23,13 +21,13 @@ def create_support_agent(config, config_manager):
 
     LANGGRAPH INTEGRATION PATTERN:
     This function returns an agent wrapper that integrates with LangGraph
-    by exposing an invoke() method that matches LangGraph node expectations.
+    by exposing an ainvoke() method that the supervisor's support node awaits.
 
     DYNAMIC TOOL LOADING WORKFLOW:
     1. Extract tool definitions from LaunchDarkly AI Config
     2. Create actual tool instances using dynamic factory
     3. Create agent wrapper that fetches fresh config on each call
-    4. Return wrapper with invoke() method for LangGraph compatibility
+    4. Return wrapper with ainvoke() method for LangGraph compatibility
 
     - Tools are NOT hardcoded - they come from LaunchDarkly configuration
     - Different users can get different tool sets based on targeting rules
@@ -37,9 +35,9 @@ def create_support_agent(config, config_manager):
     - Agent wrapper pattern enables runtime configuration changes
 
     LAUNCHDARKLY TOOL VARIATIONS:
-    - docs-only: ["search_v1"] - Basic search only
-    - rag-enabled: ["search_v1", "search_v2", "reranking"] - Full RAG stack
-    - research-enhanced: ["search_v1", "search_v2", "reranking", "arxiv_search"] - RAG + MCP
+    - rag-search-enhanced (Part 1): ["search_v2", "reranking"] - RAG stack
+    - eu-free, other-free (Part 2): ["search_v1"] - Basic search only
+    - eu-paid, other-paid (Part 2): ["search_v1", "search_v2", "reranking", "arxiv_search", "openalex_search"] - RAG + MCP
     """
 
     # STEP 1: Extract tool definitions from LaunchDarkly AI Config
@@ -53,9 +51,9 @@ def create_support_agent(config, config_manager):
     agent_wrapper = create_simple_agent_wrapper(
         config_manager=config_manager,
         config_key="support-agent",      # LaunchDarkly AI Config key
-        tools=available_tools            # Tools loaded from configuration
+        tools=available_tools,           # Tools loaded from configuration
+        served_config=config,            # Reuse the config already evaluated for this turn
     )
 
-    # STEP 3: Return wrapper with invoke() method for LangGraph integration
-    # The wrapper's invoke() method matches LangGraph node function signature
+    # STEP 3: Return wrapper with ainvoke() method for LangGraph integration
     return agent_wrapper
