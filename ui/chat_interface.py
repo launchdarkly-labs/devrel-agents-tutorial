@@ -12,7 +12,16 @@ UI_DIR = Path(__file__).resolve().parent
 ASSETS_DIR = UI_DIR / "assets"
 KB_DIR = UI_DIR.parent / "kb"
 ALBERT_AVATAR = ASSETS_DIR / "albert-proud.png"
+USER_AVATAR = ASSETS_DIR / "avatar-user.png"
+ASSISTANT_AVATAR = ASSETS_DIR / "avatar-assistant.png"
 LD_WORDMARK_SVG = ASSETS_DIR / "launchdarkly-logo-white.svg"
+
+# Clear identifiers (always redacted) plus employer, city, and role (redacted only by strict security).
+SECURITY_CHECK_QUERY = (
+    "My name is Jane Doe, email jane.doe@example.com. "
+    "I work at Acme Corp in Berlin as a manager. "
+    "Can you explain temporal-difference learning?"
+)
 
 LD_LOGO_B64 = base64.b64encode(LD_WORDMARK_SVG.read_bytes()).decode("ascii")
 ALBERT_B64 = base64.b64encode(ALBERT_AVATAR.read_bytes()).decode("ascii")
@@ -78,122 +87,160 @@ html, body, [class*="css"], .stApp {
     font-family: 'Inter', sans-serif;
 }
 
-.header-container {
+.slide {
+    margin-bottom: 1.25rem;
+    border-radius: 28px;
+    background:
+        linear-gradient(#F8F8F8, #F8F8F8) padding-box,
+        linear-gradient(100deg, #DDFF46 0%, #FF35A2 46%, #3DD6F5 100%) border-box;
+    border: 14px solid transparent;
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
+    position: relative;
+    overflow: hidden;
+}
+
+.slide::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background-image:
+        linear-gradient(rgba(25, 25, 25, 0.16) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(25, 25, 25, 0.16) 1px, transparent 1px);
+    background-size: 26px 26px;
+    mask-image: linear-gradient(#000, transparent 72%);
+    pointer-events: none;
+}
+
+.slide-body {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 2rem;
-    background: #212124;
-    padding: 1.5rem 2rem;
-    margin-bottom: 1.25rem;
-    border-radius: 14px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    gap: 1.5rem;
+    background: #FFFFFF;
+    border-radius: 16px 16px 0 0;
+    padding: 1.6rem 1.8rem 1.2rem;
 }
 
-.header-left {
-    display: flex;
-    flex-direction: column;
-    gap: 0.55rem;
-}
-
-.ld-wordmark {
-    height: 32px;
-    width: auto;
-    align-self: flex-start;
-    margin-bottom: 0.25rem;
-}
-
-.header-title {
-    font-family: 'Sora', sans-serif;
-    font-size: 1.85rem;
+.eyebrow {
+    display: inline-block;
+    background: #DDFF46;
+    color: #191919;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.68rem;
     font-weight: 700;
-    margin: 0;
-    color: #FFFFFF;
-    letter-spacing: -0.02em;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.22rem 0.45rem;
+    border-radius: 2px;
+    margin-bottom: 0.7rem;
+}
+
+.slide h1.header-title {
+    font-family: 'Sora', sans-serif;
+    font-size: 2.35rem;
+    font-weight: 700;
+    margin: 0 0 0.45rem;
+    color: #191919 !important;
+    letter-spacing: -0.03em;
+    line-height: 1.05;
 }
 
 .header-subtitle {
-    font-size: 0.95rem;
-    color: rgba(244, 245, 247, 0.78);
+    font-size: 1rem;
+    color: #6D6E71;
     margin: 0;
     line-height: 1.45;
+    max-width: 38rem;
 }
 
-.kb-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin-top: 0.35rem;
-    padding: 0.38rem 0.85rem;
-    background: rgba(64, 91, 255, 0.16);
-    border: 1px solid rgba(64, 91, 255, 0.45);
-    border-radius: 999px;
-    font-size: 0.82rem;
-    color: #E0E5FF;
-    width: fit-content;
-}
-
-.kb-dot {
-    width: 8px;
-    height: 8px;
+.slide-albert {
+    width: 168px;
+    height: 168px;
+    flex-shrink: 0;
     border-radius: 50%;
-    background: #DDFF46;
-    display: inline-block;
+    background:
+        radial-gradient(circle at 35% 30%, #DDFF46 0%, #DDFF46 42%, transparent 43%),
+        radial-gradient(circle at 78% 72%, #FF35A2 0%, #FF35A2 36%, transparent 37%),
+        #F8F8F8;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    overflow: hidden;
 }
 
 .header-mascot {
-    height: 155px;
+    height: 150px;
     width: auto;
-    flex-shrink: 0;
 }
 
-.example-queries-container {
-    padding: 0.25rem 0 0.5rem 0;
-    margin: 0.5rem 0;
+.slide-foot {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    background: #191919;
+    padding: 0.85rem 1.3rem;
+    border-radius: 0 0 12px 12px;
 }
 
-.example-queries-title {
-    font-family: 'Sora', sans-serif;
-    font-size: 0.88rem;
-    font-weight: 600;
+.ld-wordmark {
+    height: 22px;
+    width: auto;
+}
+
+.kb-foot {
     color: #DDFF46;
-    margin-bottom: 0.2rem;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
+    font-size: 0.78rem;
+    font-weight: 600;
 }
 
-.example-queries-subtitle {
-    color: rgba(244, 245, 247, 0.7);
-    margin-bottom: 0.75rem;
-    font-size: 0.85rem;
-    line-height: 1.4;
+.queries-label {
+    color: #A7A9AC;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin: 0.2rem 0 0.55rem;
+}
+
+[class*="st-key-ask-"] button {
+    background: #212124;
+    color: #F4F5F7;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 12px;
+    text-align: left;
+    padding: 0.72rem 1rem;
+    font-weight: 600;
+}
+
+[class*="st-key-ask-"] button:hover {
+    border-color: #DDFF46;
+    color: #FFFFFF;
+    background: #26262A;
 }
 
 .stButton > button {
-    background: linear-gradient(180deg, #252B42 0%, #1D2235 100%);
-    color: #FFFFFF;
-    border: 1px solid rgba(96, 122, 255, 0.55);
+    background: #282A30;
+    color: #F4F5F7;
+    border: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: 10px;
-    padding: 0.65rem 1.1rem;
     font-family: 'Inter', sans-serif;
     font-weight: 600;
-    font-size: 0.88rem;
-    cursor: pointer;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.28);
-    transition: all 0.16s ease;
 }
 
-.stButton > button:hover {
-    background: #405BFF;
-    border-color: #DDFF46;
-    color: #FFFFFF;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 14px rgba(64, 91, 255, 0.4);
+[data-testid="stSidebar"] .stButton > button {
+    background: #DDFF46;
+    color: #191919;
+    border: none;
 }
 
-.stButton > button:active {
-    transform: translateY(0);
-    background: #3349CC;
+[data-testid="stSidebar"] .stButton > button:hover {
+    background: #FFFFFF;
+    color: #191919;
 }
 
 .stChatMessage {
@@ -201,6 +248,10 @@ html, body, [class*="css"], .stApp {
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     margin: 0.5rem 0;
+}
+
+.stChatMessage img {
+    border-radius: 8px;
 }
 
 .stSelectbox > div > div {
@@ -262,29 +313,33 @@ html, body, [class*="css"], .stApp {
 }
 
 @media (max-width: 768px) {
-    .header-container {
+    .slide-body {
         flex-direction: column;
         align-items: flex-start;
     }
     .header-title {
-        font-size: 1.2rem;
+        font-size: 1.6rem;
     }
 }
 </style>
 """, unsafe_allow_html=True)
 
 st.markdown(f"""
-<div class="header-container">
-    <div class="header-left">
-        <img class="ld-wordmark" src="data:image/svg+xml;base64,{LD_LOGO_B64}" alt="LaunchDarkly" />
-        <h1 class="header-title">Multi-Agent Research System</h1>
-        <p class="header-subtitle">LangGraph supervisor, PII security boundary, and hybrid RAG + MCP academic research</p>
-        <div class="kb-pill">
-            <span class="kb-dot"></span>
-            <span>Loaded knowledge base: <strong>{KB_SUMMARY}</strong> + ArXiv &amp; OpenAlex</span>
+<div class="slide">
+    <div class="slide-body">
+        <div>
+            <span class="eyebrow">Research demo</span>
+            <h1 class="header-title">Multi-Agent Research System</h1>
+            <p class="header-subtitle">A LangGraph supervisor, a PII security boundary, and hybrid RAG with live academic search.</p>
+        </div>
+        <div class="slide-albert">
+            <img class="header-mascot" src="data:image/png;base64,{ALBERT_B64}" alt="Albert" />
         </div>
     </div>
-    <img class="header-mascot" src="data:image/png;base64,{ALBERT_B64}" alt="Albert" />
+    <div class="slide-foot">
+        <img class="ld-wordmark" src="data:image/svg+xml;base64,{LD_LOGO_B64}" alt="LaunchDarkly" />
+        <span class="kb-foot">{KB_SUMMARY} · ArXiv · OpenAlex</span>
+    </div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -343,44 +398,22 @@ def show_observability_links(metadata):
         unsafe_allow_html=True,
     )
 
-st.markdown("""
-<div class="example-queries-container">
-    <h3 class="example-queries-title">Example Queries</h3>
-    <p class="example-queries-subtitle">Try RAG search on the reinforcement learning textbook, PII redaction, or live academic research</p>
-</div>
-""", unsafe_allow_html=True)
+EXAMPLE_QUERIES = [
+    ("basic", "Basic Search", "How does Q-learning differ from SARSA in your knowledge base?"),
+    ("rerank", "RAG + Reranking", "In our textbook, how do multi-armed bandits balance exploration and exploitation? Search and rerank the passages."),
+    ("security", "Security Check", SECURITY_CHECK_QUERY),
+    ("arxiv", "ArXiv Research", "Find recent ArXiv papers on offline reinforcement learning"),
+    ("openalex", "OpenAlex Research", "Search OpenAlex for highly cited papers on reinforcement learning from human feedback"),
+    ("full", "Full Research Stack", "Compare how our textbook defines policy gradient methods with recent academic research papers"),
+]
 
-# Row 1: Basic search tools
-col1, col2 = st.columns(2)
-with col1:
-    if st.button("▶ Basic Search", use_container_width=True):
-        st.session_state.example_query = "How does Q-learning differ from SARSA in your knowledge base?"
-
-with col2:
-    if st.button("▶ RAG + Reranking", use_container_width=True):
-        st.session_state.example_query = "In our textbook, how do multi-armed bandits balance exploration and exploitation? Search and rerank the passages."
-
-# Row 2: Security and research tools
-col4, col5, col6 = st.columns(3)
-with col4:
-    if st.button("▶ Security Check", use_container_width=True):
-        st.session_state.example_query = "My name is Jane Doe, email: jane.doe@example.com. Can you explain temporal-difference learning?"
-
-with col5:
-    if st.button("▶ ArXiv Research", use_container_width=True):
-        st.session_state.example_query = "Find recent ArXiv papers on offline reinforcement learning"
-
-with col6:
-    if st.button("▶ OpenAlex Research", use_container_width=True):
-        st.session_state.example_query = "Search OpenAlex for highly cited papers on reinforcement learning from human feedback"
-
-# Row 3: Advanced research
-col7 = st.columns(1)[0]
-with col7:
-    if st.button("▶ Full Research Stack", use_container_width=True):
-        st.session_state.example_query = "Compare how our textbook defines policy gradient methods with recent academic research papers"
-
-st.markdown("---")
+st.markdown('<p class="queries-label">Example queries</p>', unsafe_allow_html=True)
+for start in (0, 3):
+    columns = st.columns(3)
+    for column, (key, title, prompt) in zip(columns, EXAMPLE_QUERIES[start:start + 3]):
+        with column:
+            if st.button(title, key=f"ask-{key}", use_container_width=True):
+                st.session_state.example_query = prompt
 
 # Initialize session state with dual history for PII isolation
 if "messages" not in st.session_state:
@@ -423,7 +456,7 @@ def send_feedback(message_id, feedback):
 
 # Display chat history
 for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
+    with st.chat_message(message["role"], avatar=str(USER_AVATAR if message["role"] == "user" else ASSISTANT_AVATAR)):
         st.write(message["content"])
         if message["role"] == "assistant":
             # Show feedback buttons for assistant messages
@@ -468,11 +501,11 @@ if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
 
     # Display user message
-    with st.chat_message("user"):
+    with st.chat_message("user", avatar=str(USER_AVATAR)):
         st.write(prompt)
 
     # Get agent response inside the assistant bubble so a live spinner shows immediately
-    with st.chat_message("assistant"):
+    with st.chat_message("assistant", avatar=str(ASSISTANT_AVATAR)):
         try:
             user_context = get_user_context(st.session_state.user_id, sample_users)
 

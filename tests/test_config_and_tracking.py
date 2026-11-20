@@ -137,3 +137,21 @@ async def test_sdk_tool_handlers_emit_tool_call_events_and_render_templates(monk
         assert forwarded == {"model": "claude-haiku-5-5", "model_provider": "anthropic", "max_tokens": 512}
     finally:
         _reset_for_testing()
+
+
+def test_flush_traces_uses_public_otel_provider(monkeypatch):
+    flushed = []
+
+    class FakeTracerProvider:
+        def force_flush(self):
+            flushed.append(True)
+
+    monkeypatch.setattr(config_manager.trace, "get_tracer_provider", lambda: FakeTracerProvider())
+    manager = FixedConfigManager()
+    manager.flush_traces()
+    assert flushed == [True]
+
+    # Proxy/no-op provider without force_flush must be a safe no-op
+    monkeypatch.setattr(config_manager.trace, "get_tracer_provider", lambda: object())
+    manager.flush_traces()
+

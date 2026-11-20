@@ -30,7 +30,6 @@ from launchdarkly_ai_server import (
     text_message,
     to_ld_context,
 )
-from launchdarkly_ai_server.lifecycle import _flush_tracer_provider
 from launchdarkly_ai_server.tracking import make_track_data
 from opentelemetry import trace
 from opentelemetry.trace import StatusCode as SpanStatusCode
@@ -410,11 +409,16 @@ class FixedConfigManager:
 
     def flush_traces(self):
         """Export queued OpenTelemetry spans immediately so UI trace links resolve right away."""
-        _flush_tracer_provider()
+        flush = getattr(trace.get_tracer_provider(), "force_flush", None)
+        if callable(flush):
+            try:
+                flush()
+            except Exception as e:
+                log_debug(f"TRACE FLUSH SKIPPED: {e}")
 
     def flush_metrics(self):
         """Flush pending LaunchDarkly events and OpenTelemetry spans if initialized."""
-        _flush_tracer_provider()
+        self.flush_traces()
         try:
             get_client().flush()
         except Exception as e:

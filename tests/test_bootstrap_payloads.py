@@ -45,3 +45,26 @@ def test_part_3_variation_sends_max_tool_calls(monkeypatch):
     assert payload["modelConfigKey"] == "Anthropic.claude-opus-5-5"
     assert payload["model"] == {"custom": {"max_tool_calls": 10}}
     assert "max_tool_calls" not in payload
+
+
+def test_unmapped_provider_fallback_uses_canonical_provider_casing(monkeypatch):
+    sent = []
+    monkeypatch.setattr(create_configs.http, "post", lambda url, headers, json, timeout: sent.append(json) or FakeResponse())
+    monkeypatch.setattr(create_configs.time, "sleep", lambda seconds: None)
+
+    bootstrap = create_configs.MultiAgentBootstrap("api-test-key")
+    bootstrap.create_variation(
+        "multi-agent-chatbot",
+        "support-agent",
+        {
+            "key": "custom-openai",
+            "instructions": "Help the user.",
+            "modelConfig": {"provider": "openai", "modelId": "gpt-custom-preview"},
+            "tools": [],
+        },
+    )
+
+    payload = sent[0]
+    assert payload["modelName"] == "gpt-custom-preview"
+    assert payload["provider"] == {"name": "OpenAI"}
+

@@ -153,7 +153,7 @@ class MultiAgentBootstrap:
         model_config = variation_data["modelConfig"]
         model_id = model_config["modelId"]
 
-        # Map to correct LaunchDarkly model config keys
+        # Map to correct LaunchDarkly model config keys and canonical provider names
         model_config_key_map = {
             "claude-sonnet-5-5": "Anthropic.claude-sonnet-5-5",
             "claude-haiku-5-5": "Anthropic.claude-haiku-5-5",
@@ -162,6 +162,19 @@ class MultiAgentBootstrap:
             "gpt-6.1-terra": "OpenAI.gpt-6.1-terra",
             "gpt-6-luna": "OpenAI.gpt-6-luna",
             "mistral-small-latest": "Mistral.mistral-small-latest"
+        }
+        provider_name_map = {
+            "anthropic": "Anthropic",
+            "bedrock": "Bedrock",
+            "cohere": "Cohere",
+            "deepseek": "DeepSeek",
+            "gemini": "Gemini",
+            "google": "Google",
+            "meta": "Meta",
+            "mistral": "Mistral",
+            "openai": "OpenAI",
+            "perplexity": "Perplexity",
+            "xai": "xAI",
         }
         model_config_key = model_config_key_map.get(model_id)
 
@@ -182,9 +195,11 @@ class MultiAgentBootstrap:
             payload["modelConfigKey"] = model_config_key
             print(f"  🔧 Using modelConfigKey: {model_config_key}")
         else:
+            raw_provider = model_config["provider"]
+            provider_name = provider_name_map.get(raw_provider.lower(), raw_provider)
             payload["modelName"] = model_id
-            payload["provider"] = {"name": model_config["provider"].title()}
-            print(f"  🔧 Using modelName/provider fallback: {model_id}/{model_config['provider'].lower()}")
+            payload["provider"] = {"name": provider_name}
+            print(f"  🔧 Using modelName/provider fallback: {model_id}/{provider_name}")
 
         response = http.post(url, headers=self.headers, json=payload, timeout=30)
 
