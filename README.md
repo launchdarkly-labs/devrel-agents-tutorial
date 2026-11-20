@@ -1,16 +1,25 @@
-# Multi-Agent Chatbot with LaunchDarkly AI Configs
+# Multi-Agent Chatbot with LaunchDarkly Agent Management
 
 Demo application for the [Agent Graphs tutorial](https://docs.launchdarkly.com/tutorials/agent-graphs).
+
+## Prerequisites
+
+- **Python 3.12+** with [`uv`](https://docs.astral.sh/uv/getting-started/installation/)
+- **LaunchDarkly account** ([sign up for free](https://app.launchdarkly.com/signup)) and a **Writer API access token** (`LD_API_KEY`, created under **Settings → Authorization → Create token**)
+- **OpenAI API key** ([platform.openai.com/api-keys](https://platform.openai.com/api-keys))
+- **Anthropic API key** ([console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys))
+- **Mistral API key** ([console.mistral.ai](https://console.mistral.ai/), optional, used for EU security routing)
 
 ## Quick Start
 
 ```bash
 cp .env.example .env
-# Add your LD_SDK_KEY and API keys to .env
+# 1. Add LD_API_KEY, OPENAI_API_KEY, and ANTHROPIC_API_KEY (plus optional MISTRAL_API_KEY) to .env
 
 uv sync
 uv run python initialize_embeddings.py --force
-uv run python bootstrap/create_configs.py
+(cd bootstrap && uv run python create_configs.py)
+# 2. Copy the Production SDK key printed by create_configs.py into LD_SDK_KEY in .env
 
 # Terminal 1
 uv run uvicorn api.main:app --reload --port 8000
@@ -34,22 +43,20 @@ Open http://localhost:8501
 ### LaunchDarkly Integration
 | File | Purpose |
 |------|---------|
-| `config_manager.py` | **Core LD integration** - fetches AI Configs and Agent Graphs |
+| `config_manager.py` | **Core LD integration** - fetches AI configs and agent graphs |
 | `api/services/agent_service.py` | **Graph orchestration** - traverses Agent Graph, routes between agents |
-| `bootstrap/create_configs.py` | Creates AI Configs, tools, segments, and targeting rules in LD |
+| `bootstrap/create_configs.py` | Creates AI configs, tools, segments, and targeting rules in LD |
 
 ### Agents
 | File | Purpose |
 |------|---------|
-| `agents/supervisor_agent.py` | Routes requests based on PII likelihood (uses LD AI Config) |
-| `agents/security_agent.py` | Detects and redacts PII (uses LD AI Config) |
-| `agents/support_agent.py` | Answers questions with tools (uses LD AI Config + tools) |
-| `agents/ld_agent_helpers.py` | Shared helpers - model creation, metric tracking |
+| `agents/generic_agent.py` | Runs any graph node (supervisor, security, support) from its AI config and tools |
+| `agents/ld_agent_helpers.py` | Shared helpers - model creation, tool call limits |
 
 ### Tools
 | File | Purpose |
 |------|---------|
-| `tools_impl/dynamic_tool_factory.py` | Creates tools from LD AI Config definitions |
+| `tools_impl/dynamic_tool_factory.py` | Creates tools from AI config definitions |
 | `tools_impl/search_v1.py` | Basic keyword search |
 | `tools_impl/search_v2.py` | Semantic vector search |
 | `tools_impl/reranking.py` | BM25 relevance scoring |
@@ -70,7 +77,7 @@ Open http://localhost:8501
 ┌─────────────────────────────────────────────────────────────┐
 │                    LaunchDarkly Dashboard                    │
 │  • Agent Graph (chatbot-flow)                               │
-│  • AI Configs (supervisor, security, support)               │
+│  • AI configs (supervisor, security, support)               │
 │  • Targeting rules (free/paid, EU/other)                    │
 └─────────────────────────────────────────────────────────────┘
                               │
@@ -78,7 +85,7 @@ Open http://localhost:8501
 ┌─────────────────────────────────────────────────────────────┐
 │                     config_manager.py                        │
 │  • get_agent_graph() → fetches graph topology               │
-│  • get_config() → fetches AI Config for each agent          │
+│  • track_feedback() → sends thumbs up/down events           │
 │  • Handles targeting based on user context                  │
 └─────────────────────────────────────────────────────────────┘
                               │
@@ -95,7 +102,7 @@ Open http://localhost:8501
 │                      agents/*.py                             │
 │  • Each agent receives config from LD                       │
 │  • Uses config.instructions, config.model                   │
-│  • Tracks metrics via config.tracker                        │
+│  • Executor sends metrics through the graph tracker         │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -103,12 +110,12 @@ Open http://localhost:8501
 
 | Change | Deploy Required? |
 |--------|-----------------|
-| Model (gpt-4o → claude-sonnet) | No |
+| Model (gpt-6-luna → claude-sonnet-5-5) | No |
 | Prompt/instructions | No |
 | Graph edges (routing) | No |
 | Targeting rules (user segments) | No |
 | Variation rollout percentages | No |
-| New agent type | **Yes** (register in `AGENT_REGISTRY`) |
+| New agent node (using existing tools) | No |
 | New tool integration | **Yes** (implement in `tools_impl/`) |
 | Routing contract changes | **Yes** (update `_select_next_node()`) |
 
@@ -116,13 +123,9 @@ Open http://localhost:8501
 
 The `AgentGraphExecutor` is stateless and generic:
 
-- **AGENT_REGISTRY**: Maps node key patterns to factory functions
+- **Generic node runner (`create_generic_agent`)**: Builds each node at runtime from its LaunchDarkly AI config, instructions, and tools
 - **Edge-following**: `while current_node` loop until terminal node
 - **Routing**: Matches `routing_decision` to edge `handoff.route`
 - **Safety**: Cycle detection, max hop limit (10)
 
-To add a new agent type:
-```python
-# In agent_service.py
-AGENT_REGISTRY["my_agent"] = create_my_agent
-```
+To add a new agent node, create its AI config in LaunchDarkly and connect it with an edge in the `chatbot-flow` agent graph—`AgentGraphExecutor` executes it automatically through `create_generic_agent` without code changes unless it needs a new tool in `tools_impl/`.

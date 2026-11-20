@@ -20,30 +20,41 @@ def extract_tool_configs_from_launchdarkly(config) -> tuple[List[str], Dict[str,
     tools_list = []
     tool_configs = {}
 
-    # Get tools from the initial config (tools are stable, instructions are dynamic)
-    if hasattr(config, 'tools') and config.tools:
-        tools_list = list(config.tools)
+    # Configs are plain dicts now, so there is no to_dict() and no attribute
+    # access. Both lookups below used to fail into the except branch, which
+    # returned no tools at all rather than erroring.
+    config = config or {}
 
-    # Try to get tool configurations from config dict structure
-    try:
-        config_dict = config.to_dict()
-        if 'model' in config_dict and 'parameters' in config_dict['model'] and 'tools' in config_dict['model']['parameters']:
-            tools_data = config_dict['model']['parameters']['tools']
-            for tool in tools_data:
-                if 'name' in tool:
-                    tool_name = tool['name']
-                    if tool_name not in tools_list:
-                        tools_list.append(tool_name)
-                    # Extract tool parameters/schema from LaunchDarkly
-                    tool_configs[tool_name] = tool.get('parameters', {})
+    # LaunchDarkly 1.1.0 serves top-level `tools` as a dict keyed by tool name,
+    # where each entry carries `name`, `description`, and `parameters`. Local
+    # fixtures may also pass `tools` as a list of names or tool dicts.
+    raw_tools = config.get('tools')
+    if isinstance(raw_tools, dict):
+        for key, spec in raw_tools.items():
+            spec_dict = spec if isinstance(spec, dict) else {}
+            tool_name = spec_dict.get('name') or key
+            if tool_name not in tools_list:
+                tools_list.append(tool_name)
+            params = dict(spec_dict.get('parameters') or {})
+            if spec_dict.get('description'):
+                params['description'] = spec_dict['description']
+            tool_configs[tool_name] = params
+    elif isinstance(raw_tools, list):
+        for item in raw_tools:
+            if isinstance(item, dict) and item.get('name'):
+                tool_name = item['name']
+                if tool_name not in tools_list:
+                    tools_list.append(tool_name)
+                params = dict(item.get('parameters') or {})
+                if item.get('description'):
+                    params['description'] = item['description']
+                tool_configs[tool_name] = params
+            elif isinstance(item, str) and item not in tools_list:
+                tools_list.append(item)
 
-        log_debug(f"EXTRACTED TOOLS FROM LAUNCHDARKLY: {tools_list}")
-        if tool_configs:
-            log_verbose(f" TOOL CONFIGS FROM LAUNCHDARKLY: {tool_configs}")
-
-    except Exception as e:
-        log_debug(f"Error extracting tool configs from LaunchDarkly: {e}")
-        pass  # Fallback to just the tools list and defaults
+    log_debug(f"EXTRACTED TOOLS FROM LAUNCHDARKLY: {tools_list}")
+    if tool_configs:
+        log_verbose(f" TOOL CONFIGS FROM LAUNCHDARKLY: {tool_configs}")
 
     return tools_list, tool_configs
 
@@ -74,12 +85,20 @@ def _create_dynamic_search_v1(tool_config: Dict[str, Any]) -> BaseTool:
     # Create base tool instance
     tool = SearchToolV1()
 
-    # Apply LaunchDarkly configuration if available
-    if tool_config and 'properties' in tool_config:
-        log_debug(f"SEARCH_V1: Applying LaunchDarkly config")
-        # Could override defaults here based on LaunchDarkly config
-        # For now, just log that config is available
-        pass
+    if tool_config:
+        if tool_config.get('description'):
+            object.__setattr__(tool, 'description', tool_config['description'])
+        if 'properties' in tool_config:
+            log_debug("SEARCH_V1: Applying LaunchDarkly config")
+            field_definitions = {}
+            required = set(tool_config.get('required') or [])
+            for field_name, field_config in tool_config['properties'].items():
+                field_desc = field_config.get('description', '')
+                if field_name in required:
+                    field_definitions[field_name] = (str, Field(description=field_desc))
+                else:
+                    field_definitions[field_name] = (Optional[str], Field(default=None, description=field_desc))
+            object.__setattr__(tool, 'args_schema', create_model('DynamicSearchV1Input', **field_definitions))
 
     return tool
 
@@ -101,7 +120,7 @@ def _create_dynamic_search_v2(tool_config: Dict[str, Any]) -> BaseTool:
             field_description = field_config.get('description', '')
 
             # Map LaunchDarkly JSON schema types to Python types
-            if field_config.get('type') == 'number':
+            if field_config.get('type') in ('number', 'integer'):
                 field_type = int
                 field_default = 3  # Default for top_k
             elif field_config.get('type') == 'string':
@@ -123,10 +142,15 @@ def _create_dynamic_search_v2(tool_config: Dict[str, Any]) -> BaseTool:
             query: str
             top_k: Optional[int] = 3
 
+    configured_description = (
+        (tool_config or {}).get('description')
+        or "Semantic search through the knowledge base. Use for technical questions and concepts."
+    )
+
     # Create dynamic tool class
     class DynamicSearchToolV2(BaseTool):
         name: str = "search_v2"
-        description: str = "Semantic search through the knowledge base. Use for technical questions and concepts."
+        description: str = configured_description
         args_schema: type[BaseModel] = DynamicSearchV2Input
 
         def _run(self, query: str, top_k: int = 3) -> str:
@@ -148,6 +172,7 @@ def _create_dynamic_reranking_tool(tool_config: Dict[str, Any]) -> BaseTool:
 
         # Build Pydantic field definitions from LaunchDarkly schema
         field_definitions = {}
+        required = set(tool_config.get('required') or [])
 
         for field_name, field_config in properties.items():
             field_description = field_config.get('description', '')
@@ -161,7 +186,10 @@ def _create_dynamic_reranking_tool(tool_config: Dict[str, Any]) -> BaseTool:
                 field_type = str  # Default
 
             # Create Pydantic field
-            field_definitions[field_name] = (field_type, Field(description=field_description))
+            if field_name in required:
+                field_definitions[field_name] = (field_type, Field(description=field_description))
+            else:
+                field_definitions[field_name] = (Optional[field_type], Field(default=None, description=field_description))
 
         # Create dynamic Pydantic model
         DynamicRerankingInput = create_model('DynamicRerankingInput', **field_definitions)
@@ -173,10 +201,15 @@ def _create_dynamic_reranking_tool(tool_config: Dict[str, Any]) -> BaseTool:
             query: str
             results: Optional[List[Dict[str, Any]]] = None
 
+    configured_description = (
+        (tool_config or {}).get('description')
+        or "Rerank search results by relevance. Use after search to improve result ordering."
+    )
+
     # Create dynamic tool class
     class DynamicRerankingTool(BaseTool):
         name: str = "reranking"
-        description: str = "Rerank search results by relevance. Use after search to improve result ordering."
+        description: str = configured_description
         args_schema: type[BaseModel] = DynamicRerankingInput
 
         def _run(self, query: str, results: List[Dict[str, Any]] = None, **kwargs) -> str:

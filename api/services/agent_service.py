@@ -15,7 +15,6 @@ import uuid
 from typing import Dict, Any
 from langchain_core.messages import HumanMessage
 from dotenv import load_dotenv
-from ldai.tracker import TokenUsage
 from ..models import ChatResponse, AgentConfig as APIAgentConfig
 from config_manager import FixedConfigManager as ConfigManager
 from utils.logger import log_student
@@ -47,9 +46,9 @@ class AgentGraphExecutor:
         sanitized_history: list = None
     ) -> Dict[str, Any]:
         """Execute agents by traversing the LaunchDarkly Agent Graph."""
-        graph = self.config_manager.get_agent_graph(user_id, graph_key, user_context)
+        graph, graph_tracker = await self.config_manager.get_agent_graph(user_id, graph_key, user_context)
 
-        if not graph.is_enabled():
+        if not graph.enabled:
             raise ValueError(f"Agent Graph '{graph_key}' is not enabled")
 
         # Shared context - generic, no agent-specific fields
@@ -66,27 +65,27 @@ class AgentGraphExecutor:
             "total_output_tokens": 0,
         }
 
-        graph_tracker = graph.get_tracker()
         graph_start_time = time.time()
         execution_path = []
 
         # Build node lookup
         nodes = {}
-        graph.reverse_traverse(lambda node, _: nodes.update({node.get_key(): node}), {})
+        await graph.reverse_traverse(lambda node, _: nodes.update({node.key: node}), {})
         log_student(f"GRAPH: '{graph_key}' with {len(nodes)} nodes: {list(nodes.keys())}")
 
         try:
-            current_node = graph.root()
+            current_node = graph.root
             if not current_node:
                 raise ValueError("Agent graph has no root node")
 
             prev_node_key = None
             visited = set()
             hop_count = 0
+            must_redact = False
 
             # Traverse until terminal node
             while current_node:
-                node_key = current_node.get_key()
+                node_key = current_node.key
 
                 # Safety checks
                 if node_key in visited:
@@ -96,17 +95,17 @@ class AgentGraphExecutor:
                 if hop_count > MAX_HOPS:
                     raise ValueError(f"Max hops exceeded: {hop_count}")
 
-                config = current_node.get_config()
+                config = current_node.config
                 execution_path.append(node_key)
 
                 # Track
                 if graph_tracker:
-                    graph_tracker.track_node_invocation(node_key)
+                    graph_tracker.track_node_invocation(current_node)
                     if prev_node_key:
                         graph_tracker.track_handoff_success(prev_node_key, node_key)
 
                 # Get valid routes from outgoing edges
-                edges = current_node.get_edges()
+                edges = current_node.edges
                 valid_routes = []
                 for edge in edges:
                     handoff = edge.handoff or {}
@@ -122,15 +121,22 @@ class AgentGraphExecutor:
                 result = await agent.ainvoke(ctx)
 
                 duration_ms = int((time.time() - node_start) * 1000)
-                self._track_duration(graph_tracker, graph_key, config, duration_ms)
+                if graph_tracker and not result.get("_skipped"):
+                    graph_tracker.track_node_result(
+                        current_node, duration_ms, not result.get("_error"), result.get("_token_usage")
+                    )
+                    for tool_name in result.get("tool_calls") or []:
+                        graph_tracker.track_tool_call(current_node, tool_name)
 
-                # Track tool calls to LaunchDarkly
-                if graph_tracker and result.get("tool_calls"):
-                    for tool_name in result["tool_calls"]:
-                        graph_tracker.track_tool_call(node_key, tool_name)
+                # Fail closed: following an edge after a failed security check would pass the raw PII on.
+                if result.get("_error"):
+                    raise RuntimeError(f"{node_key} failed: {result['_error']}")
+                # Same for a sanitize handoff that came back without redacted text.
+                if must_redact and not result.get("redacted"):
+                    raise RuntimeError(f"{node_key} returned no redacted text")
 
                 # Update context with results (generic)
-                self._update_context(node_key, config, result, ctx)
+                self._update_context(node_key, config, result, ctx, current_node.meta)
 
                 # Find next node (edges already fetched above)
                 if not edges:
@@ -138,6 +144,10 @@ class AgentGraphExecutor:
                     break
 
                 next_node = self._select_next_node(edges, result, nodes, graph_tracker, source_key=node_key)
+                must_redact = next_node is not None and any(
+                    e.target_key == next_node.key and (e.handoff or {}).get("action") == "sanitize"
+                    for e in edges
+                )
                 prev_node_key = node_key
                 current_node = next_node
 
@@ -163,28 +173,29 @@ class AgentGraphExecutor:
             handoff = edge.handoff or {}
             route = handoff.get("route", "").lower().strip()
             if route:
-                route_map[route] = edge.target_config
-            log_student(f"  EDGE: → {edge.target_config} (route={route})")
+                route_map[route] = edge.target_key
+            log_student(f"  EDGE: → {edge.target_key} (route={route})")
 
         # Exact match only - fail closed on unrecognized routes
         if routing and routing in route_map:
             target = route_map[routing]
             log_student(f"  MATCHED: routing='{routing}' → {target}")
             return nodes.get(target)
-        elif routing:
+        if route_map:
             log_student(f"  UNRECOGNIZED ROUTE: '{routing}' not in {list(route_map.keys())}")
             if graph_tracker:
                 graph_tracker.track_handoff_failure(source_key, routing)
+            raise ValueError(f"{source_key} chose no valid route: {routing!r}")
 
-        # Default: first edge (fallback)
+        # Edges without routes hand off to the first target
         if edges:
-            default = edges[0].target_config
+            default = edges[0].target_key
             log_student(f"  DEFAULT: → {default}")
             return nodes.get(default)
 
         return None
 
-    def _update_context(self, node_key: str, config, result: dict, ctx: dict):
+    def _update_context(self, node_key: str, config, result: dict, ctx: dict, meta: dict = None):
         """Update context with agent results - fully generic."""
         # Aggregate tokens
         if "_token_usage" in result:
@@ -199,16 +210,29 @@ class AgentGraphExecutor:
         if "tool_calls" in result:
             ctx["tool_calls"] = result["tool_calls"]
 
-        # Get variation key
-        var_key = "default"
-        if hasattr(config, 'tracker') and hasattr(config.tracker, '_variation_key'):
-            var_key = config.tracker._variation_key
+        # Downstream nodes read ctx["messages"], so redacted text has to replace
+        # the original message or the PII reaches them anyway.
+        if result.get("redacted"):
+            ctx["processed_input"] = result["redacted"]
+            ctx["messages"] = [HumanMessage(content=result["redacted"])]
+
+        var_key = (meta or {}).get("variationKey") or "unknown"
+        version = (meta or {}).get("version", 1)
+        raw_tools = (config or {}).get("tools")
+        if isinstance(raw_tools, dict):
+            configured_tools = list(raw_tools.keys())
+        elif isinstance(raw_tools, list):
+            configured_tools = [t["name"] if isinstance(t, dict) and "name" in t else str(t) for t in raw_tools]
+        else:
+            configured_tools = []
 
         # Record agent config - fully generic, include all result fields
         agent_info = {
             "agent_name": node_key,
             "variation_key": var_key,
-            "model": config.model.name if hasattr(config, 'model') else "unknown",
+            "version": version,
+            "model": ((config or {}).get("model") or {}).get("name", "unknown"),
+            "tools": configured_tools,
             "tools_used": result.get("tool_calls", []),
         }
 
@@ -219,35 +243,11 @@ class AgentGraphExecutor:
 
         ctx["agent_configs"].append(agent_info)
 
-    def _track_duration(self, graph_tracker, graph_key: str, config, duration_ms: int):
-        """Track node duration."""
-        if not graph_tracker or not config:
-            return
-        if not hasattr(graph_tracker, '_ld_client'):
-            return
-
-        tracker = config.tracker
-        track_data = {
-            'graphKey': graph_key,
-            'configKey': getattr(tracker, '_config_key', 'unknown'),
-            'variationKey': getattr(tracker, '_variation_key', 'default'),
-            'version': getattr(tracker, '_version', 1),
-            'modelName': getattr(tracker, '_model_name', 'unknown'),
-            'providerName': getattr(tracker, '_provider_name', 'unknown'),
-        }
-        graph_tracker._ld_client.track(
-            "$ld:ai:duration:total",
-            graph_tracker._context,
-            track_data,
-            duration_ms
-        )
-
     def _track_graph_metrics(self, graph_tracker, ctx: dict, path: list, start_time: float):
         """Track overall graph metrics."""
         if not graph_tracker:
             return
 
-        graph_tracker.track_path(path)
         latency_ms = int((time.time() - start_time) * 1000)
         graph_tracker.track_latency(latency_ms)
         log_student(f"LATENCY: {latency_ms}ms")
@@ -255,9 +255,7 @@ class AgentGraphExecutor:
         total_in = ctx.get("total_input_tokens", 0)
         total_out = ctx.get("total_output_tokens", 0)
         if total_in > 0 or total_out > 0:
-            graph_tracker.track_total_tokens(
-                TokenUsage(input=total_in, output=total_out, total=total_in + total_out)
-            )
+            graph_tracker.track_total_tokens(total_in + total_out)
 
         graph_tracker.track_invocation_success()
 
@@ -271,7 +269,7 @@ class AgentService:
         self.graph_executor = AgentGraphExecutor(self.config_manager)
 
     def flush_metrics(self):
-        self.config_manager.close()
+        self.config_manager.flush()
 
     async def process_message(
         self,
@@ -292,16 +290,23 @@ class AgentService:
                 user_context=user_context or {}
             )
 
+            agent_configs = result.get("agent_configs", [])
+            primary_cfg = next(
+                (cfg for cfg in agent_configs if cfg.get("agent_name") == "support-agent"),
+                agent_configs[-1] if agent_configs else {},
+            )
+
             return ChatResponse(
                 id=str(uuid.uuid4()),
                 response=result.get("final_response", ""),
                 tool_calls=result.get("tool_calls", []),
-                variation_key="agent-graph",
-                model="multi-agent",
+                variation_key=primary_cfg.get("variation_key", "agent-graph"),
+                model=primary_cfg.get("model", "multi-agent"),
                 agent_configurations=[
                     APIAgentConfig(
                         agent_name=cfg["agent_name"],
                         variation_key=cfg.get("variation_key", "default"),
+                        version=cfg.get("version"),
                         model=cfg.get("model", "unknown"),
                         tools=cfg.get("tools", []),
                         tools_used=cfg.get("tools_used", []),
@@ -309,7 +314,7 @@ class AgentService:
                         types=cfg.get("types"),
                         redacted=cfg.get("redacted")
                     )
-                    for cfg in result.get("agent_configs", [])
+                    for cfg in agent_configs
                 ]
             )
 

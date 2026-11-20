@@ -122,7 +122,7 @@ project:
         - key: "supervisor-basic"
           modelConfig:
             provider: "anthropic"
-            modelId: "Anthropic.claude-sonnet-4-20250514"
+            modelId: "Anthropic.claude-haiku-5-5"
           instructions: |
             You are a routing supervisor. Analyze user input for PII and route accordingly.
 
@@ -153,11 +153,11 @@ project:
         - key: "pii-detector"
           modelConfig:
             provider: "anthropic"
-            modelId: "Anthropic.claude-sonnet-4-20250514"
+            modelId: "Anthropic.claude-haiku-5-5"
           instructions: |
             You are a privacy agent that REMOVES PII and formats the input for another process. Analyze the input text and identify any personally identifiable information including: Email addresses, Phone numbers, Social Security Numbers, Names (first, last, full names), Physical addresses, Credit card numbers, Driver's license numbers, Any other sensitive personal data.
 
-            Respond with:
+            Put these fields in the JSON object that ends your response:
             - detected: true if any PII was found, false otherwise
             - types: array of PII types found (e.g., ['email', 'name', 'phone'])
             - redacted: the input text with PII replaced by [REDACTED], keeping the text readable and natural
@@ -220,7 +220,7 @@ project:
         - key: "rag-search-enhanced"
           modelConfig:
             provider: "anthropic"
-            modelId: "Anthropic.claude-sonnet-4-20250514"
+            modelId: "Anthropic.claude-sonnet-5-5"
           tools: ["search_v2", "reranking"]
           instructions: |
             You are Umbra's support assistant. Umbra is a cloud deployment platform for developers.
@@ -242,7 +242,7 @@ project:
         - key: "eu-free"
           modelConfig:
             provider: "anthropic"
-            modelId: "Anthropic.claude-3-haiku-20240307"
+            modelId: "Anthropic.claude-haiku-5-5"
           tools: ["search_v1"]
           instructions: |
             You are Umbra's support assistant for EU users on the free tier. Use search_v1 to find information from Umbra's documentation about billing, deployments, regions, and account management. Follow EU privacy requirements. Only answer based on documentation - never make up policies.
@@ -252,7 +252,7 @@ project:
         - key: "eu-paid"
           modelConfig:
             provider: "anthropic"
-            modelId: "Anthropic.claude-sonnet-4-20250514"
+            modelId: "Anthropic.claude-sonnet-5-5"
           tools: ["search_v1", "search_v2", "reranking"]
           instructions: |
             You are Umbra's premium support assistant for EU paid users. Use your search tools to find accurate information from Umbra's documentation. EU privacy laws require strict data handling. Only answer based on documentation - never make up policies. Mention document names when citing sources but do NOT generate markdown links.
@@ -262,7 +262,7 @@ project:
         - key: "other-free"
           modelConfig:
             provider: "openai"
-            modelId: "OpenAI.gpt-4o-mini-2024-07-18"
+            modelId: "OpenAI.gpt-6-luna"
           tools: ["search_v1"]
           instructions: |
             You are Umbra's support assistant. Use search_v1 to find information from Umbra's documentation about billing, deployments, regions, and account management. Only answer based on documentation - never make up policies.
@@ -272,7 +272,7 @@ project:
         - key: "other-paid"
           modelConfig:
             provider: "openai"
-            modelId: "OpenAI.gpt-4o"
+            modelId: "OpenAI.gpt-6.2-sol"
           tools: ["search_v1", "search_v2", "reranking"]
           instructions: |
             You are Umbra's premium support assistant. Use your search tools to find accurate information from Umbra's documentation about billing, deployments, regions, features, and troubleshooting. Only answer based on documentation - never make up policies. Mention document names when citing sources but do NOT generate markdown links.

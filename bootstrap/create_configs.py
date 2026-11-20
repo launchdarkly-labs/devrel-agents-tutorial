@@ -11,6 +11,13 @@ import json
 import time
 from pathlib import Path
 from dotenv import load_dotenv
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+# The LaunchDarkly API rate-limits bursts of writes; wait and retry instead of skipping the call.
+http = requests.Session()
+http.mount("https://", HTTPAdapter(max_retries=Retry(
+    total=5, backoff_factor=2, status_forcelist=[429], allowed_methods=None, raise_on_status=False)))
 
 class MultiAgentBootstrap:
     def __init__(self, api_key, base_url="https://app.launchdarkly.com"):
@@ -29,7 +36,7 @@ class MultiAgentBootstrap:
 
         # Check if project exists
         check_url = f"{self.base_url}/api/v2/projects/{project_key}"
-        check_response = requests.get(check_url, headers=self.headers, timeout=30)
+        check_response = http.get(check_url, headers=self.headers, timeout=30)
 
         if check_response.status_code == 200:
             print(f"  ✅ Project '{project_key}' exists")
@@ -51,7 +58,7 @@ class MultiAgentBootstrap:
             "name": name
         }
 
-        response = requests.post(url, headers=self.headers, json=payload, timeout=30)
+        response = http.post(url, headers=self.headers, json=payload, timeout=30)
 
         if response.status_code in [200, 201]:
             print(f"  ✅ Project '{project_key}' created")
@@ -80,7 +87,7 @@ class MultiAgentBootstrap:
             "name": segment_data["key"].replace("-", " ").title()
         }
         
-        response = requests.post(url, headers=self.headers, json=payload, timeout=30)
+        response = http.post(url, headers=self.headers, json=payload, timeout=30)
         
         if response.status_code in [200, 201]:
             print(f" Empty segment '{segment_data['key']}' created")
@@ -94,13 +101,13 @@ class MultiAgentBootstrap:
                 print(f"  Segment '{segment_data['key']}' already exists, deleting and recreating...")
                 # Delete existing segment
                 delete_url = f"{self.base_url}/api/v2/segments/{project_key}/production/{segment_data['key']}"
-                delete_response = requests.delete(delete_url, headers=self.headers, timeout=30)
+                delete_response = http.delete(delete_url, headers=self.headers, timeout=30)
                 
                 if delete_response.status_code == 204:
                     print(f"🗑️  Deleted existing segment '{segment_data['key']}'")
                     time.sleep(1)  # Wait for deletion to propagate
                     # Retry creation
-                    retry_response = requests.post(url, headers=self.headers, json=payload, timeout=30)
+                    retry_response = http.post(url, headers=self.headers, json=payload, timeout=30)
                     if retry_response.status_code in [200, 201]:
                         print(f" Empty segment '{segment_data['key']}' recreated")
                         time.sleep(0.5)
@@ -155,7 +162,7 @@ class MultiAgentBootstrap:
         patch_headers = self.headers.copy()
         patch_headers["Content-Type"] = "application/json; domain-model=launchdarkly.semanticpatch"
         
-        response = requests.patch(url, headers=patch_headers, json=payload, timeout=30)
+        response = http.patch(url, headers=patch_headers, json=payload, timeout=30)
         
         if response.status_code == 200:
             result = response.json()
@@ -173,7 +180,7 @@ class MultiAgentBootstrap:
         
         # Check if config already exists
         check_url = f"{self.base_url}/api/v2/projects/{project_key}/ai-configs/{config_key}"
-        check_response = requests.get(check_url, headers=self.headers, timeout=30)
+        check_response = http.get(check_url, headers=self.headers, timeout=30)
         
         if check_response.status_code == 200:
             print(f" AI Config '{config_key}' exists, adding variations")
@@ -215,7 +222,7 @@ class MultiAgentBootstrap:
         
         # Delete the variation
         delete_url = f"{self.base_url}/api/v2/projects/{project_key}/ai-configs/{config_key}/variations/{variation_id}"
-        delete_response = requests.delete(delete_url, headers=self.headers, timeout=30)
+        delete_response = http.delete(delete_url, headers=self.headers, timeout=30)
         
         if delete_response.status_code == 204:
             print(f"    🗑️  Deleted existing variation '{variation_key}'")
@@ -250,7 +257,11 @@ class MultiAgentBootstrap:
         payload["modelConfigKey"] = model_config_key
         print(f"   Using modelConfigKey: {model_config_key}")
 
-        response = requests.post(url, headers=self.headers, json=payload, timeout=30)
+        # Custom parameters such as max_tool_calls live in the variation's model.custom
+        if variation_data.get("customParameters"):
+            payload["model"] = {"custom": variation_data["customParameters"]}
+
+        response = http.post(url, headers=self.headers, json=payload, timeout=30)
         
         if response.status_code in [200, 201]:
             print(f"   Variation '{variation_data['key']}' created")
@@ -291,9 +302,11 @@ class MultiAgentBootstrap:
             "tools": [{"key": tool, "version": 1} for tool in variation_data.get("tools", [])],
             "modelConfigKey": model_config_key
         }
+        if variation_data.get("customParameters"):
+            payload["model"] = {"custom": variation_data["customParameters"]}
         print(f"     Updating with modelConfigKey: {model_config_key}")
         
-        response = requests.patch(url, headers=self.headers, json=payload, timeout=30)
+        response = http.patch(url, headers=self.headers, json=payload, timeout=30)
         
         if response.status_code == 200:
             print(f"     Variation '{variation_data['key']}' updated")
@@ -372,7 +385,7 @@ class MultiAgentBootstrap:
         }
         
         print(f"   Creating tool '{payload['key']}'")
-        response = requests.post(url, headers=self.headers, json=payload, timeout=30)
+        response = http.post(url, headers=self.headers, json=payload, timeout=30)
         
         if response.status_code in [200, 201]:
             print(f"   Tool '{tool_data['key']}' created")
@@ -393,7 +406,7 @@ class MultiAgentBootstrap:
         """Delete tool from project"""
         url = f"{self.base_url}/api/v2/projects/{project_key}/ai-tools/{tool_key}"
         
-        response = requests.delete(url, headers=self.headers, timeout=30)
+        response = http.delete(url, headers=self.headers, timeout=30)
         
         if response.status_code == 204:
             print(f"  🗑️  Tool '{tool_key}' deleted")
@@ -411,7 +424,7 @@ class MultiAgentBootstrap:
         url = f"{self.base_url}/api/v2/projects/{project_key}/ai-configs/{config_key}/targeting"
         
         # Get current targeting to understand existing rules and find disabled variation
-        response = requests.get(url, headers=self.headers, timeout=30)
+        response = http.get(url, headers=self.headers, timeout=30)
         if response.status_code != 200:
             print(f"    Could not fetch targeting for '{config_key}'")
             return False
@@ -464,7 +477,7 @@ class MultiAgentBootstrap:
         }
         
         print(f"   Debug: Sending {len(instructions)} instructions to clear targeting")
-        response = requests.patch(url, headers=self.headers, json=payload, timeout=30)
+        response = http.patch(url, headers=self.headers, json=payload, timeout=30)
         
         if response.status_code == 200:
             print(f"  🗑️  Cleared {len(rules)} targeting rules for '{config_key}' (set to disabled)")
@@ -477,7 +490,7 @@ class MultiAgentBootstrap:
     def get_targeting_variation_map(self, project_key, config_key):
         """Get targeting variation IDs (different from AI config variation IDs)"""
         url = f"{self.base_url}/api/v2/projects/{project_key}/ai-configs/{config_key}/targeting"
-        response = requests.get(url, headers=self.headers, timeout=30)
+        response = http.get(url, headers=self.headers, timeout=30)
         
         if response.status_code == 200:
             targeting_data = response.json()
@@ -505,7 +518,7 @@ class MultiAgentBootstrap:
     def get_ai_config_variation_id_map(self, project_key, config_key):
         """Get AI config variation IDs from the AI config itself (key -> _id)."""
         url = f"{self.base_url}/api/v2/projects/{project_key}/ai-configs/{config_key}"
-        response = requests.get(url, headers=self.headers, timeout=30)
+        response = http.get(url, headers=self.headers, timeout=30)
 
         if response.status_code != 200:
             print(f" Failed to fetch AI config variations for '{config_key}': {response.text}")
@@ -518,7 +531,7 @@ class MultiAgentBootstrap:
     def list_variations(self, project_key, config_key):
         """List variations via the variations endpoint used for create/update/delete."""
         url = f"{self.base_url}/api/v2/projects/{project_key}/ai-configs/{config_key}/variations"
-        response = requests.get(url, headers=self.headers, timeout=30)
+        response = http.get(url, headers=self.headers, timeout=30)
         if response.status_code != 200:
             print(f"      Could not list variations for '{config_key}': {response.text}")
             return []
@@ -546,7 +559,7 @@ class MultiAgentBootstrap:
             "tools": [{"key": t, "version": 1} for t in (tools_list or [])]
         }
 
-        response = requests.patch(url, headers=self.headers, json=payload, timeout=30)
+        response = http.patch(url, headers=self.headers, json=payload, timeout=30)
         if response.status_code == 200:
             print(f"     Updated tools for variation '{variation_key}' → {tools_list or []}")
             time.sleep(0.2)
@@ -560,7 +573,7 @@ class MultiAgentBootstrap:
         config_key = config_data["key"]
         config_name = config_data.get("name", config_key.replace("-", " ").title())
         url = f"{self.base_url}/api/v2/projects/{project_key}/ai-configs/{config_key}"
-        response = requests.get(url, headers=self.headers, timeout=30)
+        response = http.get(url, headers=self.headers, timeout=30)
         if response.status_code == 200:
             print(f"  ✅ AI Config '{config_key}' exists")
             return True
@@ -573,7 +586,7 @@ class MultiAgentBootstrap:
                 "name": config_name,
                 "mode": "agent"
             }
-            create_response = requests.post(create_url, headers=self.headers, json=payload, timeout=30)
+            create_response = http.post(create_url, headers=self.headers, json=payload, timeout=30)
             if create_response.status_code in [200, 201]:
                 print(f"  ✅ AI Config '{config_key}' created")
                 time.sleep(0.5)
@@ -594,12 +607,12 @@ class MultiAgentBootstrap:
 
         # Check if graph exists
         check_url = f"{self.base_url}/api/v2/projects/{project_key}/agent-graphs/{graph_key}"
-        check_response = requests.get(check_url, headers=self.headers, timeout=30)
+        check_response = http.get(check_url, headers=self.headers, timeout=30)
 
         if check_response.status_code == 200:
             if self.overwrite:
                 print(f"  🔄 Agent Graph '{graph_key}' exists, deleting for recreation...")
-                delete_response = requests.delete(check_url, headers=self.headers, timeout=30)
+                delete_response = http.delete(check_url, headers=self.headers, timeout=30)
                 if delete_response.status_code not in [200, 204]:
                     print(f"  ❌ Failed to delete existing graph: {delete_response.text}")
                     return False
@@ -619,7 +632,7 @@ class MultiAgentBootstrap:
             "rootConfigKey": graph_data.get("rootConfigKey")
         }
 
-        response = requests.post(create_url, headers=self.headers, json=payload, timeout=30)
+        response = http.post(create_url, headers=self.headers, json=payload, timeout=30)
 
         if response.status_code not in [200, 201]:
             print(f"  ❌ Failed to create agent graph: {response.text}")
@@ -664,7 +677,7 @@ class MultiAgentBootstrap:
             "edges": edges
         }
 
-        patch_response = requests.patch(patch_url, headers=self.headers, json=patch_payload, timeout=30)
+        patch_response = http.patch(patch_url, headers=self.headers, json=patch_payload, timeout=30)
 
         if patch_response.status_code == 200:
             for edge in graph_data["edges"]:
@@ -678,7 +691,7 @@ class MultiAgentBootstrap:
         url = f"{self.base_url}/api/v2/projects/{project_key}/agent-graphs/{graph_key}"
         payload = {"instructions": [{"kind": "turnTargetingOn"}]}
 
-        response = requests.patch(url, headers=self.headers, json=payload, timeout=30)
+        response = http.patch(url, headers=self.headers, json=payload, timeout=30)
 
         if response.status_code == 200:
             print(f"  ✅ Agent Graph '{graph_key}' enabled in production")
@@ -690,7 +703,7 @@ class MultiAgentBootstrap:
         url = f"{self.base_url}/api/v2/projects/{project_key}/ai-configs/{config_key}/targeting"
 
         # First get targeting to check status and find variation IDs
-        response = requests.get(url, headers=self.headers, timeout=30)
+        response = http.get(url, headers=self.headers, timeout=30)
         if response.status_code != 200:
             print(f"  ❌ Could not get targeting for '{config_key}': {response.text}")
             return False
@@ -714,7 +727,7 @@ class MultiAgentBootstrap:
                 "environmentKey": "production",
                 "instructions": enable_instructions
             }
-            enable_response = requests.patch(url, headers=self.headers, json=enable_payload, timeout=30)
+            enable_response = http.patch(url, headers=self.headers, json=enable_payload, timeout=30)
             if enable_response.status_code == 200:
                 print(f"  ✅ AI Config '{config_key}' targeting enabled")
             else:
@@ -746,7 +759,7 @@ class MultiAgentBootstrap:
                     "instructions": instructions
                 }
 
-                patch_response = requests.patch(url, headers=self.headers, json=payload, timeout=30)
+                patch_response = http.patch(url, headers=self.headers, json=payload, timeout=30)
 
                 if patch_response.status_code == 200:
                     print(f"    → Default variation set to '{default_variation_key}'")
@@ -812,7 +825,7 @@ class MultiAgentBootstrap:
             "instructions": instructions
         }
         
-        response = requests.patch(url, headers=self.headers, json=payload, timeout=30)
+        response = http.patch(url, headers=self.headers, json=payload, timeout=30)
         
         if response.status_code == 200:
             print(f" Targeting rules updated for '{config_key}'")
