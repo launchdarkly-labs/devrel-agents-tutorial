@@ -86,7 +86,7 @@ def _resolve_served_variation(
     if matched and matched.variation_key and matched.variation_key not in ("unknown", "error", "validation"):
         return resolved_agent, matched.variation_key, matched.version
     if feedback.variation_key and feedback.variation_key not in ("unknown", "agent-graph", "error", "validation"):
-        return target_agent, feedback.variation_key, feedback.version
+        return resolved_agent, feedback.variation_key, feedback.version
     return resolved_agent, None, feedback.version
 
 

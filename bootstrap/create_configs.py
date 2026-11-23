@@ -337,7 +337,7 @@ class MultiAgentBootstrap:
                     },
                     "top_k": {
                         "description": "Number of results to return",
-                        "type": "number"
+                        "type": "integer"
                     }
                 },
                 "additionalProperties": False,
@@ -353,7 +353,7 @@ class MultiAgentBootstrap:
                     },
                     "top_k": {
                         "description": "Number of results to return",
-                        "type": "number"
+                        "type": "integer"
                     }
                 },
                 "additionalProperties": False,
@@ -373,7 +373,7 @@ class MultiAgentBootstrap:
                     }
                 },
                 "additionalProperties": False,
-                "required": ["query", "results"]
+                "required": ["query"]
             }
 
         payload = {

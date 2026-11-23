@@ -84,7 +84,7 @@ def _json_schema_field_type(field_name: str, field_config: Dict[str, Any]) -> An
     if schema_type == "integer":
         return int
     if schema_type == "number":
-        return int if field_name == "top_k" else float
+        return float
     if schema_type == "boolean":
         return bool
     if schema_type == "array":

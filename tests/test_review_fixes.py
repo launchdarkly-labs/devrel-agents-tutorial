@@ -54,7 +54,7 @@ async def test_dynamic_tool_factory_reads_top_level_tools_dict_schema_and_invoke
                     "type": "object",
                     "properties": {
                         "query": {"type": "string", "description": "Search query for keyword matching"},
-                        "top_k": {"type": "number", "description": "Number of results to return"},
+                        "top_k": {"type": "integer", "description": "Number of results to return"},
                     },
                     "required": ["query"],
                 },
@@ -67,7 +67,7 @@ async def test_dynamic_tool_factory_reads_top_level_tools_dict_schema_and_invoke
                     "type": "object",
                     "properties": {
                         "query": {"type": "string", "description": "LD query field"},
-                        "top_k": {"type": "number", "description": "LD top_k field"},
+                        "top_k": {"type": "integer", "description": "LD top_k field"},
                         "category": {"type": "string", "description": "Optional category filter"},
                     },
                     "required": ["query"],
@@ -124,12 +124,27 @@ async def test_dynamic_tool_factory_reads_top_level_tools_dict_schema_and_invoke
         {"query": "refund", "top_k": None, "category": None}
     )
 
-    # reranking: with results list and with explicit null results
+    # reranking: with results list, omitted results, and explicit null results (matching bootstrap schema)
+    from bootstrap.create_configs import MultiAgentBootstrap
+    from unittest.mock import patch, MagicMock
+
+    captured_payloads = {}
+    fake_resp = MagicMock(status_code=201)
+    fake_resp.json.return_value = {"key": "ok"}
+    with patch("bootstrap.create_configs.http.post", side_effect=lambda _u, headers=None, json=None, timeout=None: (captured_payloads.setdefault(json["key"], json["schema"]), fake_resp)[1]), patch("bootstrap.create_configs.time.sleep"):
+        bs = MultiAgentBootstrap("fake-key")
+        for key in ("search_v1", "search_v2", "reranking"):
+            bs.create_tool("proj", {"key": key, "name": key, "description": key})
+    assert captured_payloads["reranking"]["required"] == ["query"]
+    assert captured_payloads["search_v1"]["properties"]["top_k"]["type"] == "integer"
+    assert captured_payloads["search_v2"]["properties"]["top_k"]["type"] == "integer"
+
     sample_results = [{"text": "Refunds within 30 days", "score": 0.8}, {"text": "Edge regions", "score": 0.7}]
     assert "BM25 reranked results" in rerank_tool.invoke({"query": "refund", "results": sample_results})
     assert "BM25 reranked results" in await wrapped["reranking"].ainvoke(
         {"query": "refund", "results": sample_results}
     )
+    assert "No search results found" in wrapped["reranking"].invoke({"query": "refund"})
     assert "No search results found" in wrapped["reranking"].invoke({"query": "refund", "results": None})
 
 
