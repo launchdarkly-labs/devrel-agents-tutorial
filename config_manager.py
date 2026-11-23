@@ -6,17 +6,20 @@ import inspect
 import os
 import json
 import time
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
 from launchdarkly_ai_server import (
+    GraphNode,
     SpanUsage,
     create_handler,
     execute_and_track,
     get_client,
     init_client,
     inspect_config,
+    make_track_data,
     parse_ai_config,
     parse_template,
     parse_usage,
@@ -30,7 +33,6 @@ from launchdarkly_ai_server import (
     text_message,
     to_ld_context,
 )
-from launchdarkly_ai_server.tracking import make_track_data
 from opentelemetry import trace
 from opentelemetry.trace import StatusCode as SpanStatusCode
 from dotenv import load_dotenv
@@ -94,7 +96,9 @@ class ServedConfig:
     def track_data(self) -> dict[str, Any]:
         """Metadata attached to custom metric events for experiment attribution."""
         meta = {"variationKey": "fallback", "version": 1} if self.from_fallback else self.meta
-        return make_track_data(config_key=self.key, config=self.config, meta=meta)
+        data = make_track_data(GraphNode(key=self.key, config=self.config, meta=meta), "", str(uuid.uuid4()))
+        data.pop("graphKey", None)
+        return data
 
 
 class FixedConfigManager:
