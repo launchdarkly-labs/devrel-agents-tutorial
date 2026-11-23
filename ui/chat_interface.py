@@ -317,7 +317,7 @@ html, body, [class*="css"], .stApp {
         flex-direction: column;
         align-items: flex-start;
     }
-    .header-title {
+    .slide h1.header-title {
         font-size: 1.6rem;
     }
 }

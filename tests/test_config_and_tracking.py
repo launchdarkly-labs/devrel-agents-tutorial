@@ -1,7 +1,7 @@
 """Local defaults when LaunchDarkly is unavailable, and events attributed to the served variation."""
 import config_manager
 from config_manager import FEEDBACK_POSITIVE_EVENT, FixedConfigManager
-from launchdarkly_ai_server.tracking import parse_usage
+from launchdarkly_ai_server import init_client, parse_usage, shutdown
 from tests.fakes import served
 
 
@@ -85,7 +85,6 @@ async def test_cost_event_uses_the_served_variation(monkeypatch):
 
 
 async def test_sdk_tool_handlers_emit_tool_call_events_and_render_templates(monkeypatch):
-    from launchdarkly_ai_server.lifecycle import _reset_for_testing, _set_client_for_testing
     import agents.ld_agent_helpers as helpers
 
     class FakeLDClient:
@@ -98,8 +97,9 @@ async def test_sdk_tool_handlers_emit_tool_call_events_and_render_templates(monk
         def flush(self):
             pass
 
+    await shutdown()
     fake_ld = FakeLDClient()
-    _set_client_for_testing(fake_ld)
+    await init_client(client=fake_ld)
     try:
         tool_spec = {"name": "search_v2", "description": "Search", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}}}
         support_config = served("support-agent", variation_key="other-paid", tools=[tool_spec])
@@ -136,7 +136,7 @@ async def test_sdk_tool_handlers_emit_tool_call_events_and_render_templates(monk
         helpers.create_chat_model("Anthropic", "claude-haiku-5-5", None, {"max_tokens": 512, "tools": [tool_spec]})
         assert forwarded == {"model": "claude-haiku-5-5", "model_provider": "anthropic", "max_tokens": 512}
     finally:
-        _reset_for_testing()
+        await shutdown()
 
 
 def test_flush_traces_uses_public_otel_provider(monkeypatch):

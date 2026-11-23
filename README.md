@@ -557,11 +557,11 @@ Test with these queries:
 Or ask about your specific domain: "What's our refund policy?"
 
 **PII Detection Test:**
-Click **▶ Security Check**, or paste:
+Click **Security Check**, or paste:
 
 "My name is Jane Doe, email jane.doe@example.com. I work at Acme Corp in Berlin as a manager. Can you explain temporal-difference learning?"
 
-That message is two checks in one. The name and email are direct identifiers, so every variation redacts them. The employer, city, and job title are the borderline case: the default variation leaves them, and EU strict security redacts them. The banner under the answer shows the redacted text, so you can see which policy ran. **▶ Basic Search** is the same kind of question with no personal details, and it should not be redacted.
+That message is two checks in one. The name and email are direct identifiers, so every variation redacts them. The employer, city, and job title are the borderline case: the default variation leaves them, and EU strict security redacts them. The banner under the answer shows the redacted text, so you can see which policy ran. **Basic Search** is the same kind of question with no personal details, and it should not be redacted.
 
 Below every response, the observability bar shows:
 - Which variation, model, and tools served your request

@@ -461,7 +461,7 @@ uv run streamlit run ui/chat_interface.py --server.port 8501
 Open http://localhost:8501 and test different user types:
 
 1. **User Dropdown**: In the **Context** left sidebar, switch **User ID** between regions (`eu`, `other`) and plans (`free`, `paid`).
-2. **Ask Questions**: Click **▶ OpenAlex Research** or ask "Search for machine learning papers."
+2. **Ask Questions**: Click **OpenAlex Research** or ask "Search for machine learning papers."
 3. **Inspect Traces**: Click **`↗ View Trace Waterfall`** below any response (or watch the server logs) to inspect which variation, model, and tools ran for that user.
 4. **Verify Routing**: EU users get Mistral for security. Other users get Claude Haiku for security and GPT for support. Paid users get MCP tools.
 
