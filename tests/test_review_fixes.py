@@ -14,17 +14,51 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 
-def test_dynamic_tool_factory_reads_top_level_tools_dict_schema_and_description():
+async def test_dynamic_tool_factory_reads_top_level_tools_dict_schema_and_invokes_all_tools(monkeypatch):
+    import tools_impl.search_v1 as search_v1_mod
+    import tools_impl.search_v2 as search_v2_mod
+    from agents.ld_agent_helpers import ToolCallCounter, wrap_tool_with_counter
     from tools_impl.dynamic_tool_factory import (
         create_dynamic_tools_from_launchdarkly,
         extract_tool_configs_from_launchdarkly,
     )
 
+    class FakeVectorStore:
+        documents = [
+            "Umbra offers a 30-day refund policy on Pro and Team plans.",
+            "Serverless functions support 15-minute maximum timeout limits.",
+            "Deployments run across US, EU, and APAC edge regions.",
+        ]
+
+        def exists(self):
+            return True
+
+        def search(self, query: str, top_k: int = 3):
+            return [(doc, 0.85, {"idx": idx}) for idx, doc in enumerate(self.documents[:top_k])]
+
+    monkeypatch.setattr(search_v1_mod, "VectorStore", FakeVectorStore)
+    monkeypatch.setattr(search_v2_mod, "_get_vector_store", lambda: FakeVectorStore())
+    search_v2_mod._cached_search.cache_clear()
+
+    # Exact bootstrap schemas for search_v1 (top_k: number optional) + extra custom field on search_v2
     served_config = {
         "instructions": "Answer using tools.",
         "model": {"name": "claude-sonnet-5-5"},
         "provider": {"name": "Anthropic"},
         "tools": {
+            "search_v1": {
+                "name": "search_v1",
+                "type": "function",
+                "description": "Custom LD keyword search description",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "Search query for keyword matching"},
+                        "top_k": {"type": "number", "description": "Number of results to return"},
+                    },
+                    "required": ["query"],
+                },
+            },
             "search_v2": {
                 "name": "search_v2",
                 "type": "function",
@@ -33,7 +67,7 @@ def test_dynamic_tool_factory_reads_top_level_tools_dict_schema_and_description(
                     "type": "object",
                     "properties": {
                         "query": {"type": "string", "description": "LD query field"},
-                        "top_k": {"type": "integer", "description": "LD top_k field"},
+                        "top_k": {"type": "number", "description": "LD top_k field"},
                         "category": {"type": "string", "description": "Optional category filter"},
                     },
                     "required": ["query"],
@@ -56,18 +90,47 @@ def test_dynamic_tool_factory_reads_top_level_tools_dict_schema_and_description(
     }
 
     tools_list, tool_configs = extract_tool_configs_from_launchdarkly(served_config)
-    assert tools_list == ["search_v2", "reranking"]
+    assert tools_list == ["search_v1", "search_v2", "reranking"]
     assert "properties" in tool_configs["search_v2"]
     assert "category" in tool_configs["search_v2"]["properties"]
 
     tools = create_dynamic_tools_from_launchdarkly(served_config)
-    search_tool = next(t for t in tools if t.name == "search_v2")
+    v1_tool = next(t for t in tools if t.name == "search_v1")
+    v2_tool = next(t for t in tools if t.name == "search_v2")
     rerank_tool = next(t for t in tools if t.name == "reranking")
 
-    assert search_tool.description == "Custom LD semantic search description"
-    assert "category" in search_tool.args_schema.model_fields
-    assert search_tool.args_schema.model_fields["query"].description == "LD query field"
+    assert v1_tool.description == "Custom LD keyword search description"
+    assert v2_tool.description == "Custom LD semantic search description"
+    assert "category" in v2_tool.args_schema.model_fields
+    assert v2_tool.args_schema.model_fields["query"].description == "LD query field"
     assert rerank_tool.description == "Custom LD reranking description"
+
+    # Exercise both direct BaseTool.invoke/ainvoke and GenericAgent's wrap_tool_with_counter wrapper
+    counter = ToolCallCounter(max_calls=20)
+    wrapped = {t.name: wrap_tool_with_counter(t, counter) for t in tools}
+
+    # search_v1: without top_k, with numeric top_k, and with explicit null top_k
+    assert "30-day refund" in v1_tool.invoke({"query": "refund"})
+    assert "30-day refund" in wrapped["search_v1"].invoke({"query": "refund"})
+    assert "30-day refund" in await wrapped["search_v1"].ainvoke({"query": "refund", "top_k": 2})
+    assert "30-day refund" in await wrapped["search_v1"].ainvoke({"query": "refund", "top_k": None})
+
+    # search_v2: without top_k/category, with extra schema field, and with explicit nulls
+    assert "Found 3 relevant document(s)" in v2_tool.invoke({"query": "refund"})
+    assert "Found 2 relevant document(s)" in wrapped["search_v2"].invoke(
+        {"query": "refund", "top_k": 2, "category": "billing"}
+    )
+    assert "Found 3 relevant document(s)" in await wrapped["search_v2"].ainvoke(
+        {"query": "refund", "top_k": None, "category": None}
+    )
+
+    # reranking: with results list and with explicit null results
+    sample_results = [{"text": "Refunds within 30 days", "score": 0.8}, {"text": "Edge regions", "score": 0.7}]
+    assert "BM25 reranked results" in rerank_tool.invoke({"query": "refund", "results": sample_results})
+    assert "BM25 reranked results" in await wrapped["reranking"].ainvoke(
+        {"query": "refund", "results": sample_results}
+    )
+    assert "No search results found" in wrapped["reranking"].invoke({"query": "refund", "results": None})
 
 
 def test_graph_tracker_uses_make_track_data_for_node_and_graph_variation(monkeypatch):
@@ -177,11 +240,11 @@ async def test_feedback_uses_served_variation_without_reevaluating_and_rejects_e
             AgentConfig(agent_name="support-agent", variation_key="eu-paid", version=5, model="claude-sonnet-5-5", tools=["search_v2"]),
         ],
     )
-    served_var, served_ver = _resolve_served_variation(req, "support-agent")
-    assert (served_var, served_ver) == ("eu-paid", 5)
+    served_cfg, served_var, served_ver = _resolve_served_variation(req, "support-agent")
+    assert (served_cfg, served_var, served_ver) == ("support-agent", "eu-paid", 5)
 
     ctx = manager.build_context(req.user_id, req.user_context)
-    ok = await manager.track_feedback(ctx, "support-agent", thumbs_up=True, variation_key=served_var, version=served_ver)
+    ok = await manager.track_feedback(ctx, served_cfg, thumbs_up=True, variation_key=served_var, version=served_ver)
     assert ok is True
     assert inspect_calls == []
     event, _, data, value = tracked[0]
@@ -189,10 +252,29 @@ async def test_feedback_uses_served_variation_without_reevaluating_and_rejects_e
     assert data == {"configKey": "support-agent", "variationKey": "eu-paid", "version": 5}
     assert value == 1
 
-    # 2. Missing variation + failed inspect_config returns False instead of emitting empty variationKey
+    # 2. Custom terminal node (no support-agent in agent_configurations) keeps configKey and variationKey aligned
+    custom_terminal_req = req.model_copy(
+        update={
+            "agent_configurations": [
+                AgentConfig(agent_name="supervisor-agent", variation_key="sup-default", version=1, model="gpt-6-luna", tools=[]),
+                AgentConfig(agent_name="billing-specialist", variation_key="billing-v2", version=3, model="claude-sonnet-5-5", tools=[]),
+            ]
+        }
+    )
+    term_cfg, term_var, term_ver = _resolve_served_variation(custom_terminal_req, "support-agent")
+    assert (term_cfg, term_var, term_ver) == ("billing-specialist", "billing-v2", 3)
+    ok_term = await manager.track_feedback(ctx, term_cfg, thumbs_up=True, variation_key=term_var, version=term_ver)
+    assert ok_term is True
+    assert tracked[1][2] == {"configKey": "billing-specialist", "variationKey": "billing-v2", "version": 3}
+
+    # 3. Missing variation + failed inspect_config returns False instead of emitting empty variationKey
     ok_missing = await manager.track_feedback(ctx, "support-agent", thumbs_up=False, variation_key=None)
     assert ok_missing is False
-    assert len(tracked) == 1
+    assert len(tracked) == 2
+
+    # 4. config_manager uses only public root launchdarkly_ai_server exports
+    cfg_src = (REPO_ROOT / "config_manager.py").read_text()
+    assert "launchdarkly_ai_server.tracking" not in cfg_src
 
 
 async def test_rate_limiter_uses_asyncio_sleep_without_blocking_event_loop(monkeypatch):

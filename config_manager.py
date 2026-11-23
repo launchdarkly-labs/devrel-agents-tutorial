@@ -8,13 +8,13 @@ import boto3
 import ldclient
 from dotenv import load_dotenv
 from launchdarkly_ai_server import (
+    GraphNode,
     get_client,
     init_client,
     inspect_config,
     make_track_data,
     resolve_graph,
 )
-from launchdarkly_ai_server.tracking import make_track_data as make_config_track_data
 from utils.logger import log_student, log_debug
 
 load_dotenv()
@@ -41,12 +41,10 @@ class GraphTracker:
         self._graph_key = graph_key
         self._run_id = str(uuid.uuid4())
         self._context = ldclient.Context.from_dict(context)
-        self._data = make_config_track_data(
-            config_key=graph_key,
-            config={},
-            meta=meta or {},
-            graph_key=graph_key,
-            run_id=self._run_id,
+        self._data = make_track_data(
+            GraphNode(key=graph_key, config={}, meta=meta or {}),
+            graph_key,
+            self._run_id,
         )
         self._nodes_entered = 0
 

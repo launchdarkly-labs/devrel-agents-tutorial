@@ -59,10 +59,11 @@ class SearchToolV2(BaseTool):
         # Lazy init; will raise a clean error on first use if uninitialized
         self.vector_store = None
 
-    def _run(self, query: str, top_k: int = 3, **kwargs) -> str:
+    def _run(self, query: str, top_k: Optional[int] = 3, **kwargs) -> str:
         try:
-            # clamp for safety (in case someone bypasses args_schema)
-            top_k = max(1, min(int(top_k), 20))
+            # clamp for safety (in case someone bypasses args_schema or passes explicit null)
+            resolved_top_k = 3 if top_k is None else int(top_k)
+            top_k = max(1, min(resolved_top_k, 20))
             min_score = 0.20  # Default minimum similarity score
 
             results = _cached_search(query, top_k, min_score)

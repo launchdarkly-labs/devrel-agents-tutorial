@@ -78,6 +78,51 @@ def create_dynamic_tool_instance(tool_name: str, tool_config: Dict[str, Any]) ->
         return None
 
 
+def _json_schema_field_type(field_name: str, field_config: Dict[str, Any]) -> Any:
+    """Map a JSON-schema property definition to its corresponding Python type."""
+    schema_type = (field_config or {}).get("type")
+    if schema_type == "integer":
+        return int
+    if schema_type == "number":
+        return int if field_name == "top_k" else float
+    if schema_type == "boolean":
+        return bool
+    if schema_type == "array":
+        items = (field_config or {}).get("items")
+        if field_name == "results" or (isinstance(items, dict) and items.get("type") == "object"):
+            return List[Dict[str, Any]]
+        return List[Any]
+    if schema_type == "object":
+        return Dict[str, Any]
+    return str
+
+
+def _build_args_schema(
+    model_name: str,
+    tool_config: Dict[str, Any],
+    defaults: Optional[Dict[str, Any]] = None,
+) -> type[BaseModel]:
+    """Build a Pydantic args_schema from a LaunchDarkly JSON-schema object."""
+    field_definitions: Dict[str, Any] = {}
+    required = set(tool_config.get("required") or [])
+    defaults = defaults or {}
+
+    for field_name, raw_field_cfg in (tool_config.get("properties") or {}).items():
+        field_cfg = raw_field_cfg if isinstance(raw_field_cfg, dict) else {}
+        field_desc = field_cfg.get("description", "")
+        field_type = _json_schema_field_type(field_name, field_cfg)
+        if field_name in required:
+            field_definitions[field_name] = (field_type, Field(description=field_desc))
+        else:
+            default_val = field_cfg.get("default", defaults.get(field_name, None))
+            field_definitions[field_name] = (
+                Optional[field_type],
+                Field(default=default_val, description=field_desc),
+            )
+
+    return create_model(model_name, **field_definitions)
+
+
 def _create_dynamic_search_v1(tool_config: Dict[str, Any]) -> BaseTool:
     """Create search_v1 tool with LaunchDarkly configuration"""
     from tools_impl.search_v1 import SearchToolV1
@@ -90,15 +135,11 @@ def _create_dynamic_search_v1(tool_config: Dict[str, Any]) -> BaseTool:
             object.__setattr__(tool, 'description', tool_config['description'])
         if 'properties' in tool_config:
             log_debug("SEARCH_V1: Applying LaunchDarkly config")
-            field_definitions = {}
-            required = set(tool_config.get('required') or [])
-            for field_name, field_config in tool_config['properties'].items():
-                field_desc = field_config.get('description', '')
-                if field_name in required:
-                    field_definitions[field_name] = (str, Field(description=field_desc))
-                else:
-                    field_definitions[field_name] = (Optional[str], Field(default=None, description=field_desc))
-            object.__setattr__(tool, 'args_schema', create_model('DynamicSearchV1Input', **field_definitions))
+            object.__setattr__(
+                tool,
+                'args_schema',
+                _build_args_schema('DynamicSearchV1Input', tool_config, defaults={'top_k': 5}),
+            )
 
     return tool
 
@@ -110,31 +151,11 @@ def _create_dynamic_search_v2(tool_config: Dict[str, Any]) -> BaseTool:
     if tool_config and 'properties' in tool_config:
         properties = tool_config['properties']
         log_debug(f"SEARCH_V2: Creating dynamic schema from LaunchDarkly: {properties}")
-
-        # Build Pydantic field definitions from LaunchDarkly schema
-        field_definitions = {}
-
-        for field_name, field_config in properties.items():
-            field_type = str  # Default to string
-            field_default = None
-            field_description = field_config.get('description', '')
-
-            # Map LaunchDarkly JSON schema types to Python types
-            if field_config.get('type') in ('number', 'integer'):
-                field_type = int
-                field_default = 3  # Default for top_k
-            elif field_config.get('type') == 'string':
-                field_type = str
-
-            # Create Pydantic field
-            if field_name in tool_config.get('required', []):
-                field_definitions[field_name] = (field_type, Field(description=field_description))
-            else:
-                field_definitions[field_name] = (field_type, Field(default=field_default, description=field_description))
-
-        # Create dynamic Pydantic model
-        DynamicSearchV2Input = create_model('DynamicSearchV2Input', **field_definitions)
-
+        DynamicSearchV2Input = _build_args_schema(
+            'DynamicSearchV2Input',
+            tool_config,
+            defaults={'top_k': 3},
+        )
     else:
         # Fallback to minimal schema
         log_debug(f"SEARCH_V2: No LaunchDarkly config found, using minimal schema")
@@ -153,11 +174,12 @@ def _create_dynamic_search_v2(tool_config: Dict[str, Any]) -> BaseTool:
         description: str = configured_description
         args_schema: type[BaseModel] = DynamicSearchV2Input
 
-        def _run(self, query: str, top_k: int = 3) -> str:
+        def _run(self, query: str, top_k: Optional[int] = 3, **kwargs: Any) -> str:
             # Import and delegate to actual implementation
             from tools_impl.search_v2 import SearchToolV2
             actual_tool = SearchToolV2()
-            return actual_tool._run(query, top_k)
+            resolved_top_k = 3 if top_k is None else int(top_k)
+            return actual_tool._run(query, resolved_top_k, **kwargs)
 
     return DynamicSearchToolV2()
 
@@ -169,31 +191,7 @@ def _create_dynamic_reranking_tool(tool_config: Dict[str, Any]) -> BaseTool:
     if tool_config and 'properties' in tool_config:
         properties = tool_config['properties']
         log_debug(f"RERANKING: Creating dynamic schema from LaunchDarkly: {properties}")
-
-        # Build Pydantic field definitions from LaunchDarkly schema
-        field_definitions = {}
-        required = set(tool_config.get('required') or [])
-
-        for field_name, field_config in properties.items():
-            field_description = field_config.get('description', '')
-
-            # Map LaunchDarkly types to Python types
-            if field_config.get('type') == 'array':
-                field_type = List[Dict[str, Any]]  # For results array
-            elif field_config.get('type') == 'string':
-                field_type = str
-            else:
-                field_type = str  # Default
-
-            # Create Pydantic field
-            if field_name in required:
-                field_definitions[field_name] = (field_type, Field(description=field_description))
-            else:
-                field_definitions[field_name] = (Optional[field_type], Field(default=None, description=field_description))
-
-        # Create dynamic Pydantic model
-        DynamicRerankingInput = create_model('DynamicRerankingInput', **field_definitions)
-
+        DynamicRerankingInput = _build_args_schema('DynamicRerankingInput', tool_config)
     else:
         # Fallback to minimal schema matching LaunchDarkly
         log_debug(f"RERANKING: No LaunchDarkly config found, using minimal schema")
