@@ -62,12 +62,12 @@ def _create_dynamic_search_v2(tool_config: Dict[str, Any]) -> BaseTool:
         field_definitions = {}
 
         for field_name, field_config in properties.items():
-            field_type = str  # Default to string
-            field_default = None
+            field_type: Any = str  # Default to string
+            field_default: Any = None
             field_description = field_config.get('description', '')
 
             # Map LaunchDarkly JSON schema types to Python types
-            if field_config.get('type') == 'number':
+            if field_config.get('type') in ('number', 'integer'):
                 field_type = int
                 field_default = 3  # Default for top_k
 
@@ -75,7 +75,7 @@ def _create_dynamic_search_v2(tool_config: Dict[str, Any]) -> BaseTool:
             if field_name in tool_config.get('required', []):
                 field_definitions[field_name] = (field_type, Field(description=field_description))
             else:
-                field_definitions[field_name] = (field_type, Field(default=field_default, description=field_description))
+                field_definitions[field_name] = (Optional[field_type], Field(default=field_default, description=field_description))
 
         # Create dynamic Pydantic model
         DynamicSearchV2Input = create_model('DynamicSearchV2Input', **field_definitions)
@@ -93,9 +93,9 @@ def _create_dynamic_search_v2(tool_config: Dict[str, Any]) -> BaseTool:
         description: str = "Semantic search using vector embeddings"
         args_schema: type[BaseModel] = DynamicSearchV2Input
 
-        def _run(self, query: str, top_k: int = 3) -> str:
+        def _run(self, query: str, top_k: Optional[int] = 3, **kwargs: Any) -> str:
             from tools_impl.search_v2 import SearchToolV2
-            return SearchToolV2()._run(query, top_k)
+            return SearchToolV2()._run(query, 3 if top_k is None else top_k, **kwargs)
 
     return DynamicSearchToolV2()
 
@@ -106,15 +106,20 @@ def _create_dynamic_reranking_tool(tool_config: Dict[str, Any]) -> BaseTool:
     # Create dynamic input schema based on LaunchDarkly tool definition
     if tool_config and 'properties' in tool_config:
         properties = tool_config['properties']
+        required_fields = set(tool_config.get('required', []))
         log_debug(f"RERANKING: Creating dynamic schema from LaunchDarkly: {properties}")
 
         # Build Pydantic field definitions from LaunchDarkly schema
         field_definitions = {}
 
         for field_name, field_config in properties.items():
-            # Map LaunchDarkly types to Python types; the results array holds search_v2 items
-            field_type = List[Dict[str, Any]] if field_config.get('type') == 'array' else str
-            field_definitions[field_name] = (field_type, Field(description=field_config.get('description', '')))
+            # Map LaunchDarkly types to Python types; results can be strings or dicts from search_v2
+            field_type: Any = List[Any] if field_config.get('type') == 'array' else str
+            field_description = field_config.get('description', '')
+            if field_name in required_fields:
+                field_definitions[field_name] = (field_type, Field(description=field_description))
+            else:
+                field_definitions[field_name] = (Optional[field_type], Field(default=None, description=field_description))
 
         # Create dynamic Pydantic model
         DynamicRerankingInput = create_model('DynamicRerankingInput', **field_definitions)
@@ -124,7 +129,7 @@ def _create_dynamic_reranking_tool(tool_config: Dict[str, Any]) -> BaseTool:
         log_debug("RERANKING: No LaunchDarkly config found, using minimal schema")
         class DynamicRerankingInput(BaseModel):
             query: str
-            results: Optional[List[Dict[str, Any]]] = None
+            results: Optional[List[Any]] = None
 
     # Create dynamic tool class
     class DynamicRerankingTool(BaseTool):
@@ -132,7 +137,7 @@ def _create_dynamic_reranking_tool(tool_config: Dict[str, Any]) -> BaseTool:
         description: str = "Reorders results by relevance using BM25 algorithm"
         args_schema: type[BaseModel] = DynamicRerankingInput
 
-        def _run(self, query: str, results: List[Dict[str, Any]] = None, **kwargs) -> str:
+        def _run(self, query: str, results: Optional[List[Any]] = None, **kwargs: Any) -> str:
             from tools_impl.reranking import RerankingTool
             return RerankingTool()._run(query, results, **kwargs)
 

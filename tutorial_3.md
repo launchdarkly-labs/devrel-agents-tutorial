@@ -59,13 +59,13 @@ To reduce costs, change the following in the `create_premium_model_variations` f
 # Original (expensive):
 "model": {
     "name": "claude-opus-5-5",
-    "provider": "anthropic"
+    "provider": "Anthropic"
 }
 
 # Change to (free Mistral):
 "model": {
     "name": "mistral-small-latest",
-    "provider": "mistral"
+    "provider": "Mistral"
 }
 ```
 
@@ -561,7 +561,7 @@ Here's what we learned running these experiments ourselves:
 
 - Low-variance metrics (latency, tokens) reach significance quickly (~1,000 samples). High-variance metrics (cost, feedback) may need 5,000-10,000+ samples. This isn't a flaw in your experiment but the reality of statistical power. Don't chase 90% confidence on every metric; focus on directional insights for high-variance metrics and statistical proof for low-variance ones.
 
-- Using a free Mistral model for security reduced that agent's cost to \$0, yet increased total system cost by 14.5 because downstream agents had to work harder with reduced context. However, the experiment also revealed an unexpected 36% latency improvement. Mistral is not just free but significantly faster. LaunchDarkly's user-level tracking captured both effects, enabling an informed decision: enhanced privacy + faster responses for ~\$0.004 more per request is a worthwhile tradeoff.
+- Using a free Mistral model for security reduced that agent's cost to \$0, yet increased total system cost by 14.5% because downstream agents had to work harder with reduced context. However, the experiment also revealed an unexpected 36% latency improvement. Mistral is not just free but significantly faster. LaunchDarkly user-level tracking captured both effects, enabling an informed decision: enhanced privacy + faster responses for ~\$0.004 more per request is a worthwhile tradeoff.
 
 - At 87% confidence for latency (as compared to 90% target), the 36% improvement is clear enough for decision-making. Perfect statistical significance is ideal, but 85-89% confidence combined with other positive signals (stable feedback, acceptable cost) can justify deployment when the effect size is large.
 

@@ -68,3 +68,77 @@ def test_unmapped_provider_fallback_uses_canonical_provider_casing(monkeypatch):
     assert payload["modelName"] == "gpt-custom-preview"
     assert payload["provider"] == {"name": "OpenAI"}
 
+
+def test_part_3_free_mistral_option_and_provider_casing(monkeypatch):
+    sent = []
+    monkeypatch.setattr(tutorial_3.requests, "post", lambda url, json, headers, timeout: sent.append(json) or FakeResponse())
+    monkeypatch.setattr(tutorial_3.time, "sleep", lambda seconds: None)
+
+    boot = tutorial_3.Tutorial3VariationBootstrap()
+    assert boot._create_variations(
+        "support-agent",
+        [
+            {
+                "key": "mistral-free",
+                "name": "Mistral Free",
+                "instructions": "Help the user.",
+                "model": {"name": "mistral-small-latest", "provider": "mistral"},
+                "tools": ["search_v1"],
+                "customParameters": {"max_tool_calls": 10},
+            },
+            {
+                "key": "mistral-custom",
+                "name": "Mistral Custom",
+                "instructions": "Help the user.",
+                "model": {"name": "mistral-custom-preview", "provider": "mistral"},
+                "tools": ["search_v1"],
+                "customParameters": {"max_tool_calls": 10},
+            },
+        ],
+    )
+
+    assert sent[0]["modelConfigKey"] == "Mistral.mistral-small-latest"
+    assert sent[1]["modelName"] == "mistral-custom-preview"
+    assert sent[1]["provider"] == {"name": "Mistral"}
+
+
+def test_dynamic_tools_accept_integer_top_k_and_string_rerank_results(monkeypatch):
+    from tools_impl.dynamic_tool_factory import _create_dynamic_reranking_tool, _create_dynamic_search_v2
+    import tools_impl.search_v2 as search_v2_mod
+
+    seen = {}
+
+    def fake_run(self, query, top_k=3, **kwargs):
+        seen["top_k"] = top_k
+        return f"hit:{query}:{top_k}"
+
+    monkeypatch.setattr(search_v2_mod.SearchToolV2, "_run", fake_run)
+
+    search_tool = _create_dynamic_search_v2(
+        {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "top_k": {"type": "integer"},
+            },
+            "required": ["query"],
+        }
+    )
+    assert search_tool.invoke({"query": "reinforcement learning", "top_k": None}) == "hit:reinforcement learning:3"
+    assert seen["top_k"] == 3
+
+    rerank_tool = _create_dynamic_reranking_tool(
+        {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "results": {"type": "array"},
+            },
+            "required": ["query"],
+        }
+    )
+    out = rerank_tool.invoke({"query": "policy gradient", "results": ["doc about policy gradient", "other doc"]})
+    assert "BM25 reranked results" in out
+    assert "No search results found" in rerank_tool.invoke({"query": "policy gradient"})
+
+

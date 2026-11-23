@@ -61,9 +61,29 @@ class Tutorial3VariationBootstrap:
 
         print(f"\n📝 Creating {len(variations)} variations for {ai_config_key}...")
 
-        # Map model name to LaunchDarkly modelConfigKey
+        # Map model name to LaunchDarkly modelConfigKey and canonical provider names
         model_config_key_map = {
             "claude-opus-5-5": "Anthropic.claude-opus-5-5",
+            "claude-sonnet-5-5": "Anthropic.claude-sonnet-5-5",
+            "claude-haiku-5-5": "Anthropic.claude-haiku-5-5",
+            "gpt-6.2-sol": "OpenAI.gpt-6.2-sol",
+            "gpt-6.1-terra": "OpenAI.gpt-6.1-terra",
+            "gpt-6-luna": "OpenAI.gpt-6-luna",
+            "mistral-small-latest": "Mistral.mistral-small-latest",
+        }
+        provider_name_map = {
+            "anthropic": "Anthropic",
+            "bedrock": "Bedrock",
+            "cohere": "Cohere",
+            "deepseek": "DeepSeek",
+            "gemini": "Google",
+            "google": "Google",
+            "groq": "Groq",
+            "meta": "Meta",
+            "mistral": "Mistral",
+            "openai": "OpenAI",
+            "perplexity": "Perplexity",
+            "xai": "xAI",
         }
 
         for variation in variations:
@@ -85,9 +105,11 @@ class Tutorial3VariationBootstrap:
                 payload["modelConfigKey"] = model_config_key
                 print(f"  Using modelConfigKey: {model_config_key}")
             else:
+                raw_provider = variation["model"]["provider"]
+                provider_name = provider_name_map.get(raw_provider.lower(), raw_provider)
                 payload["modelName"] = model_name
-                payload["provider"] = {"name": variation["model"]["provider"]}
-                print(f"  Using modelName/provider: {model_name}")
+                payload["provider"] = {"name": provider_name}
+                print(f"  Using modelName/provider: {model_name}/{provider_name}")
 
             # Custom parameters such as max_tool_calls live in the variation's model.custom
             payload["model"] = {"custom": variation["customParameters"]}

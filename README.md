@@ -40,7 +40,7 @@ Build a working multi-agent system with dynamic configuration in 20 minutes usin
 
 *Part 1 of 3 of the series: **Chaos to Clarity: Defensible AI Systems That Deliver on Your Goals***
 
-You've been there: your AI chatbot works great in testing, then production hits and GPT-4 costs spiral out of control. You switch to Claude, but now European users need different privacy rules. Every change means another deploy, more testing, and crossed fingers that nothing breaks.
+You've been there: your AI chatbot works great in testing, then production hits and frontier model costs spiral out of control. You switch to Claude, but now European users need different privacy rules. Every change means another deploy, more testing, and crossed fingers that nothing breaks.
 
 The teams shipping faster? They control AI behavior dynamically instead of hardcoding everything.
 
