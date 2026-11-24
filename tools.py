@@ -16,6 +16,10 @@ import os
 from typing import List, Dict, Any, Optional
 
 
+def _ci_safe_mode() -> bool:
+    return os.getenv("CI_SAFE_MODE", "").lower() in {"1", "true", "yes"}
+
+
 def search_v1(query: str) -> str:
     """
     Basic keyword-based search through enterprise documentation.
@@ -31,12 +35,8 @@ def search_v1(query: str) -> str:
     """
     try:
         from tools_impl.search_v1 import SearchToolV1
-        tool = SearchToolV1()
-        return tool._run(query)
+        return SearchToolV1()._run(query)
     except Exception as e:
-        import traceback
-        error_details = traceback.format_exc()
-        print(f"ERROR in search_v1: {type(e).__name__}: {str(e)}\n{error_details}")
         return f"Search error: {type(e).__name__}: {str(e)}. If this persists, ensure vector embeddings are initialized with 'uv run initialize_embeddings.py'"
 
 
@@ -56,14 +56,8 @@ def search_v2(query: str, top_k: int = 3) -> str:
     """
     try:
         from tools_impl.search_v2 import SearchToolV2
-        tool = SearchToolV2()
-        # Clamp top_k for safety
-        top_k = max(1, min(int(top_k), 20))
-        return tool._run(query, top_k)
+        return SearchToolV2()._run(query, top_k)
     except Exception as e:
-        import traceback
-        error_details = traceback.format_exc()
-        print(f"ERROR in search_v2: {type(e).__name__}: {str(e)}\n{error_details}")
         return f"Search error: {type(e).__name__}: {str(e)}. If this persists, ensure vector embeddings are initialized with 'uv run initialize_embeddings.py'"
 
 
@@ -83,8 +77,7 @@ def reranking(query: str, results: Optional[List[Dict[str, Any]]] = None) -> str
     """
     try:
         from tools_impl.reranking import RerankingTool
-        tool = RerankingTool()
-        return tool._run(query, results)
+        return RerankingTool()._run(query, results)
     except Exception as e:
         return f"Reranking error: {str(e)}"
 
@@ -103,13 +96,12 @@ def arxiv_search(query: str, max_results: int = 5) -> str:
     Returns:
         Formatted string with ArXiv paper results including titles, authors, and abstracts
     """
-    # Check if CI_SAFE_MODE is enabled (network-dependent tools disabled)
-    if os.getenv("CI_SAFE_MODE", "").lower() in {"1", "true", "yes"}:
+    if _ci_safe_mode():
         return "ArXiv search is disabled in CI safe mode (network-dependent MCP tool)"
 
     try:
         from tools_impl.dynamic_tool_factory import _create_dynamic_mcp_tool
-        tool = _create_dynamic_mcp_tool("arxiv_search", {})
+        tool = _create_dynamic_mcp_tool("arxiv_search")
         if tool is None:
             return "ArXiv MCP tool not available. Install with: uv tool install arxiv-mcp-server"
         return tool._run(query=query, max_results=max_results)
@@ -117,35 +109,30 @@ def arxiv_search(query: str, max_results: int = 5) -> str:
         return f"ArXiv search error: {str(e)}"
 
 
-def semantic_scholar(query: str, num_results: int = 3) -> str:
+def openalex_search(query: str) -> str:
     """
-    Access Semantic Scholar citation database for academic research.
+    Search OpenAlex for scholarly works and citation counts.
 
-    MCP tool that searches the Semantic Scholar database for papers and citations.
-    Requires semanticscholar-MCP-Server to be installed. Disabled in CI safe mode.
-    Always request fewer than 5 results to avoid rate limiting.
+    MCP tool that searches the OpenAlex catalog of papers, books, and datasets.
+    Requires a one-time sign-in with tools_impl/openalex_auth.py. Disabled in CI safe mode.
 
     Args:
         query: Academic research query
-        num_results: Number of papers to return (default: 3, recommended: <5)
 
     Returns:
-        Formatted string with Semantic Scholar paper results including citations
+        Formatted string with OpenAlex results including citation counts
     """
-    # Check if CI_SAFE_MODE is enabled (network-dependent tools disabled)
-    if os.getenv("CI_SAFE_MODE", "").lower() in {"1", "true", "yes"}:
-        return "Semantic Scholar search is disabled in CI safe mode (network-dependent MCP tool)"
+    if _ci_safe_mode():
+        return "OpenAlex search is disabled in CI safe mode (network-dependent MCP tool)"
 
     try:
         from tools_impl.dynamic_tool_factory import _create_dynamic_mcp_tool
-        # Clamp num_results to recommended max
-        num_results = max(1, min(int(num_results), 5))
-        tool = _create_dynamic_mcp_tool("semantic_scholar", {})
+        tool = _create_dynamic_mcp_tool("openalex_search")
         if tool is None:
-            return "Semantic Scholar MCP tool not available. Install from: https://github.com/JackKuo666/semanticscholar-MCP-Server"
-        return tool._run(query=query, num_results=num_results)
+            return "OpenAlex MCP tool not available. Sign in with: uv run python tools_impl/openalex_auth.py"
+        return tool._run(query=query)
     except Exception as e:
-        return f"Semantic Scholar search error: {str(e)}"
+        return f"OpenAlex search error: {str(e)}"
 
 
 # Tool metadata for LaunchDarkly AI Config registration
@@ -155,5 +142,5 @@ __all__ = [
     "search_v2",
     "reranking",
     "arxiv_search",
-    "semantic_scholar"
+    "openalex_search"
 ]

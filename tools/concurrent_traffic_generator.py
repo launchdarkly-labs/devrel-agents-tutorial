@@ -54,6 +54,7 @@ class ConcurrentTrafficGenerator:
 
     def evaluate_response(self, query, response):
         """Ask Claude to evaluate if user would give feedback"""
+        # Every Claude call here disables thinking: Haiku 5.5 thinks by default, which uses up these small max_tokens budgets
         prompt = f"""Based on this Q&A, would a user give feedback?
 
 Question: {query[:200]}
@@ -64,12 +65,13 @@ Reply with ONLY one of these:
 - negative (poor answer, user would thumbs down)
 - none (okay answer, user wouldn't bother rating)
 
-Most users don't give feedback unless the answer is notably good or bad."""
+Users give a thumbs up to answers that fully and correctly answer the question, a thumbs down to answers that are wrong, evasive, or ask for information the question already gave, and no rating to answers that only partly help."""
 
         try:
             ai_response = self.claude.messages.create(
-                model="claude-haiku-4-5-20251001",
+                model="claude-haiku-5-5",
                 max_tokens=10,
+                thinking={"type": "disabled"},
                 messages=[{"role": "user", "content": prompt}]
             )
 
@@ -81,15 +83,16 @@ Most users don't give feedback unless the answer is notably good or bad."""
             else:
                 return "none"
 
-        except:
+        except Exception:
             return "none"  # Default to no feedback on error
 
     def generate_base_topics(self):
         """Generate base RL topics"""
         try:
             response = self.claude.messages.create(
-                model="claude-haiku-4-5-20251001",
+                model="claude-haiku-5-5",
                 max_tokens=800,
+                thinking={"type": "disabled"},
                 messages=[{
                     "role": "user",
                     "content": """List 20 reinforcement learning topics from the Sutton & Barto textbook.
@@ -145,19 +148,20 @@ Complexity guide:
 
         try:
             response = self.claude.messages.create(
-                model="claude-haiku-4-5-20251001",
+                model="claude-haiku-5-5",
                 max_tokens=100,
+                thinking={"type": "disabled"},
                 messages=[{"role": "user", "content": prompt}]
             )
             return response.content[0].text.strip()
-        except:
+        except Exception:
             # Fallback
             if inject_pii:
                 return f"Hi, I'm John Smith (john.smith@email.com) and I need help with {topic}"
             else:
                 return f"Can you explain {topic}?"
 
-    def send_single_request(self, query_num, query):
+    def send_single_request(self, total, query):
         """Send a single request and process response"""
         try:
             # Generate unique user
@@ -204,20 +208,20 @@ Complexity guide:
                             },
                             timeout=10
                         )
-                    except:
+                    except Exception:
                         pass  # Feedback is optional
                 
                 with self.lock:
                     self.successful += 1
                     self.completed += 1
-                    print(f"✅ [{self.completed}/{query_num}] Success ({duration:.1f}s) - other_paid: {query[:60]}...")
+                    print(f"✅ [{self.completed}/{total}] Success ({duration:.1f}s) - other_paid: {query[:60]}...")
                 
                 return {"success": True, "duration": duration}
             else:
                 with self.lock:
                     self.failed += 1
                     self.completed += 1
-                    print(f"❌ [{self.completed}/{query_num}] Failed - {response.status_code}")
+                    print(f"❌ [{self.completed}/{total}] Failed - {response.status_code}")
                 
                 return {"success": False, "error": response.status_code}
                 
@@ -225,25 +229,25 @@ Complexity guide:
             with self.lock:
                 self.failed += 1
                 self.completed += 1
-                print(f"⏱️  [{self.completed}/{query_num}] Timeout (>2000s) - {query[:60]}...")
+                print(f"⏱️  [{self.completed}/{total}] Timeout (>2000s) - {query[:60]}...")
             return {"success": False, "error": "timeout"}
             
         except Exception as e:
             with self.lock:
                 self.failed += 1
                 self.completed += 1
-                print(f"❌ [{self.completed}/{query_num}] Error: {e}")
+                print(f"❌ [{self.completed}/{total}] Error: {e}")
             return {"success": False, "error": str(e)}
 
     def run(self, num_queries):
         """Run traffic generation with concurrent requests"""
-        print(f"\n🚀 Concurrent Traffic Generator")
-        print(f"=" * 70)
+        print("\n🚀 Concurrent Traffic Generator")
+        print("=" * 70)
         print(f"Queries: {num_queries}")
         print(f"Concurrency: {self.concurrency} parallel requests")
-        print(f"Timeout: 2000s (33 minutes) per request")
+        print("Timeout: 2000s (33 minutes) per request")
         print(f"Target: {self.api_base_url}")
-        print(f"=" * 70)
+        print("=" * 70)
         
         # Generate base topics
         print("\n📚 Generating base topics...")
@@ -272,22 +276,11 @@ Complexity guide:
                 for task in query_tasks
             }
 
-            # Collect results as they complete
+            # Collect results as they complete (generate_query falls back to a template on errors)
             completed_count = 0
             for future in as_completed(future_to_task):
-                task = future_to_task[future]
-                query_num, topic, inject_pii = task
-                try:
-                    query = future.result()
-                    queries.append((query_num, query))
-                except Exception as e:
-                    # Use fallback on error
-                    if inject_pii:
-                        fallback_query = f"Hi, I'm John Smith (john.smith@email.com) and I need help with {topic}"
-                    else:
-                        fallback_query = f"Can you explain {topic}?"
-                    queries.append((query_num, fallback_query))
-                    print(f"⚠️  Query {query_num} generation failed, using fallback")
+                query_num = future_to_task[future][0]
+                queries.append((query_num, future.result()))
 
                 completed_count += 1
                 if completed_count % 100 == 0 or completed_count == num_queries:
@@ -303,29 +296,23 @@ Complexity guide:
         
         start_time = time.time()
         
-        # Execute concurrent requests
+        # Execute concurrent requests; results are logged in send_single_request
         with ThreadPoolExecutor(max_workers=self.concurrency) as executor:
-            futures = {
-                executor.submit(self.send_single_request, num, query): (num, query)
-                for num, query in queries
-            }
-            
-            # Wait for all to complete
-            for future in as_completed(futures):
-                pass  # Results are logged in send_single_request
-        
+            for _, query in queries:
+                executor.submit(self.send_single_request, num_queries, query)
+
         total_duration = time.time() - start_time
         
         # Summary
         print()
-        print(f"=" * 70)
-        print(f"✅ COMPLETE")
-        print(f"=" * 70)
+        print("=" * 70)
+        print("✅ COMPLETE")
+        print("=" * 70)
         print(f"Total time: {total_duration/60:.1f} minutes ({total_duration:.0f}s)")
         print(f"Successful: {self.successful}/{num_queries} ({100*self.successful/num_queries:.1f}%)")
         print(f"Failed: {self.failed}/{num_queries} ({100*self.failed/num_queries:.1f}%)")
         print(f"Average: {total_duration/num_queries:.1f}s per query (with concurrency)")
-        print(f"=" * 70)
+        print("=" * 70)
 
 def main():
     parser = argparse.ArgumentParser(description='Concurrent traffic generator for AI agent testing')

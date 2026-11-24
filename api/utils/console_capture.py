@@ -1,61 +1,44 @@
 import sys
-import io
-from typing import List
 from contextlib import contextmanager
+from contextvars import ContextVar
+
+# Each request collects its own logs; concurrent requests run in separate contexts
+_current_logs: ContextVar[list | None] = ContextVar("console_logs", default=None)
+
+
+class _CapturingWriter:
+    """Records each non-empty write for the current request and passes it through, so logs still show in the console"""
+    def __init__(self, stream, prefix=""):
+        self.stream = stream
+        self.prefix = prefix
+
+    def write(self, text):
+        captured_logs = _current_logs.get()
+        if captured_logs is not None and text.strip():  # Only capture non-empty lines
+            captured_logs.append(f"{self.prefix}{text.strip()}")
+        self.stream.write(text)
+        self.stream.flush()
+
+    def flush(self):
+        self.stream.flush()
+
+    def fileno(self):
+        # Delegate to the original stream for subprocess compatibility
+        return self.stream.fileno()
+
 
 @contextmanager
 def capture_console_output():
     """Context manager that captures both stdout and stderr during execution"""
+    # The writers are installed once and left in place: swapping sys.stdout per
+    # request breaks when requests overlap and restore each other's streams.
+    if not isinstance(sys.stdout, _CapturingWriter):
+        sys.stdout = _CapturingWriter(sys.stdout)
+        sys.stderr = _CapturingWriter(sys.stderr, prefix="[ERROR] ")
+
     captured_logs = []
-    
-    # Create custom write function that captures output
-    def capture_write(text):
-        if text.strip():  # Only capture non-empty lines
-            captured_logs.append(text.strip())
-        # Also write to original stdout so we can still see logs in console
-        original_stdout.write(text)
-        original_stdout.flush()
-    
-    # Store original stdout/stderr
-    original_stdout = sys.stdout
-    original_stderr = sys.stderr
-    
+    token = _current_logs.set(captured_logs)
     try:
-        # Create a custom stdout that captures and passes through
-        class CapturingWriter:
-            def write(self, text):
-                capture_write(text)
-            
-            def flush(self):
-                original_stdout.flush()
-            
-            def fileno(self):
-                # Delegate to original stdout for subprocess compatibility
-                return original_stdout.fileno()
-        
-        # Replace stdout with our capturing writer
-        sys.stdout = CapturingWriter()
-        
-        # Also capture stderr (for any error prints)
-        class CapturingStdErr:
-            def write(self, text):
-                if text.strip():
-                    captured_logs.append(f"[ERROR] {text.strip()}")
-                original_stderr.write(text)
-                original_stderr.flush()
-            
-            def flush(self):
-                original_stderr.flush()
-            
-            def fileno(self):
-                # Delegate to original stderr for subprocess compatibility
-                return original_stderr.fileno()
-        
-        sys.stderr = CapturingStdErr()
-        
         yield captured_logs
-        
     finally:
-        # Restore original stdout/stderr
-        sys.stdout = original_stdout
-        sys.stderr = original_stderr
+        _current_logs.reset(token)

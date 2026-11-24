@@ -41,14 +41,12 @@ env/
 ehthumbs.db
 Thumbs.db
 
-# Tests
-tests/
-
 # Documentation
 docs/
 
 # Environment files
 .env
+.openalex_tokens.json
 
 # Logs
 logs/
