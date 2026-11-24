@@ -74,35 +74,49 @@ async def flush_metrics():
         return {"success": False, "message": f"Failed to flush metrics: {e}"}
 
 
+def _resolve_served_variation(
+    feedback: FeedbackRequest, target_agent: str = "support-agent"
+) -> tuple[str, str | None, int | None]:
+    """Extract the configKey, variationKey, and version that actually served the response."""
+    configs = feedback.agent_configurations or []
+    matched = next((cfg for cfg in configs if cfg.agent_name == target_agent), None)
+    if matched is None and configs:
+        matched = configs[-1]
+    resolved_agent = (matched.agent_name if matched and matched.agent_name else None) or target_agent
+    if matched and matched.variation_key and matched.variation_key not in ("unknown", "error", "validation"):
+        return resolved_agent, matched.variation_key, matched.version
+    if feedback.variation_key and feedback.variation_key not in ("unknown", "agent-graph", "error", "validation"):
+        return resolved_agent, feedback.variation_key, feedback.version
+    return resolved_agent, None, feedback.version
+
+
 @app.post("/feedback", response_model=FeedbackResponse)
 async def submit_feedback(feedback: FeedbackRequest):
     """Submit user feedback for AI responses"""
     try:
         log_student(f"FEEDBACK: {feedback.feedback} from {feedback.source}")
 
-        # Get LaunchDarkly tracker and submit feedback
         try:
-            # Get a real LaunchDarkly AI config to get the tracker with user context
-            support_config = await agent_service.config_manager.get_config(
+            context = agent_service.config_manager.build_context(
                 feedback.user_id,
-                "support-agent",
                 feedback.user_context
             )
-
-            # Convert feedback format
-            thumbs_up = feedback.feedback == "positive"
-
-            # Track feedback using config_manager
-            success = agent_service.config_manager.track_feedback(
-                support_config.tracker,
-                thumbs_up=thumbs_up
+            served_config_key, served_variation, served_version = _resolve_served_variation(
+                feedback, "support-agent"
+            )
+            success = await agent_service.config_manager.track_feedback(
+                context,
+                served_config_key,
+                thumbs_up=feedback.feedback == "positive",
+                variation_key=served_variation,
+                version=served_version,
             )
 
             if success:
-                log_debug(f"FEEDBACK SUBMITTED: {feedback.feedback} for {feedback.variation_key}")
+                log_debug(f"FEEDBACK SUBMITTED: {feedback.feedback} for {served_variation or feedback.variation_key}")
                 return FeedbackResponse(
                     success=True,
-                    message=f"Feedback submitted successfully"
+                    message="Feedback submitted successfully"
                 )
             else:
                 log_debug(f"FEEDBACK: Failed to submit feedback to LaunchDarkly")

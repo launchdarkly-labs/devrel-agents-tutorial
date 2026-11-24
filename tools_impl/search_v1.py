@@ -1,11 +1,12 @@
-from langchain.tools import BaseTool
+from langchain_core.tools import BaseTool
 from data.vector_store import VectorStore
-from typing import Any
+from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 class SearchV1Input(BaseModel):
     """Input schema for search_v1 tool"""
     query: str = Field(description="Search query to find relevant documentation")
+    top_k: Optional[int] = Field(default=5, description="Number of results to return")
 
 class SearchToolV1(BaseTool):
     name: str = "search_v1"
@@ -20,12 +21,13 @@ class SearchToolV1(BaseTool):
         if not self.vector_store.exists():
             raise ValueError("Vector embeddings not initialized. Run 'uv run initialize_embeddings.py' first.")
     
-    def _run(self, query: str) -> str:
+    def _run(self, query: str, top_k: Optional[int] = 5, **kwargs: Any) -> str:
         try:
             # Get all chunks from persistent store and do keyword search
             if not self.vector_store.documents:
                 return "No documentation available."
             
+            limit = max(1, int(top_k)) if top_k is not None else 5
             query_lower = query.lower()
             matching_chunks = []
             
@@ -39,13 +41,13 @@ class SearchToolV1(BaseTool):
             
             # Format results showing chunk matches
             result = f"Found {len(matching_chunks)} matching text chunks:\n\n"
-            for i, (chunk_id, chunk_text) in enumerate(matching_chunks[:5]):
+            for i, (chunk_id, chunk_text) in enumerate(matching_chunks[:limit]):
                 # Truncate very long chunks for readability
                 display_text = chunk_text[:500] + "..." if len(chunk_text) > 500 else chunk_text
                 result += f"[Chunk {chunk_id}] {display_text}\n\n"
             
-            if len(matching_chunks) > 5:
-                result += f"... and {len(matching_chunks) - 5} more chunks"
+            if len(matching_chunks) > limit:
+                result += f"... and {len(matching_chunks) - limit} more chunks"
             
             return result
             
