@@ -1,23 +1,10 @@
-# Proving ROI with data-driven AI agent experiments
+# Prove LangGraph agent ROI with LaunchDarkly A/B experiments
 
-> Read the published version on [LaunchDarkly Docs](https://launchdarkly.com/docs/guides/experimentation/ai-experiments-roi).
+> Read the published version on [LaunchDarkly Docs](https://launchdarkly.com/docs/guides/experimentation/ai-experiments-roi?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_ai-experiments-roi). _Updated November 2026._
 
 ## Overview
 
-<Callout intent="info" title="Published October 2025: newer AgentControl features available">
-
-This guide was published in October 2025, before LaunchDarkly shipped several features that supersede or extend the experiment patterns shown below. The methodology still works, but for new experiments you'll likely also want to use:
-
-- [**Online evaluations**](https://launchdarkly.com/docs/home/agentcontrol/online-evaluations) and [**custom judges**](https://launchdarkly.com/docs/home/agentcontrol/judges): LLM-as-a-judge scores feed directly into experiment metrics, so judge accuracy or toxicity can be the primary metric
-- [**Agent graphs**](https://launchdarkly.com/docs/home/agentcontrol/agent-graphs): A/B test routing topology and per-node model choices, not just whole-config swaps
-- [**Offline evaluations + datasets**](https://launchdarkly.com/docs/home/agentcontrol/offline-evaluations): lock in a regression baseline before running a live experiment
-- [**LLM Playground**](https://launchdarkly.com/docs/home/agentcontrol/playground): pilot variations on test prompts before sending them to real traffic
-
-AI Configs is now **AgentControl**. Config keys, SDK names, and APIs are unchanged. For the current reference, see [AgentControl documentation](https://launchdarkly.com/docs/home/agentcontrol).
-
-</Callout>
-
-This guide explains how to measure and prove the return on investment (ROI) of AI model changes with LaunchDarkly experiments. It shows you how to use statistical analysis to find unexpected performance wins and cost paradoxes.
+This guide explains how to measure and prove the return on investment (ROI) of LangGraph multi-agent model and privacy changes with LaunchDarkly A/B experiments. It shows you how to use statistical analysis to find unexpected performance wins and cost paradoxes.
 
 Imagine a scenario where your CEO asks you "Is the new expensive AI model worth it? And does the enhanced privacy justify the cost?" By the end of this guide, you will be able to answer this question.
 
@@ -37,10 +24,10 @@ You can use this guide in one of two ways:
 If you choose to complete the full tutorial, you need the following prerequisites:
 
 - An active LaunchDarkly project, set up according to the following tutorials:
-    - [Build a LangGraph Multi-Agent system in 20 Minutes with LaunchDarkly AgentControl](https://launchdarkly.com/docs/tutorials/agents-langgraph)
-    - [Smart AI Agent Targeting with MCP Tools](https://launchdarkly.com/docs/tutorials/multi-agent-mcp-targeting)
+    - [Build a LangGraph multi-agent system in 20 minutes with LaunchDarkly AI configs](https://launchdarkly.com/docs/tutorials/agents-langgraph?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_ai-experiments-roi)
+    - [Target LangGraph agents and MCP tools with LaunchDarkly AI configs](https://launchdarkly.com/docs/tutorials/multi-agent-mcp-targeting?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_ai-experiments-roi)
 - Accounts and API keys configured in `.env` from Parts 1 and 2:
-    - **LaunchDarkly**: [sign up for a free LaunchDarkly account](https://app.launchdarkly.com/signup) and [create a Writer API access token](https://launchdarkly.com/docs/home/account/api-create) (`LD_SDK_KEY` and `LD_API_KEY`)
+    - **LaunchDarkly**: [sign up for a free LaunchDarkly account](https://app.launchdarkly.com/signup?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_ai-experiments-roi) and [create a Writer API access token](https://launchdarkly.com/docs/home/account/api-create?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_ai-experiments-roi) (`LD_SDK_KEY` and `LD_API_KEY`)
     - **OpenAI**: [create an API key at platform.openai.com/api-keys](https://platform.openai.com/api-keys) (`OPENAI_API_KEY`)
     - **Anthropic**: [create an API key at console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys) (`ANTHROPIC_API_KEY`)
     - **Mistral**: [create a free API key at console.mistral.ai](https://console.mistral.ai/) (`MISTRAL_API_KEY`, used by the `Strict Security` treatment)
@@ -130,7 +117,7 @@ Here is an overview of the second experiment:
 
 This section explains how to configure the metrics needed for your two experiments.
 
-Navigate to **Metrics** in LaunchDarkly and [create three custom metrics](https://launchdarkly.com/docs/home/metrics/create-metrics):
+Navigate to **Metrics** in LaunchDarkly and [create three custom metrics](https://launchdarkly.com/docs/home/metrics/create-metrics?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_ai-experiments-roi):
 
 <table class="fern-table">
   <tr>
@@ -209,7 +196,7 @@ Here is the detailed setup for the cost per request metric:
 
 </Accordion>
 
-In addition to the above custom metrics, you will also use these [built-in metrics](https://launchdarkly.com/docs/home/metrics/autogen/ai):
+In addition to the above custom metrics, you will also use these [built-in metrics](https://launchdarkly.com/docs/home/metrics/autogen/ai?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_ai-experiments-roi):
 
 <table class="fern-table">
   <tr>
@@ -266,7 +253,7 @@ Here is how to set up your experiment:
     - `Negative feedback rate`
     - `p95_total_user_latency`
     - `ai_cost_per_request`
-- **Flag or AgentControl config**: security-agent
+- **Flag or AI config**: security-agent
 **Targeting rule:** Rule 4
     - This configures `If Context` > `is in Segment` then `Other Paid`
 - **Variations served outside of this experiment:** `Basic Security`
@@ -303,7 +290,7 @@ Here is how to set up your experiment:
     - `p95_total_user_latency`
     - `average_total_user_tokens`
     - `ai_cost_per_request`
-- **Flag or AgentControl config**: support-agent
+- **Flag or AI config**: support-agent
 - **Targeting rule:** Rule 4
     - This configures `If Context` > `is in Segment` then `Other Paid`
 - **Variations served outside of this experiment:** `other-paid`
@@ -573,7 +560,7 @@ We encountered some limitations while running these experiments:
 
 - **Independent experiments:** While random assignment naturally balances security versions across model versions, preventing systematic bias, you cannot analyze interaction effects between security and model choices. If interaction effects are important to your use case, consider running a proper [factorial experiment design](https://en.wikipedia.org/wiki/Factorial_experiment).
 
-- **Statistical confidence:** LaunchDarkly uses [Bayesian statistics](https://launchdarkly.com/docs/home/experimentation/bayesian) to calculate confidence, where 90% confidence means there's a 90% probability the true effect is positive. This is not the same as p-value < 0.10 from [frequentist tests](https://en.wikipedia.org/wiki/Frequentist_inference). We set the threshold at 90%, rather than 95%, to balance false positives versus false negatives, though for mission-critical features you should consider raising the confidence threshold to 95%.
+- **Statistical confidence:** LaunchDarkly uses [Bayesian statistics](https://launchdarkly.com/docs/home/experimentation/bayesian?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_ai-experiments-roi) to calculate confidence, where 90% confidence means there's a 90% probability the true effect is positive. This is not the same as p-value < 0.10 from [frequentist tests](https://en.wikipedia.org/wiki/Frequentist_inference). We set the threshold at 90%, rather than 95%, to balance false positives versus false negatives, though for mission-critical features you should consider raising the confidence threshold to 95%.
 
 ## Common mistakes you have avoided
 
@@ -632,11 +619,11 @@ In this guide you ran two experiments:
 - **Security‑agent test**: a bundle change, where both prompt/instructions and the model changed.
 - **Premium‑model test**: a model‑only change.
 
-AgentControl configs come in two modes: **prompt‑based** (single‑step completions) and **agent‑based** (multi‑step workflows with tools). Below are additional patterns to explore.
+AI configs come in two modes: **prompt‑based** (single‑step completions) and **agent‑based** (multi‑step workflows with tools). Below are additional patterns to explore.
 
-### AgentControl config experiments
+### AI config experiments
 
-Experiments you can run entirely in AgentControl with no app redeploy include:
+Experiments you can run entirely in AI configs with no app redeploy include:
 
 - **Prompt and template experiments (prompt‑based or agent instructions):** Duplicate a variation and iterate on system/assistant messages or agent instructions to measure adherence to schema, tone, or qualitative satisfaction. Use LaunchDarkly Experimentation to tie those variations to product metrics.
 
@@ -670,27 +657,27 @@ These ideas work with all of the experiment suggestions we listed above:
 - Target by plan/tier, geo, device, or org using config targeting rules and percentage rollouts.
 - Keep variations narrow, one change per experiment, to avoid confounding. Reserve "bundle" tests for tool‑stack comparisons.
 
-Require statistical evidence before shipping configuration changes. Pair each variation with clear success metrics, then A/B test prompt or tool adjustments and use confidence intervals to confirm improvements. When you introduce the new code paths above, protect them behind feature flags so you can run sequential tests, [multi-armed bandits](https://launchdarkly.com/docs/home/multi-armed-bandits) for faster convergence, or change your [experiment design](https://launchdarkly.com/docs/guides/experimentation/designing-experiments) to understand how prompts, tools, and safety levers interact.
+Require statistical evidence before shipping configuration changes. Pair each variation with clear success metrics, then A/B test prompt or tool adjustments and use confidence intervals to confirm improvements. When you introduce the new code paths above, protect them behind feature flags so you can run sequential tests, [multi-armed bandits](https://launchdarkly.com/docs/home/multi-armed-bandits?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_ai-experiments-roi) for faster convergence, or change your [experiment design](https://launchdarkly.com/docs/guides/experimentation/designing-experiments?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_ai-experiments-roi) to understand how prompts, tools, and safety levers interact.
 
 ## Conclusion: From chaos to clarity
 
-Across this three-part series, you've transformed from hardcoded AI configurations to a scientifically rigorous, data-driven optimization engine. [Part 1](https://launchdarkly.com/docs/tutorials/agents-langgraph) established your foundation with a dynamic multi-agent [LangGraph](https://langchain-ai.github.io/langgraph/) system controlled by [LaunchDarkly AgentControl](https://launchdarkly.com/docs/home/agentcontrol), eliminating the need for code deployments when adjusting AI behavior. [Part 2](https://launchdarkly.com/docs/tutorials/multi-agent-mcp-targeting) added sophisticated targeting with geographic privacy rules, user segmentation by plan tiers, and [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) tool integration for real academic research capabilities. This tutorial, Part 3, completed your journey with statistical experimentation that proves ROI and guides optimization decisions with mathematical confidence rather than intuition.
+Across this three-part series, you've transformed from hardcoded AI configurations to a scientifically rigorous, data-driven optimization engine. [Part 1](https://launchdarkly.com/docs/tutorials/agents-langgraph?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_ai-experiments-roi) established your foundation with a dynamic multi-agent [LangGraph](https://langchain-ai.github.io/langgraph/) system controlled by [LaunchDarkly Agent management](https://launchdarkly.com/docs/home/agentcontrol?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_ai-experiments-roi), eliminating the need for code deployments when adjusting AI behavior. [Part 2](https://launchdarkly.com/docs/tutorials/multi-agent-mcp-targeting?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_ai-experiments-roi) added sophisticated targeting with geographic privacy rules, user segmentation by plan tiers, and [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) tool integration for real academic research capabilities. This guide, Part 3, completed your journey with statistical experimentation that proves ROI and guides optimization decisions with mathematical confidence rather than intuition.
 
 You now possess a defensible AI system that adapts to changing requirements, scales across user segments, and continuously improves through measured experimentation. Your stakeholders receive concrete evidence for AI investments, your engineering team deploys features with statistical backing, and your users benefit from optimized experiences driven by real data rather than assumptions. The chaos of ad-hoc AI development has given way to clarity through systematic, scientific product development.
 
-{version === "LaunchDarkly docs" && (<Callout intent="note" title='Want to know more? Start a trial.'>
-
-Your 14-day trial begins as soon as you sign up. Get started in minutes using the in-app Quickstart. You'll discover how easy it is to release, monitor, and optimize your software.<br/><br/>
-
-Want to try it out? <a href="https://app.launchdarkly.com/signup">Start a trial</a>.
-
-</Callout>)}
+> **Want to know more? Start a trial.**
+>
+> Your 14-day trial begins as soon as you sign up. Get started in minutes using the in-app Quickstart. You'll discover how easy it is to release, monitor, and optimize your software.
+>
+> Want to try it out? [Start a trial](https://app.launchdarkly.com/signup?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_ai-experiments-roi).
 
 ## Related tutorials
 
-- [Build a LangGraph Multi-Agent system in 20 Minutes](https://launchdarkly.com/docs/tutorials/agents-langgraph) - Part 1 of this series: build the agent system that the experiments here measure
-- [Smart AI Agent Targeting with MCP Tools](https://launchdarkly.com/docs/tutorials/multi-agent-mcp-targeting) - Part 2: add user, geo, and tier targeting before experimenting on it
-- [Beyond n8n for Workflow Automation: Agent Graphs](https://launchdarkly.com/docs/tutorials/agent-graphs) - Externalize the multi-agent topology with visual graph builder and per-node metrics
-- [When to add online evals](https://launchdarkly.com/docs/tutorials/when-to-add-online-evals) - Surface the metrics experiments measure with judge-based scoring on live traffic
-- [Offline Evaluation of RAG-Grounded Answers](https://launchdarkly.com/docs/tutorials/offline-evals) - Lock in an offline baseline before running A/B tests
-- [Evaluate LLM code generation with LLM-as-judge evaluators](https://launchdarkly.com/docs/tutorials/custom-evals-claude-code) - Build custom judges to produce the quality metrics your experiments compare
+- [Build a LangGraph multi-agent system in 20 minutes with LaunchDarkly AI configs](https://launchdarkly.com/docs/tutorials/agents-langgraph?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_ai-experiments-roi) - Part 1 of this series: build the agent system that the experiments here measure
+- [Target LangGraph agents and MCP tools with LaunchDarkly AI configs](https://launchdarkly.com/docs/tutorials/multi-agent-mcp-targeting?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_ai-experiments-roi) - Part 2: add user, geo, and tier targeting before experimenting on it
+- [Benchmark LangGraph, Strands, OpenAI Agents, and Google ADK on the same agent graph](https://launchdarkly.com/docs/tutorials/agent-graph-experiments?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_ai-experiments-roi) - Compare four orchestrators on latency and token usage over one LaunchDarkly agent graph
+- [Beyond n8n for workflow automation: agent graphs as your universal agent harness](https://launchdarkly.com/docs/tutorials/agent-graphs?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_ai-experiments-roi) - Externalize the multi-agent topology with visual graph builder and per-node metrics
+- [Evaluate RAG agent answers offline with LLM-as-a-judge in LaunchDarkly](https://launchdarkly.com/docs/tutorials/offline-evals?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_ai-experiments-roi) - Lock in an offline baseline before running A/B tests
+- [Run AgentControl offline evaluations in CI](https://launchdarkly.com/docs/tutorials/aic-cicd?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_ai-experiments-roi) - Gate prompt and retriever changes on pull requests before starting live experiments
+- [Evaluate LLM code generation with LLM-as-judge evaluators](https://launchdarkly.com/docs/tutorials/custom-evals-claude-code?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_ai-experiments-roi) - Build custom judges to produce the quality metrics your experiments compare
+- [When to add online evals](https://launchdarkly.com/docs/tutorials/when-to-add-online-evals?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_ai-experiments-roi) - Surface the metrics experiments measure with judge-based scoring on live traffic

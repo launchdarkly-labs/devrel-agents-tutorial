@@ -1,42 +1,13 @@
----
-slug: /tutorials/agents-langgraph
-title: "Build a LangGraph Multi-Agent system in 20 Minutes with LaunchDarkly AgentControl"
-og:title: "Build a LangGraph Multi-Agent system in 20 Minutes with LaunchDarkly AgentControl"
-description: Build a multi-agent system with dynamic configuration in 20 minutes using LangGraph multi-agent workflows, RAG search, and LaunchDarkly AgentControl.
-og:description: Build a multi-agent system with dynamic configuration in 20 minutes using LangGraph multi-agent workflows, RAG search, and LaunchDarkly AgentControl.
-keywords: tutorial, langgraph, multi-agent, AgentControl, RAG, agents, python
-publishedDate: 2025-09-08
-categories:
-  - AI
----
+# Build a LangGraph multi-agent system in 20 minutes with LaunchDarkly AI configs
 
-{/* cSpell:ignore devrel Barto rerank IPRL */}
-<p class="publishedDate"><em>Published September 8th, 2025</em></p>
-<div class="authorWrapper">
-  <img
-src="../../../assets/images/authors/scarlettattensil.png"
-    alt="Portrait of Scarlett Attensil."
-    class="authorAvatar"
-  ></img>
-  <p class="authorName">by Scarlett Attensil</p>
-</div>
+> Read the full three-part series and companion tutorials on LaunchDarkly Docs:
+> - **Part 1 (this branch)**: [Build a LangGraph multi-agent system in 20 minutes with LaunchDarkly AI configs](https://launchdarkly.com/docs/tutorials/agents-langgraph?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_agents-langgraph)
+> - **Part 2 (`tutorial_2.md`)**: [Target LangGraph agents and MCP tools with LaunchDarkly AI configs](https://launchdarkly.com/docs/tutorials/multi-agent-mcp-targeting?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_agents-langgraph)
+> - **Part 3 (`tutorial_3.md`)**: [Prove LangGraph agent ROI with LaunchDarkly A/B experiments](https://launchdarkly.com/docs/guides/experimentation/ai-experiments-roi?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_agents-langgraph)
+> - **Agent Graphs (`tutorial/agent-graphs` branch)**: [Beyond n8n for workflow automation: agent graphs as your universal agent harness](https://launchdarkly.com/docs/tutorials/agent-graphs?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_agents-langgraph)
+> - **Offline Evals (`feature/offline-evals` branch)**: [Evaluate RAG agent answers offline with LLM-as-a-judge in LaunchDarkly](https://launchdarkly.com/docs/tutorials/offline-evals?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_agents-langgraph)
 
-<Callout intent="info" title="Published September 2025: newer AgentControl features available">
-
-This tutorial was published in September 2025, before LaunchDarkly shipped several features that supersede or complement the patterns shown below. The walkthrough still works, but for new builds you'll likely want to use:
-
-- [**Agent graphs**](/home/agentcontrol/agent-graphs): externalize the multi-agent topology into a visual graph with per-node monitoring (the newer take on this tutorial's pattern)
-- [**Online evaluations**](/home/agentcontrol/online-evaluations) and [**custom judges**](/home/agentcontrol/judges): built-in and user-defined LLM-as-a-judge scoring on live traffic
-- [**LLM Playground**](/home/agentcontrol/playground): compare variations side-by-side before promoting
-- [**Offline evaluations + datasets**](/home/agentcontrol/offline-evaluations): regression-test variations against a saved reference set
-
-AI Configs is now **AgentControl**. Config keys, SDK names, and APIs are unchanged. For the current reference, see [AgentControl documentation](/home/agentcontrol).
-
-</Callout>
-
-## Overview
-
-Build a working multi-agent system with dynamic configuration in 20 minutes using LangGraph multi-agent workflows, RAG search, and LaunchDarkly AgentControl.
+Build a working multi-agent system with dynamic configuration in 20 minutes using LangGraph multi-agent workflows, RAG search, OpenTelemetry traces, and LaunchDarkly AI configs.
 
 *Part 1 of 3 of the series: **Chaos to Clarity: Defensible AI Systems That Deliver on Your Goals***
 
@@ -44,13 +15,13 @@ You've been there: your AI chatbot works great in testing, then production hits 
 
 The teams shipping faster? They control AI behavior dynamically instead of hardcoding everything.
 
-This series shows you how to build **LangGraph multi-agent workflows** that get their intelligence from **RAG** search through your business documents. These workflows are enhanced with **MCP tools** for live external data and controlled through **LaunchDarkly AgentControl**, all without needing to deploy code changes.
+This series shows you how to build **LangGraph multi-agent workflows** that get their intelligence from **RAG** search through your business documents. These workflows are enhanced with **MCP tools** for live external data and controlled through **[LaunchDarkly Agent management](https://launchdarkly.com/docs/home/agentcontrol?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_agents-langgraph)**, all without needing to deploy code changes.
 
 ## What This Series Covers
 
-- **Part 1** (this post): Build a working multi-agent system with dynamic configuration in 20 minutes
-- **Part 2**: Add advanced features like segment targeting, MCP tool integration, and cost optimization
-- **Part 3**: Run production A/B experiments to prove what actually works
+- **Part 1** (this guide): Build a working multi-agent system with dynamic configuration in 20 minutes
+- **[Part 2](tutorial_2.md)**: Add segment targeting, MCP tool integration, and regional model routing ([LaunchDarkly Docs](https://launchdarkly.com/docs/tutorials/multi-agent-mcp-targeting?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_agents-langgraph))
+- **[Part 3](tutorial_3.md)**: Run production A/B experiments to prove model and privacy ROI ([LaunchDarkly Docs](https://launchdarkly.com/docs/guides/experimentation/ai-experiments-roi?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_agents-langgraph))
 
 By the end, you'll have a system that measures its own performance and adapts based on user data instead of guesswork.
 
@@ -68,7 +39,7 @@ In the next 20 minutes, you'll have a LangGraph multi-agent system with:
 You'll need:
 
 - **Python 3.12+** with `uv` package manager ([install uv](https://docs.astral.sh/uv/getting-started/installation/))
-- **LaunchDarkly account** ([sign up for free](https://app.launchdarkly.com/signup))
+- **LaunchDarkly account** ([sign up for free](https://app.launchdarkly.com/signup?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_agents-langgraph))
 
 **Choose your AI provider setup:**
 
@@ -99,7 +70,7 @@ cp .env.example .env
 
 First, you need to get your LaunchDarkly SDK key by creating a project:
 
-1. **Sign up for LaunchDarkly** at [app.launchdarkly.com](https://app.launchdarkly.com) (free account).
+1. **Sign up for LaunchDarkly** at [app.launchdarkly.com](https://app.launchdarkly.com/signup?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_agents-langgraph) (free account).
 <Note>If you're a brand new user, after signing up for an account, you'll need to verify your email address. You can skip through the new user onboarding flow after that. </Note>
 2. **Find projects on the side bar:**
 
@@ -117,7 +88,7 @@ First, you need to get your LaunchDarkly SDK key by creating a project:
 
 🎯 **Use exact names for Part 2 compatibility**:
 - Project: `multi-agent-chatbot`
-- AgentControl configs: `supervisor-agent`, `security-agent`, `support-agent`
+- AI configs: `supervisor-agent`, `security-agent`, `support-agent`
 - Tools: `search_v2`, `reranking`
 - Variations: `supervisor-basic`, `pii-detector`, `rag-search-enhanced`
 
@@ -292,7 +263,7 @@ In the LaunchDarkly app sidebar, click **Agents**, then **Library**. On the foll
 
 <div align="center">
 
-<Frame caption="Library in the AgentControl menu.">
+<Frame caption="Library in the Agent management menu.">
 ![Library](screenshots/library_small.png)
 </Frame>
 
@@ -376,9 +347,9 @@ The `reranking` tool takes search results from `search_v2` and reorders them usi
 
 ## Step 5: Create Your AI Agents in LaunchDarkly (5 minutes)
 
-Now that you've created the tools your agents will use, it's time to configure the agents themselves. Each agent will have its own AgentControl config that defines its behavior, model selection, and specific instructions.
+Now that you've created the tools your agents will use, it's time to configure the agents themselves. Each agent has its own AI config that defines its behavior, model selection, and specific instructions.
 
-Create LaunchDarkly AgentControl configs to control your **LangGraph** multi-agent system dynamically. **LangGraph** is LangChain's framework for building stateful, multi-**agent** applications that maintain conversation state across **agent** interactions. Your **LangGraph** architecture enables sophisticated workflows where **agents** collaborate and pass context between each other.
+Create LaunchDarkly AI configs to control your **LangGraph** multi-agent system dynamically. **LangGraph** is LangChain's framework for building stateful, multi-**agent** applications that maintain conversation state across **agent** interactions. Your **LangGraph** architecture enables sophisticated workflows where **agents** collaborate and pass context between each other.
 
 ### Create the Supervisor Agent
 
@@ -451,7 +422,7 @@ Click **Review and save**. Now enable your config by switching to the **Targetin
 </div>
 
 Click **Edit** on the Default rule, change it to serve your `supervisor-basic` variation, and save with a note like "Enabling new agent config". Then type "Production" to confirm.
-The supervisor **agent** demonstrates **LangGraph** orchestration by routing requests based on content analysis rather than rigid rules. **LangGraph** enables this **agent** to maintain conversation context and make intelligent routing decisions that adapt to user needs and AgentControl config parameters.
+The supervisor **agent** demonstrates **LangGraph** orchestration by routing requests based on content analysis rather than rigid rules. **LangGraph** enables this **agent** to maintain conversation context and make intelligent routing decisions that adapt to user needs and AI config parameters.
 
 
 ### Create the Security Agent
@@ -676,22 +647,24 @@ Every change is instant, measurable, and reversible.
 
 - Multi-agent systems work best when each agent has a specific role
 - Dynamic configuration handles changing requirements better than hardcoding
-- LaunchDarkly AgentControl configs control and change AI behavior without requiring deployments
+- LaunchDarkly AI configs control and change AI behavior without requiring deployments
 - Start simple and add complexity as you learn what works
 
-Ready for more? [Continue to Part 2: Smart AI Agent Targeting with MCP Tools →](/tutorials/multi-agent-mcp-targeting)
+Ready for more? [Continue to Part 2: Target LangGraph agents and MCP tools with LaunchDarkly AI configs →](https://launchdarkly.com/docs/tutorials/multi-agent-mcp-targeting?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_agents-langgraph)
 
 ## Related Resources
 
-Explore the **[LaunchDarkly MCP Server](/home/getting-started/mcp)** - enable AI agents to access feature flag configurations, user segments, and experimentation data directly through the Model Context Protocol.
+Explore the **[LaunchDarkly MCP Server](https://launchdarkly.com/docs/home/getting-started/mcp?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_agents-langgraph)** - enable AI agents to access feature flag configurations, user segments, AI configs, and experimentation data directly through the Model Context Protocol.
 
 **More from this series and related tutorials:**
 
-- [Beyond n8n for Workflow Automation: Agent Graphs](/tutorials/agent-graphs) - The newer take on this pattern: externalize the topology itself into a visual graph with per-node monitoring
-- [Building Framework-Agnostic AI Swarms](/tutorials/ai-orchestrators) - Compare LangGraph against Strands and OpenAI Swarm running the same agent definitions
-- [Build AI Configs with Agent Skills](/tutorials/agent-skills-quickstart) - Generate the configs in this tutorial from natural-language prompts
-- [Offline Evaluation of RAG-Grounded Answers](/tutorials/offline-evals) - Add regression tests on the RAG outputs from this system
-- [Proving ROI with data-driven AI agent experiments](/guides/experimentation/ai-experiments-roi) - Part 3: A/B test the variations you built here
+- [Target LangGraph agents and MCP tools with LaunchDarkly AI configs](https://launchdarkly.com/docs/tutorials/multi-agent-mcp-targeting?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_agents-langgraph) - Part 2: Add geo privacy routing, plan tiers, and live ArXiv and OpenAlex research tools
+- [Prove LangGraph agent ROI with LaunchDarkly A/B experiments](https://launchdarkly.com/docs/guides/experimentation/ai-experiments-roi?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_agents-langgraph) - Part 3: A/B test the variations you built here
+- [Use LaunchDarkly Agent Skills in Claude Code and Cursor](https://launchdarkly.com/docs/tutorials/agent-skills-quickstart?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_agents-langgraph) - Generate the AI configs in this tutorial from natural-language prompts
+- [Benchmark LangGraph, Strands, OpenAI Agents, and Google ADK on the same agent graph](https://launchdarkly.com/docs/tutorials/agent-graph-experiments?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_agents-langgraph) - Compare four orchestrators on latency and token usage over one LaunchDarkly agent graph
+- [Beyond n8n for workflow automation: agent graphs as your universal agent harness](https://launchdarkly.com/docs/tutorials/agent-graphs?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_agents-langgraph) - Externalize the topology itself into a visual graph with per-node monitoring
+- [Evaluate RAG agent answers offline with LLM-as-a-judge in LaunchDarkly](https://launchdarkly.com/docs/tutorials/offline-evals?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_agents-langgraph) - Add regression tests on the RAG outputs from this system
+- [Run AgentControl offline evaluations in CI](https://launchdarkly.com/docs/tutorials/aic-cicd?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_agents-langgraph) - Gate every pull request on dataset evaluations in GitHub Actions
 
 ---
 

@@ -1,18 +1,6 @@
-# Smart AI Agent Targeting with MCP Tools
+# Target LangGraph agents and MCP tools with LaunchDarkly AI configs
 
-> Read the published version on [LaunchDarkly Docs](https://launchdarkly.com/docs/tutorials/multi-agent-mcp-targeting). _Published September 22nd, 2025 by Scarlett Attensil._
-
-<Callout intent="info" title="Published September 2025: newer AgentControl features available">
-
-This tutorial was published in September 2025, before LaunchDarkly shipped several features that complement or supersede the targeting patterns shown below. The walkthrough still works, but for new builds you'll likely want to use:
-
-- [**Agent graphs**](https://launchdarkly.com/docs/home/agentcontrol/agent-graphs): externalize the multi-agent topology into a visual graph and combine it with the targeting rules in this tutorial
-- [**Online evaluations**](https://launchdarkly.com/docs/home/agentcontrol/online-evaluations) and [**custom judges**](https://launchdarkly.com/docs/home/agentcontrol/judges): score live traffic per variation, including per-segment quality scores
-- [**Prompt snippets**](https://launchdarkly.com/docs/home/agentcontrol/snippets): reusable prompt fragments so you can compose region-specific or tier-specific instructions without duplicating
-
-AI Configs is now **AgentControl**. Config keys, SDK names, and APIs are unchanged. For the current reference, see [AgentControl documentation](https://launchdarkly.com/docs/home/agentcontrol).
-
-</Callout>
+> Read the published version on [LaunchDarkly Docs](https://launchdarkly.com/docs/tutorials/multi-agent-mcp-targeting?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_multi-agent-mcp-targeting). _By Scarlett Attensil · Updated November 2026._
 
 ## Overview
 
@@ -20,21 +8,21 @@ Here's what nobody tells you about multi-agentic systems: the hard part isn't bu
 
 *Part 2 of 3 of the series: **Chaos to Clarity: Defensible AI Systems That Deliver on Your Goals***
 
-The solution? **LangGraph multi-agent workflows** controlled by **LaunchDarkly AgentControl** targeting rules that intelligently route users: paid customers get premium tools and models, free users get cost-efficient alternatives, and EU users get Mistral for enhanced privacy. Use the **LaunchDarkly REST API** to set up a custom variant-targeting matrix in 2 minutes instead of spending hours setting it up manually.
+The solution? **LangGraph multi-agent workflows** controlled by **LaunchDarkly Agent management** targeting rules that intelligently route users: paid customers get premium tools and models, free users get cost-efficient alternatives, and EU users get Mistral for enhanced privacy. Use the **LaunchDarkly REST API** to set up a custom variant-targeting matrix in 2 minutes instead of spending hours setting it up manually.
 
 ## What You'll Build Today
 
 In the next 18 minutes, you'll transform your basic multi-agent system with:
 
-- **Business Tiers & MCP Integration**: Free users get internal keyword search, Paid users get premium models with RAG, external research tools and expanded tool call limits, all controlled by [LaunchDarkly AgentControl](https://launchdarkly.com/docs/home/agentcontrol)
+- **Business Tiers & MCP Integration**: Free users get internal keyword search, Paid users get premium models with RAG, external research tools and expanded tool call limits, all controlled by [LaunchDarkly Agent management](https://launchdarkly.com/docs/home/agentcontrol?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_multi-agent-mcp-targeting)
 - **Geographic Targeting**: EU users automatically get Mistral and Claude models (enhanced privacy), other users get cost-optimized alternatives
-- **Smart Configuration**: Set up complex targeting matrices with [LaunchDarkly segments](https://launchdarkly.com/docs/home/flags/segments) and [targeting rules](https://launchdarkly.com/docs/home/flags/target)
+- **Smart Configuration**: Set up complex targeting matrices with [LaunchDarkly segments](https://launchdarkly.com/docs/home/flags/segments?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_multi-agent-mcp-targeting) and [targeting rules](https://launchdarkly.com/docs/home/flags/target?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_multi-agent-mcp-targeting)
 
 ## Prerequisites
 
 ✅ **[Part 1 completed](README.md)** with exact naming:
 - Project: `multi-agent-chatbot`
-- AgentControl configs: `supervisor-agent`, `security-agent`, `support-agent`
+- AI configs: `supervisor-agent`, `security-agent`, `support-agent`
 - Tools: `search_v2`, `reranking`
 - Variations: `supervisor-basic`, `pii-detector`, `rag-search-enhanced`
 
@@ -125,7 +113,7 @@ These tools integrate with your agents via LangGraph while LaunchDarkly controls
 
 ## Step 2: Configure with API Automation (2 minutes)
 
-Now we'll use programmatic API automation to configure the complete setup. The [LaunchDarkly REST API](https://launchdarkly.com/docs/guides/api/rest-api) lets you manage tools, segments, and [AgentControl configs](https://launchdarkly.com/docs/home/agentcontrol) programmatically. Instead of manually creating dozens of variations in the UI, this **configuration automation** makes REST API calls to provision user segments, config variations, targeting rules, and tools. These are the same resources you could create manually through the LaunchDarkly dashboard. Your actual chat application continues running unchanged.
+Now we'll use programmatic API automation to configure the complete setup. The [LaunchDarkly REST API](https://launchdarkly.com/docs/guides/api/rest-api?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_multi-agent-mcp-targeting) lets you manage tools, segments, and [AI configs](https://launchdarkly.com/docs/home/agentcontrol?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_multi-agent-mcp-targeting) programmatically. Instead of manually creating dozens of variations in the UI, this **configuration automation** makes REST API calls to provision user segments, config variations, targeting rules, and tools. These are the same resources you could create manually through the LaunchDarkly dashboard. Your actual chat application continues running unchanged.
 
 Configure your complete targeting matrix with one command:
 
@@ -136,9 +124,9 @@ uv run python create_configs.py
 
 **What the script creates**:
 - **3 new tools**: `search_v1` (basic search), `arxiv_search` and `openalex_search` (MCP research tools)
-- **4 combined user segments** with [geographic and tier targeting rules](https://launchdarkly.com/docs/home/flags/segments)
+- **4 combined user segments** with [geographic and tier targeting rules](https://launchdarkly.com/docs/home/flags/segments?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_multi-agent-mcp-targeting)
 - **Updated configs**: `security-agent` with 2 new geographic variations (`basic-security`, `strict-security`) and `support-agent` with 5 new variations, each with its own `max_tool_calls`
-- **Complete [targeting rules](https://launchdarkly.com/docs/home/flags/target)** that route users to appropriate variations
+- **Complete [targeting rules](https://launchdarkly.com/docs/home/flags/target?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_multi-agent-mcp-targeting)** that route users to appropriate variations
 - **Intelligently reuses** existing resources: `supervisor-agent`, `search_v2`, and `reranking` tools from Part 1
 
 ### Understanding the Bootstrap Script
@@ -493,11 +481,12 @@ This approach scales beyond tutorials. Whether you're serving 100 users or 100,0
 
 ## Related tutorials
 
-- [Build a LangGraph Multi-Agent system in 20 Minutes](https://launchdarkly.com/docs/tutorials/agents-langgraph) - Part 1: the multi-agent system this tutorial layers targeting on top of
-- [Proving ROI with data-driven AI agent experiments](https://launchdarkly.com/docs/guides/experimentation/ai-experiments-roi) - Part 3: A/B test the targeted variations you just built
-- [Beyond n8n for Workflow Automation: Agent Graphs](https://launchdarkly.com/docs/tutorials/agent-graphs) - Combine targeting with visual graph topology and per-node monitoring
-- [Build AI Configs with Agent Skills](https://launchdarkly.com/docs/tutorials/agent-skills-quickstart) - Generate the agent and targeting configurations from natural-language prompts
-- [Offline Evaluation of RAG-Grounded Answers](https://launchdarkly.com/docs/tutorials/offline-evals) - Validate each targeted variation against a reference dataset before rollout
+- [Build a LangGraph multi-agent system in 20 minutes with LaunchDarkly AI configs](https://launchdarkly.com/docs/tutorials/agents-langgraph?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_multi-agent-mcp-targeting) - Part 1: the multi-agent system this tutorial layers targeting on top of
+- [Prove LangGraph agent ROI with LaunchDarkly A/B experiments](https://launchdarkly.com/docs/guides/experimentation/ai-experiments-roi?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_multi-agent-mcp-targeting) - Part 3: A/B test the targeted variations you just built
+- [Use LaunchDarkly Agent Skills in Claude Code and Cursor](https://launchdarkly.com/docs/tutorials/agent-skills-quickstart?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_multi-agent-mcp-targeting) - Generate the agent and targeting configurations from natural-language prompts
+- [Benchmark LangGraph, Strands, OpenAI Agents, and Google ADK on the same agent graph](https://launchdarkly.com/docs/tutorials/agent-graph-experiments?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_multi-agent-mcp-targeting) - Compare four orchestrators on latency and token usage over one LaunchDarkly agent graph
+- [Beyond n8n for workflow automation: agent graphs as your universal agent harness](https://launchdarkly.com/docs/tutorials/agent-graphs?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_multi-agent-mcp-targeting) - Combine targeting with visual graph topology and per-node monitoring
+- [Evaluate RAG agent answers offline with LLM-as-a-judge in LaunchDarkly](https://launchdarkly.com/docs/tutorials/offline-evals?utm_source=github&utm_medium=referral&utm_campaign=devrel_fy27&utm_content=scarlett_multi-agent-mcp-targeting) - Validate each targeted variation against a reference dataset before rollout
 
 ---
 *Questions? Issues? Reach out at `aiproduct@launchdarkly.com` or open an issue in the [GitHub repo](https://github.com/launchdarkly-labs/devrel-agents-tutorial).*
