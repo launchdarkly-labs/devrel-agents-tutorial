@@ -19,6 +19,7 @@ Usage:
 
 import argparse
 import csv
+import json
 import os
 import sys
 from pathlib import Path
@@ -98,12 +99,24 @@ def main():
 
     out_rows = []
     for i, row in enumerate(rows, 1):
-        # Idempotent: if the source has been previously bundled (has an
-        # `original_question` column), use that as the search query so we
-        # don't recursively bundle a bundled prompt. Otherwise treat
-        # `input` (or legacy `question`) as the question itself.
+        # Idempotent: if the source has been previously bundled (has
+        # `original_question` inside `metadata` or as a legacy column), use
+        # that as the search query so we don't recursively bundle a bundled
+        # prompt. Otherwise treat `input` (or legacy `question`) as the
+        # question itself.
+        meta_question = ""
+        raw_meta = row.get("metadata") or ""
+        if raw_meta:
+            try:
+                parsed_meta = json.loads(raw_meta)
+                if isinstance(parsed_meta, dict):
+                    meta_question = parsed_meta.get("original_question", "")
+            except json.JSONDecodeError:
+                pass
+
         question = (
-            row.get("original_question")
+            meta_question
+            or row.get("original_question")
             or row.get("input")
             or row.get("question")
             or ""
@@ -119,14 +132,14 @@ def main():
         out_rows.append({
             "input": bundled_input,
             "expected_output": expected,
-            "original_question": question,
+            "metadata": json.dumps({"original_question": question}),
         })
         print(f"  Row {i}: {len(chunks)} chunks for {question[:60]!r}")
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w", newline="") as f:
         writer = csv.DictWriter(
-            f, fieldnames=["input", "expected_output", "original_question"]
+            f, fieldnames=["input", "expected_output", "metadata"]
         )
         writer.writeheader()
         writer.writerows(out_rows)
